@@ -3,6 +3,7 @@
 ```text
 academy-for-financial-future/
 ├── app/
+│   ├── api/certificates/route.ts # Certificate generation API starter
 │   ├── page.tsx                 # Home
 │   ├── about/page.tsx           # About Academy
 │   ├── courses/page.tsx         # Forex Courses
@@ -31,6 +32,8 @@ academy-for-financial-future/
 │   ├── downloads/               # Starter PDF resources
 │   └── images/academy-hero.png  # Generated luxury finance hero asset
 ├── supabase/schema.sql          # Starter database schema and RLS
+├── middleware.ts                 # Supabase protected route middleware
+├── .github/workflows/ci.yml      # GitHub Actions build check
 ├── DEPLOYMENT_PLAN.md           # Supabase and Vercel plan
 ├── README.md
 └── package.json

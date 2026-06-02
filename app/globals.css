@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #07111f;
+  color: #dce6f5;
+}
+
+::selection {
+  background: rgba(214, 173, 85, .38);
+}
+
+.market-grid {
+  background-image:
+    linear-gradient(rgba(214, 173, 85, .08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(214, 173, 85, .08) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+.terminal-panel {
+  border: 1px solid rgba(214, 173, 85, .22);
+  background: linear-gradient(145deg, rgba(16, 35, 60, .94), rgba(7, 17, 31, .96));
+}
+
+.gold-rule {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(214, 173, 85, .7), transparent);
+}

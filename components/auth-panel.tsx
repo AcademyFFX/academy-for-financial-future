@@ -7,7 +7,9 @@ export function AuthPanel({ mode }: { mode: "login" | "register" }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [message, setMessage] = useState("Connect Supabase environment variables to enable authentication.");
+  const [message, setMessage] = useState(
+    mode === "login" ? "Enter your student credentials to continue." : "Create your student account to begin enrollment."
+  );
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

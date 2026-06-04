@@ -1,9 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase";
 
 export function AuthPanel({ mode }: { mode: "login" | "register" }) {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -21,7 +23,8 @@ export function AuthPanel({ mode }: { mode: "login" | "register" }) {
           : await supabase.auth.signUp({ email, password, options: { data: { name, division: "Forex Training Division" } } });
 
       if (result.error) setMessage(result.error.message);
-      else setMessage(mode === "login" ? "Login successful. Redirect this user to the dashboard." : "Registration received. Check email confirmation settings in Supabase.");
+      else if (mode === "login") router.push("/student-dashboard");
+      else setMessage("Registration received. Check email confirmation settings in Supabase.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Authentication is not configured yet.");
     }

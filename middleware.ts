@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import type { ResponseCookie } from "next/dist/compiled/@edge-runtime/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 
-const protectedRoutes = ["/dashboard", "/journal", "/assignments", "/exams", "/certificates", "/admin"];
+const protectedRoutes = ["/student-dashboard", "/dashboard", "/journal", "/assignments", "/exams", "/certificates", "/admin"];
 
 export async function middleware(request: NextRequest) {
   const isProtected = protectedRoutes.some((route) => request.nextUrl.pathname.startsWith(route));
@@ -65,5 +65,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/journal/:path*", "/assignments/:path*", "/exams/:path*", "/certificates/:path*", "/admin/:path*"]
+  matcher: ["/student-dashboard/:path*", "/dashboard/:path*", "/journal/:path*", "/assignments/:path*", "/exams/:path*", "/certificates/:path*", "/admin/:path*"]
 };

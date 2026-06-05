@@ -20,6 +20,11 @@ type JournalEntry = {
   created_at: string;
 };
 
+type TradingJournalRow = Partial<JournalEntry> & {
+  notes?: string | null;
+  result?: string | null;
+};
+
 const initialForm = {
   currency_pair: "",
   trade_direction: "Buy",
@@ -40,6 +45,29 @@ export default function JournalPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("Record your trade plan and post-trade review.");
 
+  function getErrorMessage(error: unknown, fallback: string) {
+    if (error instanceof Error) return error.message;
+    if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+      return error.message;
+    }
+    return fallback;
+  }
+
+  function normalizeEntry(row: TradingJournalRow): JournalEntry {
+    return {
+      id: String(row.id ?? crypto.randomUUID()),
+      currency_pair: String(row.currency_pair ?? ""),
+      trade_direction: row.trade_direction === "Sell" ? "Sell" : "Buy",
+      entry_price: Number(row.entry_price ?? 0),
+      stop_loss: Number(row.stop_loss ?? 0),
+      take_profit: Number(row.take_profit ?? 0),
+      risk_percentage: Number(row.risk_percentage ?? 0),
+      trade_notes: row.trade_notes ?? row.notes ?? null,
+      screenshot_url: row.screenshot_url ?? null,
+      created_at: row.created_at ?? new Date().toISOString()
+    };
+  }
+
   useEffect(() => {
     async function loadJournal() {
       try {
@@ -57,13 +85,14 @@ export default function JournalPage() {
 
         const { data, error } = await supabase
           .from("trading_journal")
-          .select("id,currency_pair,trade_direction,entry_price,stop_loss,take_profit,risk_percentage,trade_notes,screenshot_url,created_at")
+          .select("*")
+          .eq("student_id", user.id)
           .order("created_at", { ascending: false });
 
         if (error) throw error;
-        setEntries((data ?? []) as JournalEntry[]);
+        setEntries(((data ?? []) as TradingJournalRow[]).map(normalizeEntry));
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Unable to load trading journal entries.");
+        setMessage(getErrorMessage(error, "Unable to load trading journal entries."));
       } finally {
         setLoading(false);
       }
@@ -104,16 +133,16 @@ export default function JournalPage() {
       const { data, error } = await supabase
         .from("trading_journal")
         .insert(payload)
-        .select("id,currency_pair,trade_direction,entry_price,stop_loss,take_profit,risk_percentage,trade_notes,screenshot_url,created_at")
+        .select("*")
         .single();
 
       if (error) throw error;
 
-      setEntries((current) => [data as JournalEntry, ...current]);
+      setEntries((current) => [normalizeEntry(data as TradingJournalRow), ...current]);
       setForm(initialForm);
       setMessage("Journal entry saved.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to save journal entry.");
+      setMessage(getErrorMessage(error, "Unable to save journal entry."));
     } finally {
       setSaving(false);
     }

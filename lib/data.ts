@@ -23,6 +23,7 @@ export const navItems = [
   { href: "/assignments", label: "Assignments" },
   { href: "/exams", label: "Certification Exams" },
   { href: "/certificates", label: "Certificates" },
+  { href: "/verify", label: "Verify Certificate" },
   { href: "/announcements", label: "Announcements" },
   { href: "/contact", label: "Contact" }
 ];

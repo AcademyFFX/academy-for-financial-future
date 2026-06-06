@@ -25,8 +25,13 @@ create table public.enrollments (
 
 create table public.assignments (
   id uuid primary key default gen_random_uuid(),
+  student_id uuid references auth.users(id) on delete cascade,
   course_id uuid references public.courses(id) on delete cascade,
   title text not null,
+  course_module text,
+  student_notes text,
+  file_url text,
+  submission_date date not null default current_date,
   due_date date,
   created_at timestamptz not null default now()
 );
@@ -57,12 +62,15 @@ create table public.trading_journal (
 
 alter table public.profiles enable row level security;
 alter table public.enrollments enable row level security;
+alter table public.assignments enable row level security;
 alter table public.submissions enable row level security;
 alter table public.trading_journal enable row level security;
 
 create policy "Students can read own profile" on public.profiles for select using (auth.uid() = id);
 create policy "Students can update own profile" on public.profiles for update using (auth.uid() = id);
 create policy "Students can read own enrollments" on public.enrollments for select using (auth.uid() = student_id);
+create policy "Students can read own assignments" on public.assignments for select using (auth.uid() = student_id);
+create policy "Students can create own assignment submissions" on public.assignments for insert with check (auth.uid() = student_id);
 create policy "Students can manage own submissions" on public.submissions for all using (auth.uid() = student_id);
 create policy "Students can read own trading journal" on public.trading_journal for select using (auth.uid() = student_id);
 create policy "Students can create own trading journal entries" on public.trading_journal for insert with check (auth.uid() = student_id);

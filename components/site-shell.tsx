@@ -41,6 +41,9 @@ export function SiteShell({ children }: { children: ReactNode }) {
             <Link href="/login" className="ml-2 border border-gold-500/45 px-4 py-2 text-xs font-semibold text-gold-300">
               Login
             </Link>
+            <Link href="/register" className="bg-gold-500 px-4 py-2 text-xs font-bold text-navy-950">
+              Register
+            </Link>
           </nav>
           <button
             type="button"

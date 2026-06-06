@@ -44,13 +44,25 @@ export default function HomePage() {
             <h2 className="mt-4 font-serif text-4xl font-semibold text-white">Built for a serious forex education institution.</h2>
           </div>
           <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {featureCards.map((feature) => (
-              <article key={feature.title} className="terminal-panel p-6">
-                <feature.icon className="text-gold-300" size={24} />
-                <h3 className="mt-5 text-lg font-semibold text-white">{feature.title}</h3>
-                <p className="mt-3 leading-7 text-ink/70">{feature.text}</p>
-              </article>
-            ))}
+            {featureCards.map((feature) => {
+              const content = (
+                <>
+                  <feature.icon className="text-gold-300" size={24} />
+                  <h3 className="mt-5 text-lg font-semibold text-white">{feature.title}</h3>
+                  <p className="mt-3 leading-7 text-ink/70">{feature.text}</p>
+                </>
+              );
+
+              return feature.title === "Student Registration" ? (
+                <Link key={feature.title} href="/register" className="terminal-panel block p-6 transition hover:border-gold-400/60">
+                  {content}
+                </Link>
+              ) : (
+                <article key={feature.title} className="terminal-panel p-6">
+                  {content}
+                </article>
+              );
+            })}
           </div>
         </SectionInner>
       </Section>

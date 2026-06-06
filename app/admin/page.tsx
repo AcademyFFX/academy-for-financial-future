@@ -1,45 +1,48 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Award, ClipboardCheck, Download, GraduationCap, Megaphone, Save, ShieldCheck, Trash2, Users } from "lucide-react";
+import { Award, ClipboardCheck, Download, Megaphone, Save, ShieldCheck, Trash2, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
 import { createClient } from "@/lib/supabase";
 
+type DbRow = Record<string, unknown>;
+
 type Student = {
   id: string;
-  full_name: string | null;
-  email: string | null;
-  created_at: string;
-  certification_level: string | null;
+  name: string;
+  email: string;
+  enrollmentDate: string;
+  certificationLevel: string;
 };
 
 type Assignment = {
   id: string;
-  student_id: string | null;
+  studentId: string;
   title: string;
-  course_module: string | null;
-  file_url: string | null;
-  submission_date: string;
+  courseModule: string;
+  fileUrl: string;
+  submissionDate: string;
 };
 
 type Exam = {
   id: string;
-  student_id: string;
-  exam_title: string;
+  studentId: string;
+  studentName: string;
+  examTitle: string;
   score: number;
-  result: "Pass" | "Fail";
-  submitted_at: string;
+  result: string;
+  submittedAt: string;
 };
 
 type Certificate = {
   id: string;
-  certificate_number: string;
-  student_id: string;
-  student_name: string;
-  verification_code: string;
-  issue_date: string;
+  certificateNumber: string;
+  studentId: string;
+  studentName: string;
+  verificationCode: string;
+  issueDate: string;
 };
 
 type Announcement = {
@@ -49,7 +52,30 @@ type Announcement = {
   published_at: string;
 };
 
+const adminEmail = "acafffx@gmail.com";
 const initialAnnouncement = { id: "", title: "", body: "" };
+
+function value(row: DbRow, keys: string[], fallback = "") {
+  for (const key of keys) {
+    const current = row[key];
+    if (current !== null && current !== undefined && String(current).trim().length > 0) {
+      return String(current);
+    }
+  }
+  return fallback;
+}
+
+function numberValue(row: DbRow, keys: string[], fallback = 0) {
+  const raw = value(row, keys);
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeDate(raw: string) {
+  if (!raw) return new Date().toISOString();
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
 
 export default function AdminPage() {
   const router = useRouter();
@@ -82,6 +108,50 @@ export default function AdminPage() {
     return fallback;
   }
 
+  function normalizeStudent(row: DbRow): Student {
+    return {
+      id: value(row, ["id", "student_id"]),
+      name: value(row, ["name", "full_name", "student_name"], "Student"),
+      email: value(row, ["email", "student_email"], "Not recorded"),
+      enrollmentDate: normalizeDate(value(row, ["enrollment_date", "created_at", "date_enrolled"])),
+      certificationLevel: value(row, ["certification_level", "level", "course_name"], "Forex Training Division")
+    };
+  }
+
+  function normalizeAssignment(row: DbRow): Assignment {
+    return {
+      id: value(row, ["id"], crypto.randomUUID()),
+      studentId: value(row, ["student_id"]),
+      title: value(row, ["title", "assignment_title"], "Assignment"),
+      courseModule: value(row, ["course_module", "module", "course"], "Module"),
+      fileUrl: value(row, ["file_url", "url", "submission_url"]),
+      submissionDate: normalizeDate(value(row, ["submission_date", "submitted_at", "created_at", "date"]))
+    };
+  }
+
+  function normalizeExam(row: DbRow): Exam {
+    return {
+      id: value(row, ["id"], crypto.randomUUID()),
+      studentId: value(row, ["student_id"]),
+      studentName: value(row, ["student_name", "name"], "Student"),
+      examTitle: value(row, ["exam_title", "title"], "Certification Exam"),
+      score: numberValue(row, ["score"]),
+      result: value(row, ["result", "status"], numberValue(row, ["score"]) >= 80 ? "Pass" : "Fail"),
+      submittedAt: normalizeDate(value(row, ["submitted_at", "exam_date", "created_at", "date"]))
+    };
+  }
+
+  function normalizeCertificate(row: DbRow): Certificate {
+    return {
+      id: value(row, ["id"], crypto.randomUUID()),
+      certificateNumber: value(row, ["certificate_number"]),
+      studentId: value(row, ["student_id"]),
+      studentName: value(row, ["student_name", "name"], "Student"),
+      verificationCode: value(row, ["verification_code"]),
+      issueDate: normalizeDate(value(row, ["issue_date", "created_at", "date"]))
+    };
+  }
+
   const loadAdminData = useCallback(async () => {
     setLoading(true);
 
@@ -96,38 +166,41 @@ export default function AdminPage() {
         return;
       }
 
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profileError) throw profileError;
-
-      if (profile?.role !== "admin") {
+      if (user.email?.toLowerCase() !== adminEmail) {
         setAuthorized(false);
-        setMessage("Admin access only. Sign in with an administrator account.");
+        setMessage("Admin access only. Sign in with the academy administrator account.");
         return;
       }
 
       setAuthorized(true);
 
       const [studentsResult, assignmentsResult, examsResult, certificatesResult, announcementsResult] = await Promise.all([
-        supabase.from("profiles").select("id,full_name,email,created_at,certification_level").order("created_at", { ascending: false }),
-        supabase.from("assignments").select("id,student_id,title,course_module,file_url,submission_date").order("submission_date", { ascending: false }),
-        supabase.from("exams").select("id,student_id,exam_title,score,result,submitted_at").order("submitted_at", { ascending: false }),
-        supabase.from("certificates").select("id,certificate_number,student_id,student_name,verification_code,issue_date").order("issue_date", { ascending: false }),
-        supabase.from("announcements").select("id,title,body,published_at").order("published_at", { ascending: false })
+        supabase.from("students").select("*"),
+        supabase.from("assignments").select("*"),
+        supabase.from("exams").select("*"),
+        supabase.from("certificates").select("*"),
+        supabase.from("announcements").select("*").order("published_at", { ascending: false })
       ]);
 
       for (const result of [studentsResult, assignmentsResult, examsResult, certificatesResult, announcementsResult]) {
         if (result.error) throw result.error;
       }
 
-      setStudents((studentsResult.data ?? []) as Student[]);
-      setAssignments((assignmentsResult.data ?? []) as Assignment[]);
-      setExams((examsResult.data ?? []) as Exam[]);
-      setCertificates((certificatesResult.data ?? []) as Certificate[]);
+      const normalizedStudents = ((studentsResult.data ?? []) as DbRow[]).map(normalizeStudent);
+      const normalizedAssignments = ((assignmentsResult.data ?? []) as DbRow[])
+        .map(normalizeAssignment)
+        .sort((a, b) => new Date(b.submissionDate).getTime() - new Date(a.submissionDate).getTime());
+      const normalizedExams = ((examsResult.data ?? []) as DbRow[])
+        .map(normalizeExam)
+        .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+      const normalizedCertificates = ((certificatesResult.data ?? []) as DbRow[])
+        .map(normalizeCertificate)
+        .sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime());
+
+      setStudents(normalizedStudents);
+      setAssignments(normalizedAssignments);
+      setExams(normalizedExams);
+      setCertificates(normalizedCertificates);
       setAnnouncements((announcementsResult.data ?? []) as Announcement[]);
       setMessage("Admin dashboard ready.");
     } catch (error) {
@@ -191,7 +264,7 @@ export default function AdminPage() {
       <PageHeader
         eyebrow="AFF Instructor Admin"
         title="Instructor command center."
-        text="Monitor students, submissions, exams, certificates, and official academy announcements."
+        text="Monitor students, submissions, exams, certificates, trading activity, and official academy announcements."
       />
       <Section>
         <SectionInner className="grid gap-8">
@@ -214,10 +287,10 @@ export default function AdminPage() {
               <AdminTable title="Students" headers={["Name", "Email", "Enrollment Date", "Certification Level"]}>
                 {students.map((student) => (
                   <TableRow key={student.id} cells={[
-                    student.full_name ?? "Student",
-                    student.email ?? "Not recorded",
-                    new Date(student.created_at).toLocaleDateString(),
-                    student.certification_level ?? "Forex Training Division"
+                    student.name,
+                    student.email,
+                    new Date(student.enrollmentDate).toLocaleDateString(),
+                    student.certificationLevel
                   ]} />
                 ))}
               </AdminTable>
@@ -225,13 +298,13 @@ export default function AdminPage() {
               <AdminTable title="Assignments" headers={["Student", "Assignment", "Course/Module", "Date", "File"]}>
                 {assignments.map((assignment) => (
                   <tr key={assignment.id} className="bg-navy-950">
-                    <td className="p-4 text-ink/76">{studentMap.get(assignment.student_id ?? "")?.full_name ?? "Student"}</td>
+                    <td className="p-4 text-ink/76">{studentMap.get(assignment.studentId)?.name ?? "Student"}</td>
                     <td className="p-4 text-ink/76">{assignment.title}</td>
-                    <td className="p-4 text-ink/76">{assignment.course_module ?? "Module"}</td>
-                    <td className="p-4 text-ink/76">{new Date(assignment.submission_date).toLocaleDateString()}</td>
+                    <td className="p-4 text-ink/76">{assignment.courseModule}</td>
+                    <td className="p-4 text-ink/76">{new Date(assignment.submissionDate).toLocaleDateString()}</td>
                     <td className="p-4">
-                      {assignment.file_url ? (
-                        <a className="inline-flex items-center gap-2 text-gold-300" href={assignment.file_url} target="_blank" rel="noreferrer">
+                      {assignment.fileUrl ? (
+                        <a className="inline-flex items-center gap-2 text-gold-300" href={assignment.fileUrl} target="_blank" rel="noreferrer">
                           <Download size={15} /> Download
                         </a>
                       ) : (
@@ -245,11 +318,11 @@ export default function AdminPage() {
               <AdminTable title="Exams" headers={["Student", "Exam", "Score", "Pass/Fail", "Date"]}>
                 {exams.map((exam) => (
                   <TableRow key={exam.id} cells={[
-                    studentMap.get(exam.student_id)?.full_name ?? "Student",
-                    exam.exam_title,
+                    studentMap.get(exam.studentId)?.name ?? exam.studentName,
+                    exam.examTitle,
                     `${exam.score}%`,
                     exam.result,
-                    new Date(exam.submitted_at).toLocaleDateString()
+                    new Date(exam.submittedAt).toLocaleDateString()
                   ]} />
                 ))}
               </AdminTable>
@@ -257,10 +330,10 @@ export default function AdminPage() {
               <AdminTable title="Certificates" headers={["Certificate Number", "Student Name", "Verification Code", "Issue Date"]}>
                 {certificates.map((certificate) => (
                   <TableRow key={certificate.id} cells={[
-                    certificate.certificate_number,
-                    certificate.student_name,
-                    certificate.verification_code,
-                    new Date(certificate.issue_date).toLocaleDateString()
+                    certificate.certificateNumber,
+                    certificate.studentName,
+                    certificate.verificationCode,
+                    new Date(certificate.issueDate).toLocaleDateString()
                   ]} />
                 ))}
               </AdminTable>

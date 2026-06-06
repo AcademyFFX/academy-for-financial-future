@@ -70,12 +70,26 @@ create table public.exams (
   submitted_at timestamptz not null default now()
 );
 
+create table public.certificates (
+  id uuid primary key default gen_random_uuid(),
+  exam_id uuid unique references public.exams(id) on delete cascade,
+  certificate_number text not null unique,
+  student_id uuid not null references auth.users(id) on delete cascade,
+  student_name text not null,
+  course_name text not null,
+  score integer not null check (score between 0 and 100),
+  issue_date date not null default current_date,
+  verification_code text not null unique,
+  created_at timestamptz not null default now()
+);
+
 alter table public.profiles enable row level security;
 alter table public.enrollments enable row level security;
 alter table public.assignments enable row level security;
 alter table public.submissions enable row level security;
 alter table public.trading_journal enable row level security;
 alter table public.exams enable row level security;
+alter table public.certificates enable row level security;
 
 create policy "Students can read own profile" on public.profiles for select using (auth.uid() = id);
 create policy "Students can update own profile" on public.profiles for update using (auth.uid() = id);
@@ -87,3 +101,4 @@ create policy "Students can read own trading journal" on public.trading_journal 
 create policy "Students can create own trading journal entries" on public.trading_journal for insert with check (auth.uid() = student_id);
 create policy "Students can read own exam results" on public.exams for select using (auth.uid() = student_id);
 create policy "Students can create own exam results" on public.exams for insert with check (auth.uid() = student_id);
+create policy "Students can read own certificates" on public.certificates for select using (auth.uid() = student_id);

@@ -60,11 +60,22 @@ create table public.trading_journal (
   created_at timestamptz not null default now()
 );
 
+create table public.exams (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references auth.users(id) on delete cascade,
+  exam_title text not null,
+  answers jsonb not null default '{}'::jsonb,
+  score integer not null check (score between 0 and 100),
+  result text not null check (result in ('Pass', 'Fail')),
+  submitted_at timestamptz not null default now()
+);
+
 alter table public.profiles enable row level security;
 alter table public.enrollments enable row level security;
 alter table public.assignments enable row level security;
 alter table public.submissions enable row level security;
 alter table public.trading_journal enable row level security;
+alter table public.exams enable row level security;
 
 create policy "Students can read own profile" on public.profiles for select using (auth.uid() = id);
 create policy "Students can update own profile" on public.profiles for update using (auth.uid() = id);
@@ -74,3 +85,5 @@ create policy "Students can create own assignment submissions" on public.assignm
 create policy "Students can manage own submissions" on public.submissions for all using (auth.uid() = student_id);
 create policy "Students can read own trading journal" on public.trading_journal for select using (auth.uid() = student_id);
 create policy "Students can create own trading journal entries" on public.trading_journal for insert with check (auth.uid() = student_id);
+create policy "Students can read own exam results" on public.exams for select using (auth.uid() = student_id);
+create policy "Students can create own exam results" on public.exams for insert with check (auth.uid() = student_id);

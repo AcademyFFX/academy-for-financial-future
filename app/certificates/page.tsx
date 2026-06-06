@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Award, Download } from "lucide-react";
+import { Award, Download, PlusCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
@@ -24,6 +24,7 @@ export default function CertificatesPage() {
   const router = useRouter();
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState("Certificates are issued automatically after passing certification exams.");
 
   function getErrorMessage(error: unknown, fallback: string) {
@@ -45,6 +46,14 @@ export default function CertificatesPage() {
       issue_date: row.issue_date ?? new Date().toISOString().slice(0, 10),
       verification_code: String(row.verification_code ?? "")
     };
+  }
+
+  function createVerificationCode() {
+    return crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase();
+  }
+
+  function createCertificateNumber() {
+    return `AFF-2026-${String(Math.floor(Math.random() * 100000)).padStart(5, "0")}`;
   }
 
   useEffect(() => {
@@ -104,6 +113,73 @@ Administrator: Dr. Jean Rene Moricette
     URL.revokeObjectURL(url);
   }
 
+  async function generateCertificate() {
+    setGenerating(true);
+    setMessage("Generating certificate...");
+
+    try {
+      const supabase = createClient();
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const { data: latestExam, error: examError } = await supabase
+        .from("exams")
+        .select("score")
+        .eq("student_id", user.id)
+        .gte("score", 80)
+        .order("submitted_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (examError) throw examError;
+
+      const profileName = typeof profile?.full_name === "string" && profile.full_name.trim().length > 0 ? profile.full_name : null;
+      const metadataName =
+        typeof user.user_metadata?.name === "string" && user.user_metadata.name.trim().length > 0
+          ? user.user_metadata.name
+          : typeof user.user_metadata?.full_name === "string" && user.user_metadata.full_name.trim().length > 0
+            ? user.user_metadata.full_name
+            : null;
+
+      const payload = {
+        certificate_number: createCertificateNumber(),
+        student_id: user.id,
+        student_name: profileName ?? metadataName ?? user.email ?? "Student",
+        course_name: "Forex Training Division",
+        score: Number(latestExam?.score ?? 100),
+        issue_date: new Date().toISOString().slice(0, 10),
+        verification_code: createVerificationCode()
+      };
+
+      const { data, error } = await supabase
+        .from("certificates")
+        .insert(payload)
+        .select("*")
+        .single();
+
+      if (error) throw error;
+
+      setCertificates((current) => [normalizeCertificate(data as CertificateRow), ...current]);
+      setMessage("Certificate generated successfully.");
+    } catch (error) {
+      setMessage(getErrorMessage(error, "Unable to generate certificate."));
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -113,13 +189,24 @@ Administrator: Dr. Jean Rene Moricette
       />
       <Section>
         <SectionInner>
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-ink/70">{message}</p>
+            <button
+              className="inline-flex items-center justify-center gap-2 bg-gold-500 px-5 py-3 font-bold text-navy-950 disabled:opacity-60"
+              type="button"
+              onClick={generateCertificate}
+              disabled={generating}
+            >
+              <PlusCircle size={18} /> {generating ? "Generating..." : "Generate Certificate"}
+            </button>
+          </div>
           {loading ? (
             <div className="terminal-panel p-6 text-ink/72">Loading certificates...</div>
           ) : certificates.length === 0 ? (
             <div className="terminal-panel p-8 text-center shadow-gold">
               <Award className="mx-auto text-gold-300" size={48} />
               <h2 className="mt-5 font-serif text-3xl font-semibold text-white">No certificates issued yet.</h2>
-              <p className="mx-auto mt-4 max-w-2xl leading-8 text-ink/74">{message}</p>
+              <p className="mx-auto mt-4 max-w-2xl leading-8 text-ink/74">Generate a certificate after passing an exam, or create one manually for verified completion.</p>
             </div>
           ) : (
             <div className="grid gap-5 lg:grid-cols-2">

@@ -1,12 +1,18 @@
-import { AuthPanel } from "@/components/auth-panel";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/section";
+import { StudentRegistrationForm } from "@/components/student-registration-form";
 
 export default function RegisterPage() {
   return (
     <>
-      <PageHeader eyebrow="Student Registration" title="Apply to the Forex Training Division." text="Create a student account to begin enrollment and receive academy onboarding instructions." />
-      <Section><AuthPanel mode="register" /></Section>
+      <PageHeader
+        eyebrow="Student Registration"
+        title="Apply to the Forex Training Division."
+        text="Create your Academy for Financial Future student account and begin enrollment."
+      />
+      <Section>
+        <StudentRegistrationForm />
+      </Section>
     </>
   );
 }

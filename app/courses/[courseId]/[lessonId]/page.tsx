@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, CheckCircle2, Download, PlayCircle, Save } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Download, FileUp, PlayCircle, Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress";
@@ -290,6 +290,12 @@ export default function LessonPage() {
                     <Download size={17} /> {pdf.title}
                   </a>
                 ))}
+                <Link
+                  href={`/assignments?courseId=${course.id}&lessonId=${lesson.id}`}
+                  className="inline-flex items-center gap-3 bg-gold-500 px-4 py-3 text-sm font-bold text-navy-950"
+                >
+                  <FileUp size={17} /> Submit Lesson Assignment
+                </Link>
               </div>
             </div>
 

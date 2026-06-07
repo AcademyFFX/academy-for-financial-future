@@ -1,19 +1,28 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ExternalLink, Save } from "lucide-react";
+import { ExternalLink, FileUp } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
+import { courseCatalog } from "@/lib/course-catalog";
 import { createClient } from "@/lib/supabase";
 
 type AssignmentSubmission = {
   id: string;
   title: string;
+  course_id: string | null;
+  lesson_id: string | null;
+  lesson_title: string | null;
   course_module: string | null;
   student_notes: string | null;
   file_url: string | null;
+  file_path: string | null;
   submission_date: string;
+  status: string;
+  grade: number | null;
+  instructor_feedback: string | null;
+  reviewed_at: string | null;
   created_at: string;
 };
 
@@ -23,9 +32,10 @@ type AssignmentRow = Partial<AssignmentSubmission> & {
 
 const initialForm = {
   title: "",
+  course_id: "",
+  lesson_id: "",
   course_module: "",
   student_notes: "",
-  file_url: "",
   submission_date: new Date().toISOString().slice(0, 10)
 };
 
@@ -34,6 +44,7 @@ export default function AssignmentsPage() {
   const [studentId, setStudentId] = useState<string | null>(null);
   const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([]);
   const [form, setForm] = useState(initialForm);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("Submit completed coursework for review.");
@@ -50,12 +61,26 @@ export default function AssignmentsPage() {
     return {
       id: String(row.id ?? crypto.randomUUID()),
       title: String(row.title ?? ""),
+      course_id: row.course_id ?? null,
+      lesson_id: row.lesson_id ?? null,
+      lesson_title: row.lesson_title ?? null,
       course_module: row.course_module ?? null,
       student_notes: row.student_notes ?? row.notes ?? null,
       file_url: row.file_url ?? null,
+      file_path: row.file_path ?? null,
       submission_date: row.submission_date ?? new Date().toISOString().slice(0, 10),
+      status: String(row.status ?? "Submitted"),
+      grade: typeof row.grade === "number" ? row.grade : row.grade ? Number(row.grade) : null,
+      instructor_feedback: row.instructor_feedback ?? null,
+      reviewed_at: row.reviewed_at ?? null,
       created_at: row.created_at ?? new Date().toISOString()
     };
+  }
+
+  function getSelectedLesson(courseId: string, lessonId: string) {
+    const course = courseCatalog.find((item) => item.id === courseId);
+    const lesson = course?.lessons.find((item) => item.id === lessonId);
+    return { course, lesson };
   }
 
   useEffect(() => {
@@ -89,10 +114,41 @@ export default function AssignmentsPage() {
     }
 
     loadSubmissions();
+
+    const params = new URLSearchParams(window.location.search);
+    const courseId = params.get("courseId") ?? "";
+    const lessonId = params.get("lessonId") ?? "";
+    const { course, lesson } = getSelectedLesson(courseId, lessonId);
+
+    if (course && lesson) {
+      setForm((current) => ({
+        ...current,
+        title: `${lesson.title} Assignment`,
+        course_id: course.id,
+        lesson_id: lesson.id,
+        course_module: `${course.title} / ${lesson.title}`
+      }));
+    }
   }, [router]);
 
   function updateField(name: keyof typeof initialForm, value: string) {
-    setForm((current) => ({ ...current, [name]: value }));
+    setForm((current) => {
+      if (name === "course_id") {
+        return { ...current, course_id: value, lesson_id: "", course_module: courseCatalog.find((course) => course.id === value)?.title ?? "" };
+      }
+
+      if (name === "lesson_id") {
+        const { course, lesson } = getSelectedLesson(current.course_id, value);
+        return {
+          ...current,
+          lesson_id: value,
+          title: lesson ? `${lesson.title} Assignment` : current.title,
+          course_module: course && lesson ? `${course.title} / ${lesson.title}` : current.course_module
+        };
+      }
+
+      return { ...current, [name]: value };
+    });
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -108,12 +164,35 @@ export default function AssignmentsPage() {
 
     try {
       const supabase = createClient();
+      let fileUrl: string | null = null;
+      let filePath: string | null = null;
+      const { lesson } = getSelectedLesson(form.course_id, form.lesson_id);
+
+      if (selectedFile) {
+        const safeName = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+        filePath = `${studentId}/${Date.now()}-${safeName}`;
+        const { error: uploadError } = await supabase.storage.from("assignment-submissions").upload(filePath, selectedFile, {
+          cacheControl: "3600",
+          upsert: false
+        });
+
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrl } = supabase.storage.from("assignment-submissions").getPublicUrl(filePath);
+        fileUrl = publicUrl.publicUrl;
+      }
+
       const payload = {
         student_id: studentId,
         title: form.title.trim(),
+        course_id: form.course_id || null,
+        lesson_id: form.lesson_id || null,
+        lesson_title: lesson?.title ?? null,
         course_module: form.course_module.trim() || null,
         student_notes: form.student_notes.trim() || null,
-        file_url: form.file_url.trim() || null,
+        file_url: fileUrl,
+        file_path: filePath,
+        status: "Submitted",
         submission_date: form.submission_date
       };
 
@@ -127,6 +206,7 @@ export default function AssignmentsPage() {
 
       setSubmissions((current) => [normalizeSubmission(data as AssignmentRow), ...current]);
       setForm(initialForm);
+      setSelectedFile(null);
       setMessage("Assignment submission saved.");
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to save assignment submission."));
@@ -156,13 +236,35 @@ export default function AssignmentsPage() {
             </label>
 
             <label className="grid gap-2 text-sm text-ink/74">
-              Course/module
-              <input
+              Course
+              <select
                 className="border border-gold-500/24 bg-navy-950 px-4 py-3 text-white outline-none focus:border-gold-400"
-                value={form.course_module}
-                onChange={(event) => updateField("course_module", event.target.value)}
+                value={form.course_id}
+                onChange={(event) => updateField("course_id", event.target.value)}
                 required
-              />
+              >
+                <option value="">Select course</option>
+                {courseCatalog.map((course) => (
+                  <option key={course.id} value={course.id}>{course.title}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="grid gap-2 text-sm text-ink/74">
+              Lesson
+              <select
+                className="border border-gold-500/24 bg-navy-950 px-4 py-3 text-white outline-none focus:border-gold-400"
+                value={form.lesson_id}
+                onChange={(event) => updateField("lesson_id", event.target.value)}
+                required
+              >
+                <option value="">Select lesson</option>
+                {courseCatalog
+                  .find((course) => course.id === form.course_id)
+                  ?.lessons.map((lesson) => (
+                    <option key={lesson.id} value={lesson.id}>{lesson.title}</option>
+                  ))}
+              </select>
             </label>
 
             <label className="grid gap-2 text-sm text-ink/74">
@@ -175,13 +277,11 @@ export default function AssignmentsPage() {
             </label>
 
             <label className="grid gap-2 text-sm text-ink/74">
-              File URL
+              Assignment file
               <input
-                className="border border-gold-500/24 bg-navy-950 px-4 py-3 text-white outline-none focus:border-gold-400"
-                type="url"
-                placeholder="https://..."
-                value={form.file_url}
-                onChange={(event) => updateField("file_url", event.target.value)}
+                className="border border-gold-500/24 bg-navy-950 px-4 py-3 text-white file:mr-4 file:border-0 file:bg-gold-500 file:px-4 file:py-2 file:font-bold file:text-navy-950"
+                type="file"
+                onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
               />
             </label>
 
@@ -197,7 +297,7 @@ export default function AssignmentsPage() {
             </label>
 
             <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-5 py-3 font-bold text-navy-950 disabled:opacity-60" type="submit" disabled={saving}>
-              <Save size={18} /> {saving ? "Saving..." : "Save Submission"}
+              <FileUp size={18} /> {saving ? "Uploading..." : "Upload Assignment"}
             </button>
             <p className="text-sm text-ink/70">{message}</p>
           </form>
@@ -222,6 +322,7 @@ export default function AssignmentsPage() {
                         </p>
                         <h3 className="mt-2 text-xl font-semibold text-white">{submission.title}</h3>
                         <p className="mt-2 text-sm text-ink/70">{submission.course_module}</p>
+                        <p className="mt-2 inline-flex border border-gold-500/25 px-3 py-1 text-xs uppercase tracking-[.18em] text-gold-300">{submission.status}</p>
                       </div>
                       {submission.file_url ? (
                         <a className="inline-flex items-center gap-2 text-sm text-gold-300" href={submission.file_url} target="_blank" rel="noreferrer">
@@ -230,6 +331,13 @@ export default function AssignmentsPage() {
                       ) : null}
                     </div>
                     {submission.student_notes ? <p className="mt-4 leading-7 text-ink/76">{submission.student_notes}</p> : null}
+                    <div className="mt-4 border-t border-gold-500/15 pt-4">
+                      <p className="text-sm font-semibold text-white">Instructor Feedback</p>
+                      {submission.grade !== null ? <p className="mt-2 text-sm text-gold-300">Grade: {submission.grade}%</p> : null}
+                      <p className="mt-2 leading-7 text-ink/72">
+                        {submission.instructor_feedback ?? "Feedback will appear here after instructor review."}
+                      </p>
+                    </div>
                   </article>
                 ))}
               </div>

@@ -22,8 +22,12 @@ type Assignment = {
   studentId: string;
   title: string;
   courseModule: string;
+  lessonTitle: string;
   fileUrl: string;
   submissionDate: string;
+  status: string;
+  grade: number | null;
+  instructorFeedback: string;
 };
 
 type Exam = {
@@ -88,6 +92,7 @@ export default function AdminPage() {
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [announcementForm, setAnnouncementForm] = useState(initialAnnouncement);
+  const [assignmentReviews, setAssignmentReviews] = useState<Record<string, { status: string; grade: string; instructorFeedback: string }>>({});
 
   const studentMap = useMemo(() => {
     return new Map(students.map((student) => [student.id, student]));
@@ -124,8 +129,12 @@ export default function AdminPage() {
       studentId: value(row, ["student_id"]),
       title: value(row, ["title", "assignment_title"], "Assignment"),
       courseModule: value(row, ["course_module", "module", "course"], "Module"),
+      lessonTitle: value(row, ["lesson_title"], "Lesson"),
       fileUrl: value(row, ["file_url", "url", "submission_url"]),
-      submissionDate: normalizeDate(value(row, ["submission_date", "submitted_at", "created_at", "date"]))
+      submissionDate: normalizeDate(value(row, ["submission_date", "submitted_at", "created_at", "date"])),
+      status: value(row, ["status"], "Submitted"),
+      grade: row.grade === null || row.grade === undefined ? null : Number(row.grade),
+      instructorFeedback: value(row, ["instructor_feedback"])
     };
   }
 
@@ -199,6 +208,14 @@ export default function AdminPage() {
 
       setStudents(normalizedStudents);
       setAssignments(normalizedAssignments);
+      setAssignmentReviews(Object.fromEntries(normalizedAssignments.map((assignment) => [
+        assignment.id,
+        {
+          status: assignment.status,
+          grade: assignment.grade === null ? "" : String(assignment.grade),
+          instructorFeedback: assignment.instructorFeedback
+        }
+      ])));
       setExams(normalizedExams);
       setCertificates(normalizedCertificates);
       setAnnouncements((announcementsResult.data ?? []) as Announcement[]);
@@ -242,6 +259,38 @@ export default function AdminPage() {
       setMessage("Announcement saved.");
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to save announcement."));
+    }
+  }
+
+  async function saveAssignmentReview(assignmentId: string) {
+    const review = assignmentReviews[assignmentId];
+    if (!review) return;
+
+    setMessage("Saving assignment review...");
+
+    try {
+      const supabase = createClient();
+      const payload = {
+        status: review.status,
+        grade: review.grade.trim().length > 0 ? Number(review.grade) : null,
+        instructor_feedback: review.instructorFeedback.trim() || null,
+        reviewed_by: adminEmail,
+        reviewed_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from("assignments")
+        .update(payload)
+        .eq("id", assignmentId)
+        .select("*")
+        .single();
+
+      if (error) throw error;
+
+      setAssignments((current) => current.map((assignment) => (assignment.id === assignmentId ? normalizeAssignment(data as DbRow) : assignment)));
+      setMessage("Assignment review saved.");
+    } catch (error) {
+      setMessage(getErrorMessage(error, "Unable to save assignment review."));
     }
   }
 
@@ -295,12 +344,13 @@ export default function AdminPage() {
                 ))}
               </AdminTable>
 
-              <AdminTable title="Assignments" headers={["Student", "Assignment", "Course/Module", "Date", "File"]}>
+              <AdminTable title="Assignments" headers={["Student", "Assignment", "Course/Module", "Lesson", "Date", "File", "Review"]}>
                 {assignments.map((assignment) => (
                   <tr key={assignment.id} className="bg-navy-950">
                     <td className="p-4 text-ink/76">{studentMap.get(assignment.studentId)?.name ?? "Student"}</td>
                     <td className="p-4 text-ink/76">{assignment.title}</td>
                     <td className="p-4 text-ink/76">{assignment.courseModule}</td>
+                    <td className="p-4 text-ink/76">{assignment.lessonTitle}</td>
                     <td className="p-4 text-ink/76">{new Date(assignment.submissionDate).toLocaleDateString()}</td>
                     <td className="p-4">
                       {assignment.fileUrl ? (
@@ -310,6 +360,49 @@ export default function AdminPage() {
                       ) : (
                         <span className="text-ink/50">No file</span>
                       )}
+                    </td>
+                    <td className="min-w-[320px] p-4">
+                      <div className="grid gap-3">
+                        <div className="grid gap-2 sm:grid-cols-[1fr_90px]">
+                          <select
+                            className="border border-gold-500/24 bg-navy-900 px-3 py-2 text-ink outline-none"
+                            value={assignmentReviews[assignment.id]?.status ?? assignment.status}
+                            onChange={(event) => setAssignmentReviews((current) => ({
+                              ...current,
+                              [assignment.id]: { ...(current[assignment.id] ?? { grade: "", instructorFeedback: "" }), status: event.target.value }
+                            }))}
+                          >
+                            <option>Submitted</option>
+                            <option>In Review</option>
+                            <option>Needs Revision</option>
+                            <option>Approved</option>
+                          </select>
+                          <input
+                            className="border border-gold-500/24 bg-navy-900 px-3 py-2 text-ink outline-none"
+                            type="number"
+                            min="0"
+                            max="100"
+                            placeholder="Grade"
+                            value={assignmentReviews[assignment.id]?.grade ?? ""}
+                            onChange={(event) => setAssignmentReviews((current) => ({
+                              ...current,
+                              [assignment.id]: { ...(current[assignment.id] ?? { status: assignment.status, instructorFeedback: "" }), grade: event.target.value }
+                            }))}
+                          />
+                        </div>
+                        <textarea
+                          className="min-h-20 border border-gold-500/24 bg-navy-900 px-3 py-2 text-ink outline-none"
+                          placeholder="Instructor feedback"
+                          value={assignmentReviews[assignment.id]?.instructorFeedback ?? ""}
+                          onChange={(event) => setAssignmentReviews((current) => ({
+                            ...current,
+                            [assignment.id]: { ...(current[assignment.id] ?? { status: assignment.status, grade: "" }), instructorFeedback: event.target.value }
+                          }))}
+                        />
+                        <button className="bg-gold-500 px-4 py-2 text-sm font-bold text-navy-950" type="button" onClick={() => saveAssignmentReview(assignment.id)}>
+                          Save Review
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

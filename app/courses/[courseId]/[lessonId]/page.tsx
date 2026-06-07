@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, CheckCircle2, Download, Save } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Download, PlayCircle, Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress";
@@ -120,7 +120,8 @@ export default function LessonPage() {
   const progress = course ? progressMap[course.id] : undefined;
   const completed = Boolean(progress?.completedLessonIds.includes(params.lessonId));
   const percent = course ? getCourseProgressPercent(course, progress) : 0;
-  const embedUrl = useMemo(() => (lesson ? getVideoEmbedUrl(lesson.videoUrl) : ""), [lesson]);
+  const hasVideo = Boolean(lesson?.videoUrl.trim());
+  const embedUrl = useMemo(() => (lesson && lesson.videoUrl.trim() ? getVideoEmbedUrl(lesson.videoUrl) : ""), [lesson]);
 
   function saveNotes() {
     const next = { ...notesMap, [noteKey]: notes };
@@ -207,8 +208,19 @@ export default function LessonPage() {
         <SectionInner className="grid gap-6 lg:grid-cols-[1fr_360px]">
           <div className="grid gap-6">
             <div className="terminal-panel overflow-hidden">
-              <div className="aspect-video bg-black">
-                {isMp4Video(lesson.videoUrl) ? (
+              <div className="aspect-video bg-navy-950">
+                {!hasVideo ? (
+                  <div className="flex h-full flex-col items-center justify-center border-b border-gold-500/20 px-6 text-center">
+                    <div className="flex h-16 w-16 items-center justify-center border border-gold-500/45 bg-navy-900 text-gold-300">
+                      <PlayCircle size={34} />
+                    </div>
+                    <p className="mt-5 text-xs font-semibold uppercase tracking-[.28em] text-gold-300">Academy Lesson Media</p>
+                    <h2 className="mt-3 text-3xl font-semibold text-white">Video Coming Soon</h2>
+                    <p className="mt-3 max-w-xl leading-7 text-ink/70">
+                      This lesson is prepared for official Academy for Financial Future video content. Review the objectives and resources below while the media is being finalized.
+                    </p>
+                  </div>
+                ) : isMp4Video(lesson.videoUrl) ? (
                   <video className="h-full w-full" controls preload="metadata">
                     <source src={lesson.videoUrl} type="video/mp4" />
                   </video>

@@ -27,7 +27,7 @@ export const courseCatalog: CourseDefinition[] = [
         id: "fx-market-map",
         title: "The Forex Market Map",
         duration: "18 min",
-        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        videoUrl: "",
         overview: "A foundational tour of participants, sessions, liquidity, and how currency markets move.",
         objectives: ["Identify the major forex market participants.", "Explain liquidity across the trading day.", "Map session behavior to planning routines."],
         pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
@@ -36,25 +36,25 @@ export const courseCatalog: CourseDefinition[] = [
         id: "currency-pairs",
         title: "Currency Pairs and Quote Anatomy",
         duration: "22 min",
-        videoUrl: "https://vimeo.com/76979871",
+        videoUrl: "",
         overview: "Learn base and quote currencies, bid/ask pricing, spread mechanics, and pair classification.",
         objectives: ["Read base and quote currency structure.", "Compare majors, minors, and exotic pairs.", "Explain bid, ask, and spread costs."],
         pdfs: [{ title: "Risk Management Worksheet", href: "/downloads/risk-management-worksheet.pdf" }]
       },
       {
         id: "sessions-pips",
-        title: "Sessions, Pips, Lots, and Spreads",
+        title: "Sessions, Pips, Lots and Spreads",
         duration: "26 min",
-        videoUrl: "/videos/aff-sessions-pips-lots.mp4",
+        videoUrl: "",
         overview: "Understand the timing, measurement, and execution language traders use every day.",
         objectives: ["Define pips, lots, and spreads.", "Compare London, New York, and Asian sessions.", "Connect session volatility to position planning."],
         pdfs: [{ title: "Professional Trading Journal Template", href: "/downloads/trading-journal-template.pdf" }]
       },
       {
         id: "orders-execution",
-        title: "Orders, Execution, and Broker Basics",
+        title: "Orders, Execution and Broker Basics",
         duration: "24 min",
-        videoUrl: "https://vimeo.com/76979871",
+        videoUrl: "",
         overview: "Review market, limit, stop, and protective order behavior under real market conditions.",
         objectives: ["Differentiate market, limit, stop, and stop-limit orders.", "Explain broker execution basics.", "Select protective orders for a trade plan."],
         pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
@@ -71,7 +71,7 @@ export const courseCatalog: CourseDefinition[] = [
         id: "candlestick-structure",
         title: "Candlestick Structure and Context",
         duration: "20 min",
-        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        videoUrl: "",
         overview: "Study wick, body, range, and candle context without treating patterns as isolated signals.",
         objectives: ["Read candle range, wick, and body structure.", "Evaluate candle context inside a trend.", "Avoid isolated pattern interpretation."],
         pdfs: [{ title: "Professional Trading Journal Template", href: "/downloads/trading-journal-template.pdf" }]
@@ -80,7 +80,7 @@ export const courseCatalog: CourseDefinition[] = [
         id: "support-resistance",
         title: "Support, Resistance, and Liquidity Zones",
         duration: "28 min",
-        videoUrl: "https://vimeo.com/76979871",
+        videoUrl: "",
         overview: "Identify decision areas where price reacts, pauses, or hunts liquidity.",
         objectives: ["Mark support and resistance with evidence.", "Recognize liquidity resting near levels.", "Separate reaction zones from prediction lines."],
         pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
@@ -89,7 +89,7 @@ export const courseCatalog: CourseDefinition[] = [
         id: "trend-confirmation",
         title: "Trend Systems and Confirmation",
         duration: "30 min",
-        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        videoUrl: "",
         overview: "Build a repeatable approach to trend identification and confirmation.",
         objectives: ["Define trend structure with higher highs and lows.", "Use confirmation without overloading indicators.", "Create a repeatable trend checklist."],
         pdfs: [{ title: "Risk Management Worksheet", href: "/downloads/risk-management-worksheet.pdf" }]
@@ -98,7 +98,7 @@ export const courseCatalog: CourseDefinition[] = [
         id: "multi-timeframe",
         title: "Multi-Timeframe Analysis Lab",
         duration: "34 min",
-        videoUrl: "https://vimeo.com/76979871",
+        videoUrl: "",
         overview: "Combine higher-timeframe bias with lower-timeframe execution planning.",
         objectives: ["Set higher-timeframe directional bias.", "Use lower timeframes for execution timing.", "Document alignment before entry."],
         pdfs: [{ title: "Professional Trading Journal Template", href: "/downloads/trading-journal-template.pdf" }]
@@ -115,7 +115,7 @@ export const courseCatalog: CourseDefinition[] = [
         id: "position-sizing",
         title: "Position Sizing Frameworks",
         duration: "25 min",
-        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        videoUrl: "",
         overview: "Translate risk percentage into trade size with practical sizing discipline.",
         objectives: ["Calculate trade risk from account equity.", "Translate stop distance into position size.", "Apply consistent risk percentage rules."],
         pdfs: [{ title: "Risk Management Worksheet", href: "/downloads/risk-management-worksheet.pdf" }]
@@ -124,7 +124,7 @@ export const courseCatalog: CourseDefinition[] = [
         id: "drawdown-control",
         title: "Drawdown Control and Daily Loss Rules",
         duration: "27 min",
-        videoUrl: "https://vimeo.com/76979871",
+        videoUrl: "",
         overview: "Design daily and weekly controls that protect capital before emotions take over.",
         objectives: ["Set daily and weekly loss limits.", "Recognize drawdown escalation patterns.", "Create capital protection stop rules."],
         pdfs: [{ title: "Risk Management Worksheet", href: "/downloads/risk-management-worksheet.pdf" }]
@@ -133,7 +133,7 @@ export const courseCatalog: CourseDefinition[] = [
         id: "trade-invalidation",
         title: "Trade Invalidation and Stop Logic",
         duration: "24 min",
-        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        videoUrl: "",
         overview: "Define when your idea is wrong and how to exit without negotiation.",
         objectives: ["Define invalidation before entry.", "Place stops around market structure.", "Separate trade thesis failure from normal fluctuation."],
         pdfs: [{ title: "Professional Trading Journal Template", href: "/downloads/trading-journal-template.pdf" }]
@@ -142,7 +142,7 @@ export const courseCatalog: CourseDefinition[] = [
         id: "risk-review",
         title: "Risk Review and Capital Protection Plan",
         duration: "32 min",
-        videoUrl: "https://vimeo.com/76979871",
+        videoUrl: "",
         overview: "Audit your risk behavior and build an enforceable capital protection plan.",
         objectives: ["Review risk behavior from prior trades.", "Identify repeat loss patterns.", "Write an enforceable protection plan."],
         pdfs: [{ title: "Risk Management Worksheet", href: "/downloads/risk-management-worksheet.pdf" }]
@@ -159,7 +159,7 @@ export const courseCatalog: CourseDefinition[] = [
         id: "liquidity-concepts",
         title: "Institutional Liquidity Concepts",
         duration: "31 min",
-        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        videoUrl: "",
         overview: "Study how resting orders, liquidity pools, and execution incentives shape movement.",
         objectives: ["Identify common liquidity pools.", "Explain how stops can fuel price movement.", "Build liquidity context into planning."],
         pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
@@ -168,7 +168,7 @@ export const courseCatalog: CourseDefinition[] = [
         id: "macro-catalysts",
         title: "Macro Catalysts and Currency Bias",
         duration: "29 min",
-        videoUrl: "https://vimeo.com/76979871",
+        videoUrl: "",
         overview: "Use macro events, rates, and risk sentiment to frame currency bias.",
         objectives: ["Connect rate expectations to currency bias.", "Track macro catalysts before trading.", "Use risk sentiment as market context."],
         pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
@@ -177,7 +177,7 @@ export const courseCatalog: CourseDefinition[] = [
         id: "news-discipline",
         title: "News Discipline and Volatility Controls",
         duration: "23 min",
-        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        videoUrl: "",
         overview: "Prepare for news events without abandoning risk rules or execution standards.",
         objectives: ["Create a news event preparation routine.", "Use volatility controls during catalysts.", "Avoid reactive entries around high-impact events."],
         pdfs: [{ title: "Risk Management Worksheet", href: "/downloads/risk-management-worksheet.pdf" }]
@@ -186,7 +186,7 @@ export const courseCatalog: CourseDefinition[] = [
         id: "trade-planning",
         title: "Professional Trade Planning Routine",
         duration: "36 min",
-        videoUrl: "https://vimeo.com/76979871",
+        videoUrl: "",
         overview: "Build a repeatable pre-market and pre-trade workflow for institutional discipline.",
         objectives: ["Build a pre-market review structure.", "Document trade thesis and invalidation.", "Use a final execution checklist."],
         pdfs: [{ title: "Professional Trading Journal Template", href: "/downloads/trading-journal-template.pdf" }]

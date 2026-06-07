@@ -235,6 +235,7 @@ export default function LessonPage() {
                 )}
               </div>
               <div className="p-6">
+                <p className="text-xs font-semibold uppercase tracking-[.22em] text-gold-300">Lesson Description</p>
                 <p className="mb-5 leading-7 text-ink/76">{lesson.overview}</p>
                 <div className="mb-2 flex justify-between text-sm text-ink/72">
                   <span>{progress?.completedLessonIds.length ?? 0} of {course.lessons.length} lessons completed</span>
@@ -242,6 +243,11 @@ export default function LessonPage() {
                 </div>
                 <ProgressBar value={percent} />
               </div>
+            </div>
+
+            <div className="terminal-panel p-6">
+              <h2 className="text-2xl font-semibold text-white">Lesson Summary</h2>
+              <p className="mt-4 leading-7 text-ink/76">{lesson.summary}</p>
             </div>
 
             <div className="terminal-panel p-6">

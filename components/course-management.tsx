@@ -13,13 +13,59 @@ import {
   type CourseProgressMap
 } from "@/lib/course-catalog";
 import { downloads } from "@/lib/data";
+import { createClient } from "@/lib/supabase";
+
+type LessonProgressRow = {
+  course_id: string;
+  lesson_id: string;
+};
 
 export function CourseManagement() {
   const [progressMap, setProgressMap] = useState<CourseProgressMap>({});
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(courseProgressStorageKey);
-    if (saved) setProgressMap(JSON.parse(saved) as CourseProgressMap);
+    async function loadProgress() {
+      const saved = window.localStorage.getItem(courseProgressStorageKey);
+      const localProgress = saved ? (JSON.parse(saved) as CourseProgressMap) : {};
+
+      try {
+        const supabase = createClient();
+        const {
+          data: { user }
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          setProgressMap(localProgress);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("lesson_progress")
+          .select("course_id, lesson_id")
+          .eq("student_id", user.id);
+
+        if (error) {
+          setProgressMap(localProgress);
+          return;
+        }
+
+        const remoteProgress = (data ?? []).reduce<CourseProgressMap>((accumulator, row: LessonProgressRow) => {
+          const existing = accumulator[row.course_id] ?? { enrolled: true, completedLessonIds: [] };
+          accumulator[row.course_id] = {
+            enrolled: true,
+            completedLessonIds: Array.from(new Set([...existing.completedLessonIds, row.lesson_id])),
+            resumeLessonId: existing.resumeLessonId
+          };
+          return accumulator;
+        }, {});
+
+        setProgressMap({ ...localProgress, ...remoteProgress });
+      } catch {
+        setProgressMap(localProgress);
+      }
+    }
+
+    loadProgress();
   }, []);
 
   useEffect(() => {
@@ -85,8 +131,8 @@ export function CourseManagement() {
                   return (
                     <Link
                       key={lesson.id}
-                      href={progress?.enrolled ? getLessonPath(course.id, lesson.id) : "#"}
-                      className={`flex items-center justify-between gap-4 border border-gold-500/20 bg-navy-950 px-4 py-3 text-left text-sm ${progress?.enrolled ? "hover:border-gold-400/60" : "pointer-events-none opacity-45"}`}
+                      href={getLessonPath(course.id, lesson.id)}
+                      className="flex items-center justify-between gap-4 border border-gold-500/20 bg-navy-950 px-4 py-3 text-left text-sm hover:border-gold-400/60"
                     >
                       <span className="flex items-center gap-3 text-ink/78">
                         <CheckCircle2 className={completed ? "text-gold-300" : "text-ink/35"} size={18} />

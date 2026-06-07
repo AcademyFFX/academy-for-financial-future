@@ -12,13 +12,59 @@ import {
   getResumeLesson,
   type CourseProgressMap
 } from "@/lib/course-catalog";
+import { createClient } from "@/lib/supabase";
+
+type LessonProgressRow = {
+  course_id: string;
+  lesson_id: string;
+};
 
 export function DashboardCourseSummary() {
   const [progressMap, setProgressMap] = useState<CourseProgressMap>({});
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(courseProgressStorageKey);
-    if (saved) setProgressMap(JSON.parse(saved) as CourseProgressMap);
+    async function loadProgress() {
+      const saved = window.localStorage.getItem(courseProgressStorageKey);
+      const localProgress = saved ? (JSON.parse(saved) as CourseProgressMap) : {};
+
+      try {
+        const supabase = createClient();
+        const {
+          data: { user }
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          setProgressMap(localProgress);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("lesson_progress")
+          .select("course_id, lesson_id")
+          .eq("student_id", user.id);
+
+        if (error) {
+          setProgressMap(localProgress);
+          return;
+        }
+
+        const remoteProgress = (data ?? []).reduce<CourseProgressMap>((accumulator, row: LessonProgressRow) => {
+          const existing = accumulator[row.course_id] ?? { enrolled: true, completedLessonIds: [] };
+          accumulator[row.course_id] = {
+            enrolled: true,
+            completedLessonIds: Array.from(new Set([...existing.completedLessonIds, row.lesson_id])),
+            resumeLessonId: existing.resumeLessonId
+          };
+          return accumulator;
+        }, {});
+
+        setProgressMap({ ...localProgress, ...remoteProgress });
+      } catch {
+        setProgressMap(localProgress);
+      }
+    }
+
+    loadProgress();
   }, []);
 
   const enrolledCourses = useMemo(() => {

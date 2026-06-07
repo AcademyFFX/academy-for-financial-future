@@ -13,11 +13,17 @@ import {
   getCourseProgressPercent,
   getLessonPath,
   getVideoEmbedUrl,
+  isMp4Video,
   lessonNotesStorageKey,
   type CourseProgressMap
 } from "@/lib/course-catalog";
+import { createClient } from "@/lib/supabase";
 
 type LessonNotesMap = Record<string, string>;
+type LessonProgressRow = {
+  course_id: string;
+  lesson_id: string;
+};
 
 export default function LessonPage() {
   const params = useParams<{ courseId: string; lessonId: string }>();
@@ -31,13 +37,60 @@ export default function LessonPage() {
   const [progressMap, setProgressMap] = useState<CourseProgressMap>({});
   const [notesMap, setNotesMap] = useState<LessonNotesMap>({});
   const [notes, setNotes] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [savingCompletion, setSavingCompletion] = useState(false);
   const [message, setMessage] = useState("Add private lesson notes and mark the lesson complete when finished.");
 
   const noteKey = `${params.courseId}:${params.lessonId}`;
 
   useEffect(() => {
-    const savedProgress = window.localStorage.getItem(courseProgressStorageKey);
-    if (savedProgress) setProgressMap(JSON.parse(savedProgress) as CourseProgressMap);
+    async function loadProgress() {
+      const savedProgress = window.localStorage.getItem(courseProgressStorageKey);
+      const localProgress = savedProgress ? (JSON.parse(savedProgress) as CourseProgressMap) : {};
+
+      try {
+        const supabase = createClient();
+        const {
+          data: { user }
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          router.replace(`/login?next=${encodeURIComponent(`/courses/${params.courseId}/${params.lessonId}`)}`);
+          return;
+        }
+
+        setUserId(user.id);
+
+        const { data, error } = await supabase
+          .from("lesson_progress")
+          .select("course_id, lesson_id")
+          .eq("student_id", user.id);
+
+        if (error) {
+          setMessage(`Unable to load lesson progress: ${error.message}`);
+          setProgressMap(localProgress);
+          return;
+        }
+
+        const remoteProgress = (data ?? []).reduce<CourseProgressMap>((accumulator, row: LessonProgressRow) => {
+          const existing = accumulator[row.course_id] ?? { enrolled: true, completedLessonIds: [] };
+          accumulator[row.course_id] = {
+            enrolled: true,
+            completedLessonIds: Array.from(new Set([...existing.completedLessonIds, row.lesson_id])),
+            resumeLessonId: existing.resumeLessonId
+          };
+          return accumulator;
+        }, {});
+
+        setProgressMap({ ...localProgress, ...remoteProgress });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown Supabase error.";
+        setMessage(`Unable to load lesson progress: ${message}`);
+        setProgressMap(localProgress);
+      }
+    }
+
+    loadProgress();
 
     const savedNotes = window.localStorage.getItem(lessonNotesStorageKey);
     if (savedNotes) {
@@ -45,7 +98,7 @@ export default function LessonPage() {
       setNotesMap(parsed);
       setNotes(parsed[noteKey] ?? "");
     }
-  }, [noteKey]);
+  }, [noteKey, params.courseId, params.lessonId, router]);
 
   useEffect(() => {
     if (!course || !lesson) return;
@@ -76,26 +129,60 @@ export default function LessonPage() {
     setMessage("Lesson notes saved.");
   }
 
-  function markComplete() {
+  async function markComplete() {
     if (!course || !lesson) return;
+    setSavingCompletion(true);
 
-    setProgressMap((current) => {
-      const existing = current[course.id] ?? { enrolled: true, completedLessonIds: [] };
-      const completedLessonIds = existing.completedLessonIds.includes(lesson.id)
-        ? existing.completedLessonIds
-        : [...existing.completedLessonIds, lesson.id];
-      const next = {
-        ...current,
-        [course.id]: {
-          enrolled: true,
-          completedLessonIds,
-          resumeLessonId: nextLesson?.id ?? lesson.id
-        }
-      };
-      window.localStorage.setItem(courseProgressStorageKey, JSON.stringify(next));
-      return next;
-    });
-    setMessage("Lesson marked complete. Course progress updated.");
+    try {
+      const supabase = createClient();
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+      const activeUserId = user?.id ?? userId;
+
+      if (!activeUserId) {
+        router.replace(`/login?next=${encodeURIComponent(`/courses/${course.id}/${lesson.id}`)}`);
+        return;
+      }
+
+      const { error } = await supabase.from("lesson_progress").upsert(
+        {
+          student_id: activeUserId,
+          course_id: course.id,
+          lesson_id: lesson.id,
+          completed_at: new Date().toISOString()
+        },
+        { onConflict: "student_id,course_id,lesson_id" }
+      );
+
+      if (error) {
+        setMessage(`Unable to save lesson completion: ${error.message}`);
+        return;
+      }
+
+      setProgressMap((current) => {
+        const existing = current[course.id] ?? { enrolled: true, completedLessonIds: [] };
+        const completedLessonIds = existing.completedLessonIds.includes(lesson.id)
+          ? existing.completedLessonIds
+          : [...existing.completedLessonIds, lesson.id];
+        const next = {
+          ...current,
+          [course.id]: {
+            enrolled: true,
+            completedLessonIds,
+            resumeLessonId: nextLesson?.id ?? lesson.id
+          }
+        };
+        window.localStorage.setItem(courseProgressStorageKey, JSON.stringify(next));
+        return next;
+      });
+      setMessage("Lesson marked complete. Course progress saved to Supabase.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown Supabase error.";
+      setMessage(`Unable to save lesson completion: ${message}`);
+    } finally {
+      setSavingCompletion(false);
+    }
   }
 
   if (!course || !lesson) {
@@ -121,21 +208,40 @@ export default function LessonPage() {
           <div className="grid gap-6">
             <div className="terminal-panel overflow-hidden">
               <div className="aspect-video bg-black">
-                <iframe
-                  className="h-full w-full"
-                  src={embedUrl}
-                  title={lesson.title}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
+                {isMp4Video(lesson.videoUrl) ? (
+                  <video className="h-full w-full" controls preload="metadata">
+                    <source src={lesson.videoUrl} type="video/mp4" />
+                  </video>
+                ) : (
+                  <iframe
+                    className="h-full w-full"
+                    src={embedUrl}
+                    title={lesson.title}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                )}
               </div>
               <div className="p-6">
+                <p className="mb-5 leading-7 text-ink/76">{lesson.overview}</p>
                 <div className="mb-2 flex justify-between text-sm text-ink/72">
                   <span>{progress?.completedLessonIds.length ?? 0} of {course.lessons.length} lessons completed</span>
                   <span className="text-gold-300">{percent}%</span>
                 </div>
                 <ProgressBar value={percent} />
               </div>
+            </div>
+
+            <div className="terminal-panel p-6">
+              <h2 className="text-2xl font-semibold text-white">Lesson Objectives</h2>
+              <ul className="mt-4 grid gap-3 text-sm leading-6 text-ink/76">
+                {lesson.objectives.map((objective) => (
+                  <li key={objective} className="flex gap-3">
+                    <CheckCircle2 className="mt-0.5 shrink-0 text-gold-300" size={17} />
+                    <span>{objective}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
 
             <div className="terminal-panel p-6">
@@ -149,8 +255,8 @@ export default function LessonPage() {
                 <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-5 py-3 font-bold text-navy-950" type="button" onClick={saveNotes}>
                   <Save size={18} /> Save Notes
                 </button>
-                <button className="inline-flex items-center justify-center gap-2 border border-gold-500/45 px-5 py-3 font-semibold text-gold-300" type="button" onClick={markComplete}>
-                  <CheckCircle2 size={18} /> {completed ? "Completed" : "Mark Complete"}
+                <button className="inline-flex items-center justify-center gap-2 border border-gold-500/45 px-5 py-3 font-semibold text-gold-300 disabled:opacity-60" type="button" onClick={markComplete} disabled={savingCompletion}>
+                  <CheckCircle2 size={18} /> {savingCompletion ? "Saving..." : completed ? "Completed" : "Mark Complete"}
                 </button>
               </div>
               <p className="mt-3 text-sm text-ink/70">{message}</p>

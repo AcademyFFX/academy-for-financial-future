@@ -8,6 +8,7 @@ import {
   courseCatalog,
   courseProgressStorageKey,
   getCourseProgressPercent,
+  getLessonPath,
   getResumeLesson,
   type CourseProgressMap
 } from "@/lib/course-catalog";
@@ -59,7 +60,7 @@ export function DashboardCourseSummary() {
                     <h3 className="font-semibold text-white">{course.title}</h3>
                     <p className="mt-1 text-sm text-ink/60">Resume: {resumeLesson?.title}</p>
                   </div>
-                  <Link href="/courses" className="inline-flex items-center gap-2 text-sm text-gold-300">
+                  <Link href={getLessonPath(course.id, resumeLesson?.id ?? course.lessons[0].id)} className="inline-flex items-center gap-2 text-sm text-gold-300">
                     <PlayCircle size={16} /> Continue
                   </Link>
                 </div>

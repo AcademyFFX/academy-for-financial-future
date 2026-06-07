@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { BookOpen, CheckCircle2, FileDown, PlayCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ProgressBar } from "@/components/progress";
@@ -7,6 +8,7 @@ import {
   courseCatalog,
   courseProgressStorageKey,
   getCourseProgressPercent,
+  getLessonPath,
   getResumeLesson,
   type CourseProgressMap
 } from "@/lib/course-catalog";
@@ -33,24 +35,6 @@ export function CourseManagement() {
         ? current[courseId]
         : { enrolled: true, completedLessonIds: [], resumeLessonId: undefined }
     }));
-  }
-
-  function toggleLesson(courseId: string, lessonId: string) {
-    setProgressMap((current) => {
-      const existing = current[courseId] ?? { enrolled: true, completedLessonIds: [] };
-      const completed = existing.completedLessonIds.includes(lessonId)
-        ? existing.completedLessonIds.filter((id) => id !== lessonId)
-        : [...existing.completedLessonIds, lessonId];
-
-      return {
-        ...current,
-        [courseId]: {
-          enrolled: true,
-          completedLessonIds: completed,
-          resumeLessonId: lessonId
-        }
-      };
-    });
   }
 
   return (
@@ -89,9 +73,9 @@ export function CourseManagement() {
 
               {progress?.enrolled ? (
                 <div className="mt-5 border border-gold-500/20 bg-navy-950 p-4">
-                  <p className="inline-flex items-center gap-2 text-sm text-gold-300">
+                  <Link href={getLessonPath(course.id, resumeLesson?.id ?? course.lessons[0].id)} className="inline-flex items-center gap-2 text-sm text-gold-300">
                     <PlayCircle size={16} /> Resume: {resumeLesson?.title}
-                  </p>
+                  </Link>
                 </div>
               ) : null}
 
@@ -99,19 +83,17 @@ export function CourseManagement() {
                 {course.lessons.map((lesson) => {
                   const completed = progress?.completedLessonIds.includes(lesson.id) ?? false;
                   return (
-                    <button
+                    <Link
                       key={lesson.id}
-                      className="flex items-center justify-between gap-4 border border-gold-500/20 bg-navy-950 px-4 py-3 text-left text-sm disabled:opacity-45"
-                      type="button"
-                      onClick={() => toggleLesson(course.id, lesson.id)}
-                      disabled={!progress?.enrolled}
+                      href={progress?.enrolled ? getLessonPath(course.id, lesson.id) : "#"}
+                      className={`flex items-center justify-between gap-4 border border-gold-500/20 bg-navy-950 px-4 py-3 text-left text-sm ${progress?.enrolled ? "hover:border-gold-400/60" : "pointer-events-none opacity-45"}`}
                     >
                       <span className="flex items-center gap-3 text-ink/78">
                         <CheckCircle2 className={completed ? "text-gold-300" : "text-ink/35"} size={18} />
                         {lesson.title}
                       </span>
                       <span className="shrink-0 text-ink/52">{lesson.duration}</span>
-                    </button>
+                    </Link>
                   );
                 })}
               </div>

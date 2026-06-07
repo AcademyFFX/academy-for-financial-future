@@ -2,6 +2,9 @@ export type CourseLesson = {
   id: string;
   title: string;
   duration: string;
+  videoUrl: string;
+  overview: string;
+  pdfs: { title: string; href: string }[];
 };
 
 export type CourseDefinition = {
@@ -19,10 +22,38 @@ export const courseCatalog: CourseDefinition[] = [
     level: "Core",
     summary: "Market structure, currency pairs, sessions, pips, order flow, and broker execution fundamentals.",
     lessons: [
-      { id: "fx-market-map", title: "The Forex Market Map", duration: "18 min" },
-      { id: "currency-pairs", title: "Currency Pairs and Quote Anatomy", duration: "22 min" },
-      { id: "sessions-pips", title: "Sessions, Pips, Lots, and Spreads", duration: "26 min" },
-      { id: "orders-execution", title: "Orders, Execution, and Broker Basics", duration: "24 min" }
+      {
+        id: "fx-market-map",
+        title: "The Forex Market Map",
+        duration: "18 min",
+        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        overview: "A foundational tour of participants, sessions, liquidity, and how currency markets move.",
+        pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
+      },
+      {
+        id: "currency-pairs",
+        title: "Currency Pairs and Quote Anatomy",
+        duration: "22 min",
+        videoUrl: "https://vimeo.com/76979871",
+        overview: "Learn base and quote currencies, bid/ask pricing, spread mechanics, and pair classification.",
+        pdfs: [{ title: "Risk Management Worksheet", href: "/downloads/risk-management-worksheet.pdf" }]
+      },
+      {
+        id: "sessions-pips",
+        title: "Sessions, Pips, Lots, and Spreads",
+        duration: "26 min",
+        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        overview: "Understand the timing, measurement, and execution language traders use every day.",
+        pdfs: [{ title: "Professional Trading Journal Template", href: "/downloads/trading-journal-template.pdf" }]
+      },
+      {
+        id: "orders-execution",
+        title: "Orders, Execution, and Broker Basics",
+        duration: "24 min",
+        videoUrl: "https://vimeo.com/76979871",
+        overview: "Review market, limit, stop, and protective order behavior under real market conditions.",
+        pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
+      }
     ]
   },
   {
@@ -31,10 +62,38 @@ export const courseCatalog: CourseDefinition[] = [
     level: "Applied",
     summary: "Candlestick reading, support and resistance, trend systems, multi-timeframe confirmation, and chart review.",
     lessons: [
-      { id: "candlestick-structure", title: "Candlestick Structure and Context", duration: "20 min" },
-      { id: "support-resistance", title: "Support, Resistance, and Liquidity Zones", duration: "28 min" },
-      { id: "trend-confirmation", title: "Trend Systems and Confirmation", duration: "30 min" },
-      { id: "multi-timeframe", title: "Multi-Timeframe Analysis Lab", duration: "34 min" }
+      {
+        id: "candlestick-structure",
+        title: "Candlestick Structure and Context",
+        duration: "20 min",
+        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        overview: "Study wick, body, range, and candle context without treating patterns as isolated signals.",
+        pdfs: [{ title: "Professional Trading Journal Template", href: "/downloads/trading-journal-template.pdf" }]
+      },
+      {
+        id: "support-resistance",
+        title: "Support, Resistance, and Liquidity Zones",
+        duration: "28 min",
+        videoUrl: "https://vimeo.com/76979871",
+        overview: "Identify decision areas where price reacts, pauses, or hunts liquidity.",
+        pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
+      },
+      {
+        id: "trend-confirmation",
+        title: "Trend Systems and Confirmation",
+        duration: "30 min",
+        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        overview: "Build a repeatable approach to trend identification and confirmation.",
+        pdfs: [{ title: "Risk Management Worksheet", href: "/downloads/risk-management-worksheet.pdf" }]
+      },
+      {
+        id: "multi-timeframe",
+        title: "Multi-Timeframe Analysis Lab",
+        duration: "34 min",
+        videoUrl: "https://vimeo.com/76979871",
+        overview: "Combine higher-timeframe bias with lower-timeframe execution planning.",
+        pdfs: [{ title: "Professional Trading Journal Template", href: "/downloads/trading-journal-template.pdf" }]
+      }
     ]
   },
   {
@@ -43,10 +102,38 @@ export const courseCatalog: CourseDefinition[] = [
     level: "Professional",
     summary: "Position sizing, drawdown control, trade invalidation, loss limits, and portfolio-level risk rules.",
     lessons: [
-      { id: "position-sizing", title: "Position Sizing Frameworks", duration: "25 min" },
-      { id: "drawdown-control", title: "Drawdown Control and Daily Loss Rules", duration: "27 min" },
-      { id: "trade-invalidation", title: "Trade Invalidation and Stop Logic", duration: "24 min" },
-      { id: "risk-review", title: "Risk Review and Capital Protection Plan", duration: "32 min" }
+      {
+        id: "position-sizing",
+        title: "Position Sizing Frameworks",
+        duration: "25 min",
+        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        overview: "Translate risk percentage into trade size with practical sizing discipline.",
+        pdfs: [{ title: "Risk Management Worksheet", href: "/downloads/risk-management-worksheet.pdf" }]
+      },
+      {
+        id: "drawdown-control",
+        title: "Drawdown Control and Daily Loss Rules",
+        duration: "27 min",
+        videoUrl: "https://vimeo.com/76979871",
+        overview: "Design daily and weekly controls that protect capital before emotions take over.",
+        pdfs: [{ title: "Risk Management Worksheet", href: "/downloads/risk-management-worksheet.pdf" }]
+      },
+      {
+        id: "trade-invalidation",
+        title: "Trade Invalidation and Stop Logic",
+        duration: "24 min",
+        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        overview: "Define when your idea is wrong and how to exit without negotiation.",
+        pdfs: [{ title: "Professional Trading Journal Template", href: "/downloads/trading-journal-template.pdf" }]
+      },
+      {
+        id: "risk-review",
+        title: "Risk Review and Capital Protection Plan",
+        duration: "32 min",
+        videoUrl: "https://vimeo.com/76979871",
+        overview: "Audit your risk behavior and build an enforceable capital protection plan.",
+        pdfs: [{ title: "Risk Management Worksheet", href: "/downloads/risk-management-worksheet.pdf" }]
+      }
     ]
   },
   {
@@ -55,10 +142,38 @@ export const courseCatalog: CourseDefinition[] = [
     level: "Advanced",
     summary: "Liquidity concepts, macro catalysts, news discipline, and professional trade planning routines.",
     lessons: [
-      { id: "liquidity-concepts", title: "Institutional Liquidity Concepts", duration: "31 min" },
-      { id: "macro-catalysts", title: "Macro Catalysts and Currency Bias", duration: "29 min" },
-      { id: "news-discipline", title: "News Discipline and Volatility Controls", duration: "23 min" },
-      { id: "trade-planning", title: "Professional Trade Planning Routine", duration: "36 min" }
+      {
+        id: "liquidity-concepts",
+        title: "Institutional Liquidity Concepts",
+        duration: "31 min",
+        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        overview: "Study how resting orders, liquidity pools, and execution incentives shape movement.",
+        pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
+      },
+      {
+        id: "macro-catalysts",
+        title: "Macro Catalysts and Currency Bias",
+        duration: "29 min",
+        videoUrl: "https://vimeo.com/76979871",
+        overview: "Use macro events, rates, and risk sentiment to frame currency bias.",
+        pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
+      },
+      {
+        id: "news-discipline",
+        title: "News Discipline and Volatility Controls",
+        duration: "23 min",
+        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        overview: "Prepare for news events without abandoning risk rules or execution standards.",
+        pdfs: [{ title: "Risk Management Worksheet", href: "/downloads/risk-management-worksheet.pdf" }]
+      },
+      {
+        id: "trade-planning",
+        title: "Professional Trade Planning Routine",
+        duration: "36 min",
+        videoUrl: "https://vimeo.com/76979871",
+        overview: "Build a repeatable pre-market and pre-trade workflow for institutional discipline.",
+        pdfs: [{ title: "Professional Trading Journal Template", href: "/downloads/trading-journal-template.pdf" }]
+      }
     ]
   }
 ];
@@ -72,6 +187,7 @@ export type CourseProgress = {
 export type CourseProgressMap = Record<string, CourseProgress>;
 
 export const courseProgressStorageKey = "aff-course-progress";
+export const lessonNotesStorageKey = "aff-lesson-notes";
 
 export function getCourseProgressPercent(course: CourseDefinition, progress?: CourseProgress) {
   if (!progress?.enrolled || course.lessons.length === 0) return 0;
@@ -81,4 +197,26 @@ export function getCourseProgressPercent(course: CourseDefinition, progress?: Co
 export function getResumeLesson(course: CourseDefinition, progress?: CourseProgress) {
   if (!progress?.enrolled) return course.lessons[0];
   return course.lessons.find((lesson) => !progress.completedLessonIds.includes(lesson.id)) ?? course.lessons[course.lessons.length - 1];
+}
+
+export function getCourseById(courseId: string) {
+  return courseCatalog.find((course) => course.id === courseId);
+}
+
+export function getLessonPath(courseId: string, lessonId: string) {
+  return `/courses/${courseId}/${lessonId}`;
+}
+
+export function getVideoEmbedUrl(videoUrl: string) {
+  const url = new URL(videoUrl);
+  if (url.hostname.includes("youtube.com")) {
+    return `https://www.youtube.com/embed/${url.searchParams.get("v") ?? ""}`;
+  }
+  if (url.hostname.includes("youtu.be")) {
+    return `https://www.youtube.com/embed/${url.pathname.replace("/", "")}`;
+  }
+  if (url.hostname.includes("vimeo.com")) {
+    return `https://player.vimeo.com/video/${url.pathname.replace("/", "")}`;
+  }
+  return videoUrl;
 }

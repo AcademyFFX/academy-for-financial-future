@@ -141,6 +141,24 @@ export const courseCatalog: CourseDefinition[] = [
         summary: "Students learn how MT4, MT5, TradingView, buy/sell functions, and order execution shape the final step between analysis and trade management.",
         objectives: ["MT4", "MT5", "TradingView", "Buy/Sell Functions", "Order Execution"],
         pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
+      },
+      {
+        id: "central-banks-brain",
+        title: "The Brain: Central Banks",
+        duration: "30 min",
+        videoUrl: "",
+        overview: "Central banks are the decision-making brain of the forex market. They influence currency value through interest rates, inflation policy, money supply, forward guidance, and monetary intervention.",
+        summary: "Central banks act as the brain of the forex market because their decisions influence the entire nervous system of global finance. When they raise or cut interest rates, control inflation, expand or reduce money supply, or communicate future policy, the currency market reacts. Traders must learn to read central bank decisions because they often create the biggest market movements.",
+        objectives: [
+          "Understand the role of central banks",
+          "Understand interest rate decisions",
+          "Understand inflation targets",
+          "Understand monetary policy",
+          "Understand forward guidance",
+          "Understand currency intervention",
+          "Understand why central banks move forex markets"
+        ],
+        pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
       }
     ]
   },

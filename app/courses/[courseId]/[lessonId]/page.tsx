@@ -308,9 +308,9 @@ export default function LessonPage() {
                     Next Lesson <ArrowRight size={16} />
                   </Link>
                 ) : (
-                  <Link href="/courses" className="inline-flex items-center gap-2 bg-gold-500 px-4 py-3 text-sm font-bold text-navy-950">
-                    Finish Course <ArrowRight size={16} />
-                  </Link>
+                  <span className="inline-flex items-center gap-2 border border-gold-500/25 bg-navy-950 px-4 py-3 text-sm font-semibold text-gold-300/80">
+                    Final Lesson
+                  </span>
                 )}
               </div>
             </div>

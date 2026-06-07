@@ -70,7 +70,7 @@ export const courseCatalog: CourseDefinition[] = [
     id: "forex-anatomy",
     title: "Forex Anatomy",
     level: "Core",
-    summary: "A structured anatomy of the forex market, from market structure and institutional orders to liquidity, sessions, data, and broker execution.",
+    summary: "Understand the Forex market as a living system by studying its structure, liquidity, institutional activity, economic forces, trading sessions, and broker execution environment.",
     lessons: [
       {
         id: "market-structure-skeleton",
@@ -78,8 +78,8 @@ export const courseCatalog: CourseDefinition[] = [
         duration: "24 min",
         videoUrl: "",
         overview: "Study market structure as the framework that gives price movement its readable form.",
-        summary: "Students learn how swing highs, swing lows, trends, ranges, and structural breaks create the foundation for professional forex analysis.",
-        objectives: ["Define market structure in practical chart terms.", "Identify swing points and structural breaks.", "Distinguish trending and ranging conditions."],
+        summary: "Students learn how higher highs, higher lows, lower highs, lower lows, and trend structure create the framework for professional forex analysis.",
+        objectives: ["Understand Higher Highs", "Higher Lows", "Lower Highs", "Lower Lows", "Trend Structure"],
         pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
       },
       {
@@ -88,8 +88,8 @@ export const courseCatalog: CourseDefinition[] = [
         duration: "27 min",
         videoUrl: "",
         overview: "Explore how institutional order activity creates force behind visible market movement.",
-        summary: "This lesson explains why large orders matter, how accumulation and distribution can appear on charts, and why retail traders must think beyond single candles.",
-        objectives: ["Explain the role of institutional order size.", "Recognize accumulation and distribution behavior.", "Connect order pressure to market movement."],
+        summary: "This lesson explains institutional participation, smart money activity, order blocks, and large volume execution as the force behind major price movement.",
+        objectives: ["Institutional Participation", "Smart Money Activity", "Order Blocks", "Large Volume Execution"],
         pdfs: [{ title: "Risk Management Worksheet", href: "/downloads/risk-management-worksheet.pdf" }]
       },
       {
@@ -98,8 +98,8 @@ export const courseCatalog: CourseDefinition[] = [
         duration: "26 min",
         videoUrl: "",
         overview: "Learn order flow as the movement of buying and selling pressure through the market.",
-        summary: "Students connect price movement to active participation, momentum shifts, and the flow of orders across important levels.",
-        objectives: ["Define order flow in simple trading language.", "Read shifts in buying and selling pressure.", "Use order flow context around key levels."],
+        summary: "Students connect buy orders, sell orders, market flow, supply, and demand to understand how pressure moves through the forex market.",
+        objectives: ["Buy Orders", "Sell Orders", "Market Flow", "Supply and Demand"],
         pdfs: [{ title: "Professional Trading Journal Template", href: "/downloads/trading-journal-template.pdf" }]
       },
       {
@@ -108,8 +108,8 @@ export const courseCatalog: CourseDefinition[] = [
         duration: "25 min",
         videoUrl: "",
         overview: "Understand economic data as the signal system that can trigger volatility and reshape currency expectations.",
-        summary: "This lesson introduces high-impact economic releases, central bank expectations, and the discipline required around news-driven markets.",
-        objectives: ["Identify high-impact economic events.", "Explain how data can affect currency bias.", "Prepare a trading plan around news risk."],
+        summary: "This lesson introduces CPI, NFP, interest rates, GDP, and inflation as economic forces that can trigger volatility and reshape currency expectations.",
+        objectives: ["CPI", "NFP", "Interest Rates", "GDP", "Inflation"],
         pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
       },
       {
@@ -118,8 +118,8 @@ export const courseCatalog: CourseDefinition[] = [
         duration: "29 min",
         videoUrl: "",
         overview: "Study liquidity as the core condition that allows orders to be filled and markets to move.",
-        summary: "Students learn where liquidity tends to rest, why it attracts price, and how liquidity awareness improves trade planning.",
-        objectives: ["Define liquidity and why it matters.", "Identify common liquidity pools.", "Use liquidity context to plan entries and exits."],
+        summary: "Students learn how liquidity pools, stop hunts, liquidity grabs, and market efficiency explain where price is often drawn.",
+        objectives: ["Liquidity Pools", "Stop Hunts", "Liquidity Grabs", "Market Efficiency"],
         pdfs: [{ title: "Risk Management Worksheet", href: "/downloads/risk-management-worksheet.pdf" }]
       },
       {
@@ -128,8 +128,8 @@ export const courseCatalog: CourseDefinition[] = [
         duration: "23 min",
         videoUrl: "",
         overview: "Use trading sessions to understand when liquidity, volatility, and opportunity tend to appear.",
-        summary: "This lesson compares the Asian, London, and New York sessions and shows students how timing affects execution quality.",
-        objectives: ["Compare major forex trading sessions.", "Recognize session overlap behavior.", "Match trading plans to session conditions."],
+        summary: "This lesson compares the Tokyo Session, London Session, New York Session, and session overlaps so students understand how timing affects execution quality.",
+        objectives: ["Tokyo Session", "London Session", "New York Session", "Session Overlaps"],
         pdfs: [{ title: "Professional Trading Journal Template", href: "/downloads/trading-journal-template.pdf" }]
       },
       {
@@ -138,8 +138,8 @@ export const courseCatalog: CourseDefinition[] = [
         duration: "22 min",
         videoUrl: "",
         overview: "Review the broker interface as the visible layer where analysis becomes execution.",
-        summary: "Students learn how platform layout, order tickets, margin displays, and account controls shape the final step between analysis and trade management.",
-        objectives: ["Navigate common broker interface elements.", "Read order tickets and margin information.", "Confirm trade details before execution."],
+        summary: "Students learn how MT4, MT5, TradingView, buy/sell functions, and order execution shape the final step between analysis and trade management.",
+        objectives: ["MT4", "MT5", "TradingView", "Buy/Sell Functions", "Order Execution"],
         pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
       }
     ]

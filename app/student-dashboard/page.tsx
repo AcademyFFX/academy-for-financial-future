@@ -6,6 +6,7 @@ import { Award, ClipboardCheck, Mail, NotebookPen, ShieldCheck, User } from "luc
 import { useEffect, useState } from "react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase";
+import { DashboardCourseSummary } from "@/components/dashboard-course-summary";
 
 const dashboardLinks = [
   { href: "/journal", label: "Trading Journal", icon: NotebookPen },
@@ -86,6 +87,9 @@ export default function StudentDashboardPage() {
               </Link>
             ))}
           </div>
+        </div>
+        <div className="mt-8">
+          <DashboardCourseSummary />
         </div>
       </div>
     </section>

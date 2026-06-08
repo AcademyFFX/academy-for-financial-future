@@ -44,12 +44,20 @@ type DbCourseRow = {
   title: string | null;
 };
 
+type DbLessonRow = {
+  id: number | string;
+  title?: string | null;
+  lesson_title?: string | null;
+  course_id?: number | string | null;
+};
+
 export default function AssignmentsPage() {
   const router = useRouter();
   const [studentId, setStudentId] = useState<string | null>(null);
   const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([]);
   const [form, setForm] = useState(initialForm);
   const [dbCourseIdsByTitle, setDbCourseIdsByTitle] = useState<Record<string, number>>({});
+  const [dbLessonIdsByCourseAndTitle, setDbLessonIdsByCourseAndTitle] = useState<Record<string, number>>({});
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -92,7 +100,16 @@ export default function AssignmentsPage() {
   function getDatabaseCourseId(courseSlug: string) {
     const course = courseCatalog.find((item) => item.id === courseSlug);
     if (!course) return null;
-    return dbCourseIdsByTitle[course.title] ?? course.dbId;
+    return dbCourseIdsByTitle[course.title] ?? null;
+  }
+
+  function getDatabaseLessonId(courseSlug: string, lessonSlug: string) {
+    const { course, lesson } = getSelectedLesson(courseSlug, lessonSlug);
+    if (!course || !lesson) return null;
+
+    const databaseCourseId = getDatabaseCourseId(courseSlug);
+    const lessonKey = databaseCourseId ? `${databaseCourseId}:${lesson.title}` : "";
+    return dbLessonIdsByCourseAndTitle[lessonKey] ?? lesson.dbId;
   }
 
   useEffect(() => {
@@ -118,6 +135,20 @@ export default function AssignmentsPage() {
             return accumulator;
           }, {});
           setDbCourseIdsByTitle(idsByTitle);
+
+          const lessonsResult = await supabase.from("lessons").select("id, title, lesson_title, course_id");
+          if (!lessonsResult.error) {
+            const idsByCourseAndTitle = ((lessonsResult.data ?? []) as DbLessonRow[]).reduce<Record<string, number>>((accumulator, lesson) => {
+              const id = Number(lesson.id);
+              const courseId = Number(lesson.course_id);
+              const title = lesson.title ?? lesson.lesson_title;
+              if (title && Number.isFinite(id) && Number.isFinite(courseId)) {
+                accumulator[`${courseId}:${title}`] = id;
+              }
+              return accumulator;
+            }, {});
+            setDbLessonIdsByCourseAndTitle(idsByCourseAndTitle);
+          }
         }
 
         const { data, error } = await supabase
@@ -190,10 +221,10 @@ export default function AssignmentsPage() {
       let filePath: string | null = null;
       const { course, lesson } = getSelectedLesson(form.course_slug, form.lesson_slug);
       const databaseCourseId = getDatabaseCourseId(form.course_slug);
-      const databaseLessonId = lesson?.dbId ?? null;
+      const databaseLessonId = getDatabaseLessonId(form.course_slug, form.lesson_slug);
 
       if (!course || !lesson || !databaseCourseId || !databaseLessonId) {
-        setMessage("Select a valid course and lesson before uploading.");
+        setMessage("This course is not seeded in Supabase yet. Run the AFF course seed migration, then try again.");
         setSaving(false);
         return;
       }

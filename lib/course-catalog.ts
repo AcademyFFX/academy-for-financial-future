@@ -82,7 +82,7 @@ export const courseCatalog: CourseDefinition[] = [
     lessons: [
       {
         id: "market-structure-skeleton",
-        dbId: 1,
+        dbId: 5,
         title: "The Skeleton: Market Structure",
         duration: "24 min",
         videoUrl: "",
@@ -93,7 +93,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "institutional-orders-muscles",
-        dbId: 2,
+        dbId: 6,
         title: "The Muscles: Institutional Orders",
         duration: "27 min",
         videoUrl: "",
@@ -104,7 +104,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "order-flow-blood",
-        dbId: 3,
+        dbId: 7,
         title: "The Blood Flow: Order Flow",
         duration: "26 min",
         videoUrl: "",
@@ -115,7 +115,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "economic-data-nervous-system",
-        dbId: 4,
+        dbId: 8,
         title: "The Nervous System: Economic Data",
         duration: "25 min",
         videoUrl: "",
@@ -126,7 +126,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "liquidity-heart",
-        dbId: 5,
+        dbId: 9,
         title: "The Heart: Liquidity",
         duration: "29 min",
         videoUrl: "",
@@ -137,7 +137,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "trading-sessions-clock",
-        dbId: 6,
+        dbId: 10,
         title: "The Clock: Trading Sessions",
         duration: "23 min",
         videoUrl: "",
@@ -148,7 +148,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "broker-interface-skin",
-        dbId: 7,
+        dbId: 11,
         title: "The Skin: Broker Interface",
         duration: "22 min",
         videoUrl: "",
@@ -159,7 +159,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "central-banks-brain",
-        dbId: 8,
+        dbId: 12,
         title: "The Brain: Central Banks",
         duration: "30 min",
         videoUrl: "",
@@ -187,7 +187,7 @@ export const courseCatalog: CourseDefinition[] = [
     lessons: [
       {
         id: "candlestick-structure",
-        dbId: 1,
+        dbId: 13,
         title: "Candlestick Structure and Context",
         duration: "20 min",
         videoUrl: "",
@@ -198,7 +198,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "support-resistance",
-        dbId: 2,
+        dbId: 14,
         title: "Support, Resistance, and Liquidity Zones",
         duration: "28 min",
         videoUrl: "",
@@ -209,7 +209,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "trend-confirmation",
-        dbId: 3,
+        dbId: 15,
         title: "Trend Systems and Confirmation",
         duration: "30 min",
         videoUrl: "",
@@ -220,7 +220,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "multi-timeframe",
-        dbId: 4,
+        dbId: 16,
         title: "Multi-Timeframe Analysis Lab",
         duration: "34 min",
         videoUrl: "",
@@ -240,7 +240,7 @@ export const courseCatalog: CourseDefinition[] = [
     lessons: [
       {
         id: "position-sizing",
-        dbId: 1,
+        dbId: 17,
         title: "Position Sizing Frameworks",
         duration: "25 min",
         videoUrl: "",
@@ -251,7 +251,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "drawdown-control",
-        dbId: 2,
+        dbId: 18,
         title: "Drawdown Control and Daily Loss Rules",
         duration: "27 min",
         videoUrl: "",
@@ -262,7 +262,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "trade-invalidation",
-        dbId: 3,
+        dbId: 19,
         title: "Trade Invalidation and Stop Logic",
         duration: "24 min",
         videoUrl: "",
@@ -273,7 +273,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "risk-review",
-        dbId: 4,
+        dbId: 20,
         title: "Risk Review and Capital Protection Plan",
         duration: "32 min",
         videoUrl: "",
@@ -293,7 +293,7 @@ export const courseCatalog: CourseDefinition[] = [
     lessons: [
       {
         id: "liquidity-concepts",
-        dbId: 1,
+        dbId: 21,
         title: "Institutional Liquidity Concepts",
         duration: "31 min",
         videoUrl: "",
@@ -304,7 +304,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "macro-catalysts",
-        dbId: 2,
+        dbId: 22,
         title: "Macro Catalysts and Currency Bias",
         duration: "29 min",
         videoUrl: "",
@@ -315,7 +315,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "news-discipline",
-        dbId: 3,
+        dbId: 23,
         title: "News Discipline and Volatility Controls",
         duration: "23 min",
         videoUrl: "",
@@ -326,7 +326,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "trade-planning",
-        dbId: 4,
+        dbId: 24,
         title: "Professional Trade Planning Routine",
         duration: "36 min",
         videoUrl: "",

@@ -11,8 +11,8 @@ import { createClient } from "@/lib/supabase";
 type AssignmentSubmission = {
   id: string;
   title: string;
-  course_id: string | null;
-  lesson_id: string | null;
+  course_id: number | null;
+  lesson_id: number | null;
   lesson_title: string | null;
   course_module: string | null;
   student_notes: string | null;
@@ -32,11 +32,16 @@ type AssignmentRow = Partial<AssignmentSubmission> & {
 
 const initialForm = {
   title: "",
-  course_id: "",
-  lesson_id: "",
+  course_slug: "",
+  lesson_slug: "",
   course_module: "",
   student_notes: "",
   submission_date: new Date().toISOString().slice(0, 10)
+};
+
+type DbCourseRow = {
+  id: number | string;
+  title: string | null;
 };
 
 export default function AssignmentsPage() {
@@ -44,6 +49,7 @@ export default function AssignmentsPage() {
   const [studentId, setStudentId] = useState<string | null>(null);
   const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([]);
   const [form, setForm] = useState(initialForm);
+  const [dbCourseIdsByTitle, setDbCourseIdsByTitle] = useState<Record<string, number>>({});
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -61,8 +67,8 @@ export default function AssignmentsPage() {
     return {
       id: String(row.id ?? crypto.randomUUID()),
       title: String(row.title ?? ""),
-      course_id: row.course_id ?? null,
-      lesson_id: row.lesson_id ?? null,
+      course_id: row.course_id === null || row.course_id === undefined ? null : Number(row.course_id),
+      lesson_id: row.lesson_id === null || row.lesson_id === undefined ? null : Number(row.lesson_id),
       lesson_title: row.lesson_title ?? null,
       course_module: row.course_module ?? null,
       student_notes: row.student_notes ?? row.notes ?? null,
@@ -83,6 +89,12 @@ export default function AssignmentsPage() {
     return { course, lesson };
   }
 
+  function getDatabaseCourseId(courseSlug: string) {
+    const course = courseCatalog.find((item) => item.id === courseSlug);
+    if (!course) return null;
+    return dbCourseIdsByTitle[course.title] ?? course.dbId;
+  }
+
   useEffect(() => {
     async function loadSubmissions() {
       try {
@@ -97,6 +109,16 @@ export default function AssignmentsPage() {
         }
 
         setStudentId(user.id);
+
+        const coursesResult = await supabase.from("courses").select("id, title");
+        if (!coursesResult.error) {
+          const idsByTitle = ((coursesResult.data ?? []) as DbCourseRow[]).reduce<Record<string, number>>((accumulator, course) => {
+            const id = Number(course.id);
+            if (course.title && Number.isFinite(id)) accumulator[course.title] = id;
+            return accumulator;
+          }, {});
+          setDbCourseIdsByTitle(idsByTitle);
+        }
 
         const { data, error } = await supabase
           .from("assignments")
@@ -124,8 +146,8 @@ export default function AssignmentsPage() {
       setForm((current) => ({
         ...current,
         title: `${lesson.title} Assignment`,
-        course_id: course.id,
-        lesson_id: lesson.id,
+        course_slug: course.id,
+        lesson_slug: lesson.id,
         course_module: `${course.title} / ${lesson.title}`
       }));
     }
@@ -133,15 +155,15 @@ export default function AssignmentsPage() {
 
   function updateField(name: keyof typeof initialForm, value: string) {
     setForm((current) => {
-      if (name === "course_id") {
-        return { ...current, course_id: value, lesson_id: "", course_module: courseCatalog.find((course) => course.id === value)?.title ?? "" };
+      if (name === "course_slug") {
+        return { ...current, course_slug: value, lesson_slug: "", course_module: courseCatalog.find((course) => course.id === value)?.title ?? "" };
       }
 
-      if (name === "lesson_id") {
-        const { course, lesson } = getSelectedLesson(current.course_id, value);
+      if (name === "lesson_slug") {
+        const { course, lesson } = getSelectedLesson(current.course_slug, value);
         return {
           ...current,
-          lesson_id: value,
+          lesson_slug: value,
           title: lesson ? `${lesson.title} Assignment` : current.title,
           course_module: course && lesson ? `${course.title} / ${lesson.title}` : current.course_module
         };
@@ -166,7 +188,15 @@ export default function AssignmentsPage() {
       const supabase = createClient();
       let fileUrl: string | null = null;
       let filePath: string | null = null;
-      const { lesson } = getSelectedLesson(form.course_id, form.lesson_id);
+      const { course, lesson } = getSelectedLesson(form.course_slug, form.lesson_slug);
+      const databaseCourseId = getDatabaseCourseId(form.course_slug);
+      const databaseLessonId = lesson?.dbId ?? null;
+
+      if (!course || !lesson || !databaseCourseId || !databaseLessonId) {
+        setMessage("Select a valid course and lesson before uploading.");
+        setSaving(false);
+        return;
+      }
 
       if (selectedFile) {
         const safeName = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, "-");
@@ -185,8 +215,8 @@ export default function AssignmentsPage() {
       const payload = {
         student_id: studentId,
         title: form.title.trim(),
-        course_id: form.course_id || null,
-        lesson_id: form.lesson_id || null,
+        course_id: databaseCourseId,
+        lesson_id: databaseLessonId,
         lesson_title: lesson?.title ?? null,
         course_module: form.course_module.trim() || null,
         student_notes: form.student_notes.trim() || null,
@@ -239,8 +269,8 @@ export default function AssignmentsPage() {
               Course
               <select
                 className="border border-gold-500/24 bg-navy-950 px-4 py-3 text-white outline-none focus:border-gold-400"
-                value={form.course_id}
-                onChange={(event) => updateField("course_id", event.target.value)}
+                value={form.course_slug}
+                onChange={(event) => updateField("course_slug", event.target.value)}
                 required
               >
                 <option value="">Select course</option>
@@ -254,13 +284,13 @@ export default function AssignmentsPage() {
               Lesson
               <select
                 className="border border-gold-500/24 bg-navy-950 px-4 py-3 text-white outline-none focus:border-gold-400"
-                value={form.lesson_id}
-                onChange={(event) => updateField("lesson_id", event.target.value)}
+                value={form.lesson_slug}
+                onChange={(event) => updateField("lesson_slug", event.target.value)}
                 required
               >
                 <option value="">Select lesson</option>
                 {courseCatalog
-                  .find((course) => course.id === form.course_id)
+                  .find((course) => course.id === form.course_slug)
                   ?.lessons.map((lesson) => (
                     <option key={lesson.id} value={lesson.id}>{lesson.title}</option>
                   ))}

@@ -1,5 +1,6 @@
 export type CourseLesson = {
   id: string;
+  dbId: number;
   title: string;
   duration: string;
   videoUrl: string;
@@ -11,6 +12,7 @@ export type CourseLesson = {
 
 export type CourseDefinition = {
   id: string;
+  dbId: number;
   title: string;
   level: string;
   summary: string;
@@ -20,12 +22,14 @@ export type CourseDefinition = {
 export const courseCatalog: CourseDefinition[] = [
   {
     id: "forex-foundations",
+    dbId: 1,
     title: "Forex Foundations",
     level: "Core",
     summary: "Market structure, currency pairs, sessions, pips, order flow, and broker execution fundamentals.",
     lessons: [
       {
         id: "fx-market-map",
+        dbId: 1,
         title: "The Forex Market Map",
         duration: "18 min",
         videoUrl: "",
@@ -36,6 +40,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "currency-pairs",
+        dbId: 2,
         title: "Currency Pairs and Quote Anatomy",
         duration: "22 min",
         videoUrl: "",
@@ -46,6 +51,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "sessions-pips",
+        dbId: 3,
         title: "Sessions, Pips, Lots and Spreads",
         duration: "26 min",
         videoUrl: "",
@@ -56,6 +62,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "orders-execution",
+        dbId: 4,
         title: "Orders, Execution and Broker Basics",
         duration: "24 min",
         videoUrl: "",
@@ -68,12 +75,14 @@ export const courseCatalog: CourseDefinition[] = [
   },
   {
     id: "forex-anatomy",
+    dbId: 2,
     title: "Forex Anatomy",
     level: "Core",
     summary: "Understand the Forex market as a living system by studying its structure, liquidity, institutional activity, economic forces, trading sessions, and broker execution environment.",
     lessons: [
       {
         id: "market-structure-skeleton",
+        dbId: 1,
         title: "The Skeleton: Market Structure",
         duration: "24 min",
         videoUrl: "",
@@ -84,6 +93,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "institutional-orders-muscles",
+        dbId: 2,
         title: "The Muscles: Institutional Orders",
         duration: "27 min",
         videoUrl: "",
@@ -94,6 +104,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "order-flow-blood",
+        dbId: 3,
         title: "The Blood Flow: Order Flow",
         duration: "26 min",
         videoUrl: "",
@@ -104,6 +115,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "economic-data-nervous-system",
+        dbId: 4,
         title: "The Nervous System: Economic Data",
         duration: "25 min",
         videoUrl: "",
@@ -114,6 +126,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "liquidity-heart",
+        dbId: 5,
         title: "The Heart: Liquidity",
         duration: "29 min",
         videoUrl: "",
@@ -124,6 +137,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "trading-sessions-clock",
+        dbId: 6,
         title: "The Clock: Trading Sessions",
         duration: "23 min",
         videoUrl: "",
@@ -134,6 +148,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "broker-interface-skin",
+        dbId: 7,
         title: "The Skin: Broker Interface",
         duration: "22 min",
         videoUrl: "",
@@ -144,6 +159,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "central-banks-brain",
+        dbId: 8,
         title: "The Brain: Central Banks",
         duration: "30 min",
         videoUrl: "",
@@ -164,12 +180,14 @@ export const courseCatalog: CourseDefinition[] = [
   },
   {
     id: "technical-analysis-lab",
+    dbId: 3,
     title: "Technical Analysis Lab",
     level: "Applied",
     summary: "Candlestick reading, support and resistance, trend systems, multi-timeframe confirmation, and chart review.",
     lessons: [
       {
         id: "candlestick-structure",
+        dbId: 1,
         title: "Candlestick Structure and Context",
         duration: "20 min",
         videoUrl: "",
@@ -180,6 +198,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "support-resistance",
+        dbId: 2,
         title: "Support, Resistance, and Liquidity Zones",
         duration: "28 min",
         videoUrl: "",
@@ -190,6 +209,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "trend-confirmation",
+        dbId: 3,
         title: "Trend Systems and Confirmation",
         duration: "30 min",
         videoUrl: "",
@@ -200,6 +220,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "multi-timeframe",
+        dbId: 4,
         title: "Multi-Timeframe Analysis Lab",
         duration: "34 min",
         videoUrl: "",
@@ -212,12 +233,14 @@ export const courseCatalog: CourseDefinition[] = [
   },
   {
     id: "risk-capital-protection",
+    dbId: 4,
     title: "Risk and Capital Protection",
     level: "Professional",
     summary: "Position sizing, drawdown control, trade invalidation, loss limits, and portfolio-level risk rules.",
     lessons: [
       {
         id: "position-sizing",
+        dbId: 1,
         title: "Position Sizing Frameworks",
         duration: "25 min",
         videoUrl: "",
@@ -228,6 +251,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "drawdown-control",
+        dbId: 2,
         title: "Drawdown Control and Daily Loss Rules",
         duration: "27 min",
         videoUrl: "",
@@ -238,6 +262,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "trade-invalidation",
+        dbId: 3,
         title: "Trade Invalidation and Stop Logic",
         duration: "24 min",
         videoUrl: "",
@@ -248,6 +273,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "risk-review",
+        dbId: 4,
         title: "Risk Review and Capital Protection Plan",
         duration: "32 min",
         videoUrl: "",
@@ -260,12 +286,14 @@ export const courseCatalog: CourseDefinition[] = [
   },
   {
     id: "institutional-forex-strategy",
+    dbId: 5,
     title: "Institutional Forex Strategy",
     level: "Advanced",
     summary: "Liquidity concepts, macro catalysts, news discipline, and professional trade planning routines.",
     lessons: [
       {
         id: "liquidity-concepts",
+        dbId: 1,
         title: "Institutional Liquidity Concepts",
         duration: "31 min",
         videoUrl: "",
@@ -276,6 +304,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "macro-catalysts",
+        dbId: 2,
         title: "Macro Catalysts and Currency Bias",
         duration: "29 min",
         videoUrl: "",
@@ -286,6 +315,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "news-discipline",
+        dbId: 3,
         title: "News Discipline and Volatility Controls",
         duration: "23 min",
         videoUrl: "",
@@ -296,6 +326,7 @@ export const courseCatalog: CourseDefinition[] = [
       },
       {
         id: "trade-planning",
+        dbId: 4,
         title: "Professional Trade Planning Routine",
         duration: "36 min",
         videoUrl: "",

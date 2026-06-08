@@ -1,6 +1,6 @@
 alter table public.assignments
-  add column if not exists course_id text,
-  add column if not exists lesson_id text,
+  add column if not exists course_id bigint,
+  add column if not exists lesson_id bigint,
   add column if not exists lesson_title text,
   add column if not exists file_path text,
   add column if not exists status text not null default 'Submitted',

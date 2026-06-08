@@ -38,6 +38,9 @@ type Exam = {
   score: number;
   result: string;
   submittedAt: string;
+  attemptNumber: number;
+  durationSeconds: number;
+  passingScore: number;
 };
 
 type Certificate = {
@@ -105,6 +108,15 @@ export default function AdminPage() {
     { label: "Total Certificates Issued", value: certificates.length, icon: Award }
   ];
 
+  const examStats = useMemo(() => {
+    const attempts = exams.length;
+    const passed = exams.filter((exam) => exam.result === "Pass").length;
+    const averageScore = attempts ? Math.round(exams.reduce((total, exam) => total + exam.score, 0) / attempts) : 0;
+    const highestScore = attempts ? Math.max(...exams.map((exam) => exam.score)) : 0;
+    const passRate = attempts ? Math.round((passed / attempts) * 100) : 0;
+    return { attempts, passed, averageScore, highestScore, passRate };
+  }, [exams]);
+
   function getErrorMessage(error: unknown, fallback: string) {
     if (error instanceof Error) return error.message;
     if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
@@ -146,7 +158,10 @@ export default function AdminPage() {
       examTitle: value(row, ["exam_title", "title"], "Certification Exam"),
       score: numberValue(row, ["score"]),
       result: value(row, ["result", "status"], numberValue(row, ["score"]) >= 80 ? "Pass" : "Fail"),
-      submittedAt: normalizeDate(value(row, ["submitted_at", "exam_date", "created_at", "date"]))
+      submittedAt: normalizeDate(value(row, ["submitted_at", "exam_date", "created_at", "date"])),
+      attemptNumber: numberValue(row, ["attempt_number"], 1),
+      durationSeconds: numberValue(row, ["duration_seconds"], 0),
+      passingScore: numberValue(row, ["passing_score"], 80)
     };
   }
 
@@ -408,13 +423,26 @@ export default function AdminPage() {
                 ))}
               </AdminTable>
 
-              <AdminTable title="Exams" headers={["Student", "Exam", "Score", "Pass/Fail", "Date"]}>
+              <section className="terminal-panel p-5">
+                <h2 className="text-xl font-semibold text-white">Exam Completion Statistics</h2>
+                <div className="mt-5 grid gap-4 md:grid-cols-5">
+                  <Metric label="Attempts" value={String(examStats.attempts)} />
+                  <Metric label="Passed" value={String(examStats.passed)} />
+                  <Metric label="Pass Rate" value={`${examStats.passRate}%`} />
+                  <Metric label="Average Score" value={`${examStats.averageScore}%`} />
+                  <Metric label="Highest Score" value={`${examStats.highestScore}%`} />
+                </div>
+              </section>
+
+              <AdminTable title="Exams" headers={["Student", "Exam", "Attempt", "Score", "Pass/Fail", "Time", "Date"]}>
                 {exams.map((exam) => (
                   <TableRow key={exam.id} cells={[
                     studentMap.get(exam.studentId)?.name ?? exam.studentName,
                     exam.examTitle,
+                    String(exam.attemptNumber),
                     `${exam.score}%`,
                     exam.result,
+                    `${Math.round(exam.durationSeconds / 60)} min`,
                     new Date(exam.submittedAt).toLocaleDateString()
                   ]} />
                 ))}
@@ -513,5 +541,14 @@ function TableRow({ cells }: { cells: string[] }) {
         <td key={`${cell}-${index}`} className="p-4 text-ink/76">{cell}</td>
       ))}
     </tr>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border border-gold-500/20 bg-navy-950 p-4">
+      <p className="text-2xl font-semibold text-gold-300">{value}</p>
+      <p className="mt-1 text-xs uppercase tracking-[.18em] text-ink/60">{label}</p>
+    </div>
   );
 }

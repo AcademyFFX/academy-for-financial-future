@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase";
 import { DashboardCourseSummary } from "@/components/dashboard-course-summary";
+import { ZoomClassesPanel } from "@/components/zoom-classes-panel";
 
 const dashboardLinks = [
   { href: "/live-trading-room", label: "Live Trading Room", icon: Radio },
@@ -91,6 +92,9 @@ export default function StudentDashboardPage() {
         </div>
         <div className="mt-8">
           <DashboardCourseSummary />
+        </div>
+        <div className="mt-8">
+          <ZoomClassesPanel user={user} />
         </div>
       </div>
     </section>

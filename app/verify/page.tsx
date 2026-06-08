@@ -1,7 +1,7 @@
 "use client";
 
 import { Search, ShieldCheck, XCircle } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
 import { createClient } from "@/lib/supabase";
@@ -12,7 +12,9 @@ type Certificate = {
   course_name: string;
   score: number;
   issue_date: string;
+  completion_date?: string | null;
   verification_code: string;
+  instructor_name?: string | null;
 };
 
 export default function VerifyCertificatePage() {
@@ -22,6 +24,14 @@ export default function VerifyCertificatePage() {
   const [message, setMessage] = useState("Enter the certificate number and verification code exactly as shown.");
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const certificate = params.get("certificate");
+    const code = params.get("code");
+    if (certificate) setCertificateNumber(certificate);
+    if (code) setVerificationCode(code);
+  }, []);
 
   function getErrorMessage(error: unknown, fallback: string) {
     if (error instanceof Error) return error.message;
@@ -42,7 +52,7 @@ export default function VerifyCertificatePage() {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("certificates")
-        .select("certificate_number,student_name,course_name,score,issue_date,verification_code")
+        .select("certificate_number,student_name,course_name,score,issue_date,completion_date,verification_code,instructor_name")
         .eq("certificate_number", certificateNumber.trim().toUpperCase())
         .eq("verification_code", verificationCode.trim().toUpperCase())
         .maybeSingle();
@@ -108,8 +118,10 @@ export default function VerifyCertificatePage() {
               <div className="grid gap-4 text-ink/76 sm:grid-cols-2">
                 <p><span className="text-gold-300">Course Name:</span> {certificate.course_name}</p>
                 <p><span className="text-gold-300">Score:</span> {certificate.score}%</p>
+                <p><span className="text-gold-300">Completion Date:</span> {new Date(certificate.completion_date ?? certificate.issue_date).toLocaleDateString()}</p>
                 <p><span className="text-gold-300">Issue Date:</span> {new Date(certificate.issue_date).toLocaleDateString()}</p>
                 <p><span className="text-gold-300">Certificate Number:</span> {certificate.certificate_number}</p>
+                <p><span className="text-gold-300">Instructor:</span> {certificate.instructor_name ?? "Dr. Jean Rene Moricette"}</p>
                 <p className="sm:col-span-2"><span className="text-gold-300">Verification Code:</span> {certificate.verification_code}</p>
               </div>
             </article>

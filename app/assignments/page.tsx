@@ -41,7 +41,7 @@ const initialForm = {
 
 type DbCourseRow = {
   id: number | string;
-  title: string | null;
+  course_name: string | null;
 };
 
 type DbLessonRow = {
@@ -127,11 +127,11 @@ export default function AssignmentsPage() {
 
         setStudentId(user.id);
 
-        const coursesResult = await supabase.from("courses").select("id, title");
+        const coursesResult = await supabase.from("courses").select("id, course_name");
         if (!coursesResult.error) {
           const idsByTitle = ((coursesResult.data ?? []) as DbCourseRow[]).reduce<Record<string, number>>((accumulator, course) => {
             const id = Number(course.id);
-            if (course.title && Number.isFinite(id)) accumulator[course.title] = id;
+            if (course.course_name && Number.isFinite(id)) accumulator[course.course_name] = id;
             return accumulator;
           }, {});
           setDbCourseIdsByTitle(idsByTitle);

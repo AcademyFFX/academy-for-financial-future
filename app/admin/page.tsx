@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Award, ClipboardCheck, Download, Megaphone, Save, ShieldCheck, Trash2, Users } from "lucide-react";
+import { Award, ClipboardCheck, ExternalLink, FileCheck, FileX, Megaphone, Save, ShieldCheck, Trash2, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
@@ -28,6 +28,17 @@ type Assignment = {
   status: string;
   grade: number | null;
   instructorFeedback: string;
+  reviewedBy: string;
+  reviewedAt: string;
+  gradingHistory: GradingHistoryEntry[];
+};
+
+type GradingHistoryEntry = {
+  status: string;
+  grade: number | null;
+  feedback: string;
+  reviewedBy: string;
+  reviewedAt: string;
 };
 
 type Exam = {
@@ -117,6 +128,18 @@ export default function AdminPage() {
     return { attempts, passed, averageScore, highestScore, passRate };
   }, [exams]);
 
+  const gradingStats = useMemo(() => {
+    const approved = assignments.filter((assignment) => assignment.status === "Approved").length;
+    const rejected = assignments.filter((assignment) => assignment.status === "Rejected").length;
+    const pending = assignments.filter((assignment) => !["Approved", "Rejected"].includes(assignment.status)).length;
+    const gradedAssignments = assignments.filter((assignment) => assignment.grade !== null);
+    const averageGrade = gradedAssignments.length
+      ? Math.round(gradedAssignments.reduce((total, assignment) => total + (assignment.grade ?? 0), 0) / gradedAssignments.length)
+      : 0;
+
+    return { approved, rejected, pending, averageGrade };
+  }, [assignments]);
+
   function getErrorMessage(error: unknown, fallback: string) {
     if (error instanceof Error) return error.message;
     if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
@@ -146,8 +169,38 @@ export default function AdminPage() {
       submissionDate: normalizeDate(value(row, ["submission_date", "submitted_at", "created_at", "date"])),
       status: value(row, ["status"], "Submitted"),
       grade: row.grade === null || row.grade === undefined ? null : Number(row.grade),
-      instructorFeedback: value(row, ["instructor_feedback"])
+      instructorFeedback: value(row, ["instructor_feedback"]),
+      reviewedBy: value(row, ["reviewed_by"]),
+      reviewedAt: normalizeDate(value(row, ["reviewed_at"])),
+      gradingHistory: normalizeGradingHistory(row.grading_history)
     };
+  }
+
+  function normalizeGradingHistory(raw: unknown): GradingHistoryEntry[] {
+    const parsed = typeof raw === "string" ? safeParseJson(raw) : raw;
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((entry) => {
+        if (!entry || typeof entry !== "object") return null;
+        const row = entry as DbRow;
+        return {
+          status: value(row, ["status"], "Submitted"),
+          grade: row.grade === null || row.grade === undefined ? null : Number(row.grade),
+          feedback: value(row, ["feedback"]),
+          reviewedBy: value(row, ["reviewedBy", "reviewed_by"], adminEmail),
+          reviewedAt: normalizeDate(value(row, ["reviewedAt", "reviewed_at"]))
+        };
+      })
+      .filter((entry): entry is GradingHistoryEntry => entry !== null);
+  }
+
+  function safeParseJson(raw: string) {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return [];
+    }
   }
 
   function normalizeExam(row: DbRow): Exam {
@@ -284,13 +337,31 @@ export default function AdminPage() {
     setMessage("Saving assignment review...");
 
     try {
+      const assignment = assignments.find((item) => item.id === assignmentId);
+      const grade = review.grade.trim().length > 0 ? Number(review.grade) : null;
+
+      if (grade !== null && (!Number.isFinite(grade) || grade < 0 || grade > 100)) {
+        setMessage("Grade must be a number from 0 to 100.");
+        return;
+      }
+
       const supabase = createClient();
+      const reviewedAt = new Date().toISOString();
+      const historyEntry: GradingHistoryEntry = {
+        status: review.status,
+        grade,
+        feedback: review.instructorFeedback.trim(),
+        reviewedBy: adminEmail,
+        reviewedAt
+      };
+
       const payload = {
         status: review.status,
-        grade: review.grade.trim().length > 0 ? Number(review.grade) : null,
+        grade,
         instructor_feedback: review.instructorFeedback.trim() || null,
         reviewed_by: adminEmail,
-        reviewed_at: new Date().toISOString()
+        reviewed_at: reviewedAt,
+        grading_history: [...(assignment?.gradingHistory ?? []), historyEntry]
       };
 
       const { data, error } = await supabase
@@ -303,7 +374,7 @@ export default function AdminPage() {
       if (error) throw error;
 
       setAssignments((current) => current.map((assignment) => (assignment.id === assignmentId ? normalizeAssignment(data as DbRow) : assignment)));
-      setMessage("Assignment review saved.");
+      setMessage(review.status === "Approved" ? "Assignment approved. Certification requirements updated." : "Assignment review saved.");
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to save assignment review."));
     }
@@ -359,6 +430,24 @@ export default function AdminPage() {
                 ))}
               </AdminTable>
 
+              <section className="terminal-panel p-5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold text-white">Instructor Grading Center</h2>
+                    <p className="mt-2 text-sm text-ink/68">Approved assignments count toward certification unlock requirements.</p>
+                  </div>
+                  <div className="inline-flex items-center gap-2 border border-gold-500/30 px-3 py-2 text-xs uppercase tracking-[.18em] text-gold-300">
+                    <ShieldCheck size={15} /> Admin Review
+                  </div>
+                </div>
+                <div className="mt-5 grid gap-4 md:grid-cols-4">
+                  <Metric label="Pending Review" value={String(gradingStats.pending)} />
+                  <Metric label="Approved" value={String(gradingStats.approved)} />
+                  <Metric label="Rejected" value={String(gradingStats.rejected)} />
+                  <Metric label="Average Grade" value={`${gradingStats.averageGrade}%`} />
+                </div>
+              </section>
+
               <AdminTable title="Assignments" headers={["Student", "Assignment", "Course/Module", "Lesson", "Date", "File", "Review"]}>
                 {assignments.map((assignment) => (
                   <tr key={assignment.id} className="bg-navy-950">
@@ -370,7 +459,7 @@ export default function AdminPage() {
                     <td className="p-4">
                       {assignment.fileUrl ? (
                         <a className="inline-flex items-center gap-2 text-gold-300" href={assignment.fileUrl} target="_blank" rel="noreferrer">
-                          <Download size={15} /> Download
+                          <ExternalLink size={15} /> Open File
                         </a>
                       ) : (
                         <span className="text-ink/50">No file</span>
@@ -391,6 +480,7 @@ export default function AdminPage() {
                             <option>In Review</option>
                             <option>Needs Revision</option>
                             <option>Approved</option>
+                            <option>Rejected</option>
                           </select>
                           <input
                             className="border border-gold-500/24 bg-navy-900 px-3 py-2 text-ink outline-none"
@@ -414,9 +504,51 @@ export default function AdminPage() {
                             [assignment.id]: { ...(current[assignment.id] ?? { status: assignment.status, grade: "" }), instructorFeedback: event.target.value }
                           }))}
                         />
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <button
+                            className="inline-flex items-center justify-center gap-2 border border-emerald-300/45 px-3 py-2 text-xs font-semibold text-emerald-200"
+                            type="button"
+                            onClick={() => setAssignmentReviews((current) => ({
+                              ...current,
+                              [assignment.id]: { ...(current[assignment.id] ?? { grade: "", instructorFeedback: "" }), status: "Approved" }
+                            }))}
+                          >
+                            <FileCheck size={15} /> Approve
+                          </button>
+                          <button
+                            className="inline-flex items-center justify-center gap-2 border border-red-300/45 px-3 py-2 text-xs font-semibold text-red-200"
+                            type="button"
+                            onClick={() => setAssignmentReviews((current) => ({
+                              ...current,
+                              [assignment.id]: { ...(current[assignment.id] ?? { grade: "", instructorFeedback: "" }), status: "Rejected" }
+                            }))}
+                          >
+                            <FileX size={15} /> Reject
+                          </button>
+                        </div>
                         <button className="bg-gold-500 px-4 py-2 text-sm font-bold text-navy-950" type="button" onClick={() => saveAssignmentReview(assignment.id)}>
                           Save Review
                         </button>
+                        <div className="border-t border-gold-500/15 pt-3">
+                          <p className="text-xs uppercase tracking-[.18em] text-gold-300">Grading History</p>
+                          {assignment.gradingHistory.length > 0 ? (
+                            <div className="mt-3 grid gap-2">
+                              {assignment.gradingHistory.slice().reverse().map((entry, index) => (
+                                <div key={`${assignment.id}-${entry.reviewedAt}-${index}`} className="border border-gold-500/14 bg-navy-900 p-3">
+                                  <p className="text-xs text-white">
+                                    {entry.status} {entry.grade !== null ? `- ${entry.grade}%` : ""}
+                                  </p>
+                                  <p className="mt-1 text-xs text-ink/58">
+                                    {new Date(entry.reviewedAt).toLocaleString()} by {entry.reviewedBy}
+                                  </p>
+                                  {entry.feedback ? <p className="mt-2 text-xs leading-5 text-ink/70">{entry.feedback}</p> : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-xs text-ink/52">No review history yet.</p>
+                          )}
+                        </div>
                       </div>
                     </td>
                   </tr>

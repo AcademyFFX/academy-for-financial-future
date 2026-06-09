@@ -21,6 +21,7 @@ export const navItems = [
   { href: "/dashboard", label: "Student Dashboard" },
   { href: "/billing", label: "Billing" },
   { href: "/messages", label: "Messages" },
+  { href: "/mobile-app", label: "Mobile App" },
   { href: "/live-trading-room", label: "Live Trading Room" },
   { href: "/journal", label: "Trading Journal" },
   { href: "/assignments", label: "Assignments" },

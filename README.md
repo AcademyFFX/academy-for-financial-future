@@ -26,6 +26,7 @@ Built with:
 - Student Login
 - Student Registration
 - Admin Dashboard
+- Mobile Companion
 
 ## Quick Start
 
@@ -37,6 +38,18 @@ npm run dev
 Copy `.env.example` to `.env.local` and add your Supabase project keys to enable authentication.
 
 See `DEPLOYMENT_PLAN.md` for the full Supabase and Vercel deployment plan.
+
+## Mobile Companion
+
+The Expo-based iOS and Android companion app is in `mobile/`.
+
+```bash
+cd mobile
+npm install
+npm run start
+```
+
+The web platform also includes `/mobile-app` to document the companion app readiness plan for students and administrators.
 
 ## Deployment Files
 

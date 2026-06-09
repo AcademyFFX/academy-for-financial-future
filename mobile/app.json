@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Academy for Financial Future",
+    "slug": "academy-for-financial-future",
+    "scheme": "affacademy",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.academyfinancialfuture.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.academyfinancialfuture.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#07111f"
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "replace-with-eas-project-id"
+      }
+    }
+  }
+}

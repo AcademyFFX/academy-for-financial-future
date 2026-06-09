@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import type { ResponseCookie } from "next/dist/compiled/@edge-runtime/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 
-const protectedRoutes = ["/student-dashboard", "/dashboard", "/courses", "/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/billing", "/admin"];
+const protectedRoutes = ["/student-dashboard", "/dashboard", "/courses", "/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/billing", "/messages", "/admin"];
 const enrollmentRestrictedRoutes = ["/journal", "/assignments", "/exams", "/certificates", "/live-trading-room"];
 
 export async function middleware(request: NextRequest) {
@@ -88,5 +88,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/student-dashboard/:path*", "/dashboard/:path*", "/courses/:path*", "/journal/:path*", "/assignments/:path*", "/exams/:path*", "/certificates/:path*", "/live-trading-room/:path*", "/billing/:path*", "/admin/:path*"]
+  matcher: ["/student-dashboard/:path*", "/dashboard/:path*", "/courses/:path*", "/journal/:path*", "/assignments/:path*", "/exams/:path*", "/certificates/:path*", "/live-trading-room/:path*", "/billing/:path*", "/messages/:path*", "/admin/:path*"]
 };

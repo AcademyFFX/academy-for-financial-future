@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Award, ClipboardCheck, CreditCard, Mail, NotebookPen, Radio, ShieldCheck, User } from "lucide-react";
+import { Award, ClipboardCheck, CreditCard, Mail, MessageSquare, NotebookPen, Radio, ShieldCheck, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase";
@@ -11,6 +11,7 @@ import { ZoomClassesPanel } from "@/components/zoom-classes-panel";
 
 const dashboardLinks = [
   { href: "/billing", label: "Membership Billing", icon: CreditCard },
+  { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/live-trading-room", label: "Live Trading Room", icon: Radio },
   { href: "/journal", label: "Trading Journal", icon: NotebookPen },
   { href: "/assignments", label: "Assignments", icon: ClipboardCheck },
@@ -21,6 +22,7 @@ const dashboardLinks = [
 export default function StudentDashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,6 +39,19 @@ export default function StudentDashboardPage() {
         }
 
         setUser(currentUser);
+
+        try {
+          const { count } = await supabase
+            .from("student_messages")
+            .select("id", { count: "exact", head: true })
+            .eq("recipient_id", currentUser.id)
+            .is("read_at", null)
+            .is("deleted_at", null);
+
+          setUnreadCount(count ?? 0);
+        } catch {
+          setUnreadCount(0);
+        }
       } catch {
         router.replace("/login");
       } finally {
@@ -82,7 +97,12 @@ export default function StudentDashboardPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             {dashboardLinks.map((item) => (
               <Link key={item.href} href={item.href} className="terminal-panel p-6 transition hover:border-gold-400/60">
-                <item.icon className="text-gold-300" size={28} />
+                <div className="flex items-center justify-between gap-3">
+                  <item.icon className="text-gold-300" size={28} />
+                  {item.href === "/messages" && unreadCount > 0 ? (
+                    <span className="rounded-full bg-gold-500 px-3 py-1 text-xs font-bold text-navy-950">{unreadCount} unread</span>
+                  ) : null}
+                </div>
                 <h2 className="mt-5 text-2xl font-semibold text-white">{item.label}</h2>
                 <p className="mt-3 leading-7 text-ink/70">
                   Open your {item.label.toLowerCase()} workspace for the Forex Training Division.

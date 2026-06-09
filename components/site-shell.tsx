@@ -4,12 +4,40 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, ShieldCheck, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { navItems } from "@/lib/data";
+import { createClient } from "@/lib/supabase";
 
 export function SiteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    async function loadUnreadCount() {
+      try {
+        const supabase = createClient();
+        const {
+          data: { user }
+        } = await supabase.auth.getUser();
+
+        if (!user) return;
+
+        const { count, error } = await supabase
+          .from("student_messages")
+          .select("id", { count: "exact", head: true })
+          .eq("recipient_id", user.id)
+          .is("read_at", null)
+          .is("deleted_at", null);
+
+        if (!error) setUnreadCount(count ?? 0);
+      } catch {
+        setUnreadCount(0);
+      }
+    }
+
+    loadUnreadCount();
+  }, [pathname]);
 
   return (
     <div className="min-h-screen bg-navy-950">
@@ -35,7 +63,10 @@ export function SiteShell({ children }: { children: ReactNode }) {
                   pathname === item.href ? "text-gold-300" : "text-ink/76 hover:text-white"
                 }`}
               >
-                {item.label}
+                <span className="relative inline-flex items-center gap-1">
+                  {item.label}
+                  {item.href === "/messages" && unreadCount > 0 ? <NotificationBadge count={unreadCount} /> : null}
+                </span>
               </Link>
             ))}
             <Link href="/login" className="ml-2 border border-gold-500/45 px-4 py-2 text-xs font-semibold text-gold-300">
@@ -64,7 +95,10 @@ export function SiteShell({ children }: { children: ReactNode }) {
                   onClick={() => setOpen(false)}
                   className={`px-3 py-3 text-sm ${pathname === item.href ? "text-gold-300" : "text-ink/80"}`}
                 >
-                  {item.label}
+                  <span className="inline-flex items-center gap-2">
+                    {item.label}
+                    {item.href === "/messages" && unreadCount > 0 ? <NotificationBadge count={unreadCount} /> : null}
+                  </span>
                 </Link>
               ))}
               <div className="grid grid-cols-2 gap-2 pt-2">
@@ -87,5 +121,13 @@ export function SiteShell({ children }: { children: ReactNode }) {
         </div>
       </footer>
     </div>
+  );
+}
+
+function NotificationBadge({ count }: { count: number }) {
+  return (
+    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-gold-500 px-1.5 py-0.5 text-[10px] font-bold text-navy-950">
+      {count > 99 ? "99+" : count}
+    </span>
   );
 }

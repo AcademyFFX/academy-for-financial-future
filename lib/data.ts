@@ -24,6 +24,7 @@ export const navItems = [
   { href: "/ai-coach", label: "AI Forex Coach" },
   { href: "/trading-simulator", label: "Trading Simulator" },
   { href: "/social-network", label: "Social Learning" },
+  { href: "/tv-studio", label: "TV Studio" },
   { href: "/mobile-app", label: "Mobile App" },
   { href: "/live-trading-room", label: "Live Trading Room" },
   { href: "/journal", label: "Trading Journal" },

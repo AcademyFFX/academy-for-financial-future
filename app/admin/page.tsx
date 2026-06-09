@@ -9,6 +9,7 @@ import { AdminAICoachKnowledge } from "@/components/admin-ai-coach-knowledge";
 import { AdminMessageCenter } from "@/components/admin-message-center";
 import { AdminSimulatorReview } from "@/components/admin-simulator-review";
 import { AdminSocialModeration } from "@/components/admin-social-moderation";
+import { AdminTVStudio } from "@/components/admin-tv-studio";
 import { AdminZoomSessionManager } from "@/components/admin-zoom-session-manager";
 import { createClient } from "@/lib/supabase";
 
@@ -605,6 +606,8 @@ export default function AdminPage() {
               <AdminSimulatorReview />
 
               <AdminSocialModeration />
+
+              <AdminTVStudio />
 
               <section className="grid gap-6 lg:grid-cols-[420px_1fr]">
                 <form onSubmit={saveAnnouncement} className="terminal-panel grid h-fit gap-4 p-6">

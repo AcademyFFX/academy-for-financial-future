@@ -19,6 +19,7 @@ export const navItems = [
   { href: "/about", label: "About Academy" },
   { href: "/courses", label: "Forex Courses" },
   { href: "/dashboard", label: "Student Dashboard" },
+  { href: "/billing", label: "Billing" },
   { href: "/live-trading-room", label: "Live Trading Room" },
   { href: "/journal", label: "Trading Journal" },
   { href: "/assignments", label: "Assignments" },

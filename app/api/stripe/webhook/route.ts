@@ -82,6 +82,56 @@ async function updateMembershipFromCheckout(object: StripeObject) {
   }, { onConflict: "student_id" });
 }
 
+async function updateMarketplacePurchaseFromCheckout(object: StripeObject) {
+  const productId = object.metadata?.marketplace_product_id;
+  const purchaseId = object.metadata?.purchase_id;
+  const studentId = object.metadata?.student_id ?? asString(object.client_reference_id);
+
+  if (!productId || !purchaseId || !studentId) return;
+
+  const supabase = createSupabaseAdminClient();
+  const amount = centsToDollars(object.amount_paid ?? object.amount_total);
+  const status = object.payment_status === "paid" ? "Paid" : "Payment Pending";
+
+  await supabase
+    .from("marketplace_purchases")
+    .update({
+      purchase_status: status,
+      amount,
+      currency: asString(object.currency || "usd").toUpperCase(),
+      stripe_checkout_session_id: asString(object.id),
+      stripe_customer_id: asString(object.customer),
+      paid_at: object.payment_status === "paid" ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", purchaseId)
+    .eq("student_id", studentId);
+
+  const affiliateCode = object.metadata?.affiliate_code;
+  if (object.payment_status === "paid" && affiliateCode) {
+    const { data: affiliate } = await supabase
+      .from("marketplace_affiliates")
+      .select("id, commission_rate")
+      .eq("code", affiliateCode)
+      .eq("active", true)
+      .maybeSingle();
+
+    if (affiliate) {
+      const commissionRate = Number(affiliate.commission_rate ?? 0);
+      await supabase.from("marketplace_affiliate_commissions").insert({
+        affiliate_id: affiliate.id,
+        purchase_id: purchaseId,
+        product_id: productId,
+        student_id: studentId,
+        gross_amount: amount,
+        commission_rate: commissionRate,
+        commission_amount: Math.round(amount * commissionRate) / 100,
+        commission_status: "Pending"
+      });
+    }
+  }
+}
+
 async function updateMembershipFromSubscription(object: StripeObject) {
   const supabase = createSupabaseAdminClient();
   const studentId = object.metadata?.student_id;
@@ -116,7 +166,11 @@ export async function POST(request: Request) {
     const object = event.data.object;
 
     if (event.type === "checkout.session.completed") {
-      await updateMembershipFromCheckout(object);
+      if (object.metadata?.marketplace_product_id) {
+        await updateMarketplacePurchaseFromCheckout(object);
+      } else {
+        await updateMembershipFromCheckout(object);
+      }
       await recordBillingHistory(event.type, object);
     }
 

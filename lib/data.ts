@@ -20,6 +20,7 @@ export const navItems = [
   { href: "/courses", label: "Forex Courses" },
   { href: "/dashboard", label: "Student Dashboard" },
   { href: "/executive-command-center", label: "Executive Analytics" },
+  { href: "/marketplace", label: "Marketplace" },
   { href: "/billing", label: "Billing" },
   { href: "/messages", label: "Messages" },
   { href: "/ai-coach", label: "AI Forex Coach" },

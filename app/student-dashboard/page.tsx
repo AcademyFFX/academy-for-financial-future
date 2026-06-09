@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Award, ClipboardCheck, CreditCard, Mail, MessageSquare, NotebookPen, Radio, ShieldCheck, User } from "lucide-react";
+import { Award, Bot, ClipboardCheck, CreditCard, Mail, MessageSquare, NotebookPen, Radio, ShieldCheck, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase";
@@ -12,6 +12,7 @@ import { ZoomClassesPanel } from "@/components/zoom-classes-panel";
 const dashboardLinks = [
   { href: "/billing", label: "Membership Billing", icon: CreditCard },
   { href: "/messages", label: "Messages", icon: MessageSquare },
+  { href: "/ai-coach", label: "AI Forex Coach", icon: Bot },
   { href: "/live-trading-room", label: "Live Trading Room", icon: Radio },
   { href: "/journal", label: "Trading Journal", icon: NotebookPen },
   { href: "/assignments", label: "Assignments", icon: ClipboardCheck },

@@ -22,6 +22,7 @@ export const navItems = [
   { href: "/billing", label: "Billing" },
   { href: "/messages", label: "Messages" },
   { href: "/ai-coach", label: "AI Forex Coach" },
+  { href: "/trading-simulator", label: "Trading Simulator" },
   { href: "/mobile-app", label: "Mobile App" },
   { href: "/live-trading-room", label: "Live Trading Room" },
   { href: "/journal", label: "Trading Journal" },

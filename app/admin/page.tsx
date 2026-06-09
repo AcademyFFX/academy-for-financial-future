@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Award, ClipboardCheck, ExternalLink, FileCheck, FileX, Megaphone, Save, ShieldCheck, Trash2, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -415,6 +416,15 @@ export default function AdminPage() {
             <div className="terminal-panel p-6 text-ink/76">Admin login only.</div>
           ) : (
             <>
+              <Link href="/executive-command-center" className="terminal-panel flex flex-col gap-3 p-5 transition hover:border-gold-400/60 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[.22em] text-gold-300">Executive Analytics</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">Open AFF Command Center</h2>
+                  <p className="mt-2 text-sm text-ink/68">Review enrollment, completion, certification, revenue, media, community, and instructor activity intelligence.</p>
+                </div>
+                <ExternalLink className="text-gold-300" size={24} />
+              </Link>
+
               <div className="grid gap-4 md:grid-cols-4">
                 {cards.map((card) => (
                   <div key={card.label} className="terminal-panel p-5">

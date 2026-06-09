@@ -56,6 +56,7 @@ export default function TVStudioPage() {
   const [activeBroadcast, setActiveBroadcast] = useState<Broadcast | null>(null);
   const [message, setMessage] = useState("Loading AFF TV Studio...");
   const [loading, setLoading] = useState(true);
+  const [recordedViews, setRecordedViews] = useState<string[]>([]);
 
   const liveShows = useMemo(() => broadcasts.filter((show) => show.status === "Live"), [broadcasts]);
   const upcomingShows = useMemo(() => broadcasts.filter((show) => show.status === "Scheduled"), [broadcasts]);
@@ -102,6 +103,23 @@ export default function TVStudioPage() {
   useEffect(() => {
     loadStudio();
   }, [loadStudio]);
+
+  useEffect(() => {
+    async function recordViewership() {
+      if (!studentId || !activeBroadcast || recordedViews.includes(activeBroadcast.id)) return;
+
+      setRecordedViews((current) => [...current, activeBroadcast.id]);
+
+      const supabase = createClient();
+      await supabase.from("tv_viewership_events").insert({
+        student_id: studentId,
+        broadcast_id: Number(activeBroadcast.id),
+        event_type: activeBroadcast.status === "Live" ? "live_view" : "library_view"
+      });
+    }
+
+    recordViewership();
+  }, [activeBroadcast, recordedViews, studentId]);
 
   async function toggleSubscription(channelName: string) {
     if (!studentId) return;

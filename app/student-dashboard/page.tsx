@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Award, Bot, BookOpenText, BriefcaseBusiness, Building2, CalendarDays, ClipboardCheck, CreditCard, Gamepad2, Landmark, Mail, MessageSquare, NotebookPen, Radio, ShieldCheck, ShoppingBag, Tv, User, Users } from "lucide-react";
+import { Award, Bot, BookOpenText, BriefcaseBusiness, Building2, CalendarDays, ClipboardCheck, CreditCard, Gamepad2, HandHeart, Landmark, Mail, MessageSquare, NotebookPen, Radio, ShieldCheck, ShoppingBag, Tv, User, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase";
@@ -17,6 +17,7 @@ const dashboardLinks = [
   { href: "/events", label: "Events Division", icon: CalendarDays },
   { href: "/campus-expansion", label: "Campus Expansion", icon: Building2 },
   { href: "/endowment-fund", label: "Endowment Fund", icon: Landmark },
+  { href: "/foundation", label: "Foundation", icon: HandHeart },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/ai-coach", label: "AI Forex Coach", icon: Bot },
   { href: "/trading-simulator", label: "Trading Simulator", icon: Gamepad2 },

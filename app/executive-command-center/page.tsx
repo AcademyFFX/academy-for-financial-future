@@ -79,7 +79,11 @@ const tables = [
   "endowment_donors",
   "endowment_scholarship_funds",
   "endowment_investment_portfolio",
-  "endowment_research_grant_allocations"
+  "endowment_research_grant_allocations",
+  "foundation_programs",
+  "foundation_humanitarian_campaigns",
+  "foundation_grant_distributions",
+  "foundation_impact_reports"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -216,6 +220,10 @@ export default function ExecutiveCommandCenterPage() {
     const scholarshipFunds = datasets.endowment_scholarship_funds ?? [];
     const endowmentPortfolio = datasets.endowment_investment_portfolio ?? [];
     const researchGrantAllocations = datasets.endowment_research_grant_allocations ?? [];
+    const foundationPrograms = datasets.foundation_programs ?? [];
+    const foundationCampaigns = datasets.foundation_humanitarian_campaigns ?? [];
+    const foundationGrants = datasets.foundation_grant_distributions ?? [];
+    const foundationReports = datasets.foundation_impact_reports ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -319,6 +327,11 @@ export default function ExecutiveCommandCenterPage() {
       endowmentValue: endowmentPortfolio.reduce((total, row) => total + numberValue(row, ["current_value"]), 0),
       scholarshipFunds: scholarshipFunds.reduce((total, row) => total + numberValue(row, ["fund_balance"]), 0),
       researchGrantAllocations: researchGrantAllocations.length,
+      foundationPrograms: foundationPrograms.length,
+      foundationBeneficiaries: foundationPrograms.reduce((total, row) => total + numberValue(row, ["beneficiaries_count"]), 0),
+      foundationGrants: foundationGrants.reduce((total, row) => total + numberValue(row, ["distribution_amount"]), 0),
+      foundationCampaigns: foundationCampaigns.length,
+      foundationReports: foundationReports.length,
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -475,6 +488,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<CalendarClock size={20} />} label="Events Division" value={`${analytics.events}`} detail={`${analytics.eventRegistrations} registrations, ${analytics.eventCertificates} certificates`} />
             <ExecutiveTile icon={<GraduationCap size={20} />} label="Campus Expansion" value={`${analytics.campuses}`} detail={`${analytics.campusApplications} applications, ${money(analytics.campusRevenue)} revenue`} />
             <ExecutiveTile icon={<CircleDollarSign size={20} />} label="Endowment Fund" value={money(analytics.endowmentValue)} detail={`${analytics.endowmentDonors} donors, ${money(analytics.scholarshipFunds)} scholarships`} />
+            <ExecutiveTile icon={<Award size={20} />} label="Foundation Impact" value={`${analytics.foundationBeneficiaries}`} detail={`${analytics.foundationPrograms} programs, ${money(analytics.foundationGrants)} grants`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

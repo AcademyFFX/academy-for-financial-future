@@ -94,7 +94,9 @@ const tables = [
   "civic_ethics_certifications",
   "civic_leadership_exams",
   "voice_coach_conversations",
-  "voice_coach_usage_events"
+  "voice_coach_usage_events",
+  "chart_analyst_reports",
+  "chart_analyst_usage_events"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -245,6 +247,8 @@ export default function ExecutiveCommandCenterPage() {
     const civicExams = datasets.civic_leadership_exams ?? [];
     const voiceCoachConversations = datasets.voice_coach_conversations ?? [];
     const voiceCoachUsage = datasets.voice_coach_usage_events ?? [];
+    const chartAnalystReports = datasets.chart_analyst_reports ?? [];
+    const chartAnalystUsage = datasets.chart_analyst_usage_events ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -295,7 +299,8 @@ export default function ExecutiveCommandCenterPage() {
       ...tvViewership.map((row) => ({ type: "TV View", label: `Broadcast ${value(row, ["broadcast_id"], "viewed")}`, date: value(row, ["watched_at", "created_at"]) })),
       ...civicJournals.map((row) => ({ type: "Leadership Journal", label: value(row, ["journal_title"], "Civic journal submitted"), date: value(row, ["created_at"]) })),
       ...civicExams.map((row) => ({ type: "Civic Exam", label: `${value(row, ["exam_title"], "Leadership exam")} - ${value(row, ["result"], "In Progress")}`, date: value(row, ["submitted_at"]) })),
-      ...voiceCoachUsage.map((row) => ({ type: "Voice Coach", label: value(row, ["coach_mode"], "Voice coaching session"), date: value(row, ["created_at"]) }))
+      ...voiceCoachUsage.map((row) => ({ type: "Voice Coach", label: value(row, ["coach_mode"], "Voice coaching session"), date: value(row, ["created_at"]) })),
+      ...chartAnalystReports.map((row) => ({ type: "Chart Analyst", label: `${value(row, ["platform"], "Chart")} - ${numberValue(row, ["overall_grade"])}%`, date: value(row, ["created_at"]) }))
     ]
       .filter((item) => item.date)
       .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
@@ -368,6 +373,10 @@ export default function ExecutiveCommandCenterPage() {
       voiceCoachMessages: voiceCoachConversations.length,
       voiceCoachExchanges: voiceCoachUsage.length,
       voiceCoachSeconds: voiceCoachUsage.reduce((total, row) => total + numberValue(row, ["audio_duration_seconds"]), 0),
+      chartAnalystReports: chartAnalystReports.length,
+      chartAnalystUsage: chartAnalystUsage.length,
+      chartAnalystAverage: chartAnalystReports.length ? Math.round(chartAnalystReports.reduce((total, row) => total + numberValue(row, ["overall_grade"]), 0) / chartAnalystReports.length) : 0,
+      chartAnalystReviewMode: chartAnalystReports.filter((row) => value(row, ["dr_moricette_review_mode"]) === "true").length,
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -527,6 +536,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<Award size={20} />} label="Foundation Impact" value={`${analytics.foundationBeneficiaries}`} detail={`${analytics.foundationPrograms} programs, ${money(analytics.foundationGrants)} grants`} />
             <ExecutiveTile icon={<ShieldCheck size={20} />} label="Civic Leadership" value={`${analytics.civicPrograms}`} detail={`${analytics.civicServiceHours} service hours, ${analytics.civicCertifications} ethics certifications`} />
             <ExecutiveTile icon={<Mic size={20} />} label="AI Voice Coach" value={`${analytics.voiceCoachExchanges}`} detail={`${analytics.voiceCoachMessages} messages, ${analytics.voiceCoachSeconds} recorded seconds`} />
+            <ExecutiveTile icon={<BarChart3 size={20} />} label="AI Chart Analyst" value={`${analytics.chartAnalystReports}`} detail={`${analytics.chartAnalystAverage}% avg grade, ${analytics.chartAnalystReviewMode} Dr. reviews`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

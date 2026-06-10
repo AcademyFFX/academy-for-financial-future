@@ -77,6 +77,7 @@ const dashboardLinks = [
   { href: "/mobile-super-app", label: "AFF Mobile Super App", icon: TabletSmartphone },
   { href: "/alumni-network", label: "AFF Global Alumni Network", icon: Trophy },
   { href: "/publishing-house", label: "AFF Publishing & Media House", icon: BookOpenText },
+  { href: "/economic-intelligence", label: "AFF Economic Intelligence", icon: BarChart3 },
   { href: "/university", label: "AFF Global University", icon: GraduationCap },
   { href: "/billing", label: "Membership Billing", icon: CreditCard },
   { href: "/marketplace", label: "AFF Marketplace", icon: ShoppingBag },

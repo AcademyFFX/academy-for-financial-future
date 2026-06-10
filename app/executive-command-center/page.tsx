@@ -181,7 +181,15 @@ const tables = [
   "aff_podcasts",
   "aff_editorial_reviews",
   "aff_copyright_registry",
-  "aff_substack_archive"
+  "aff_substack_archive",
+  "economic_events",
+  "central_bank_reports",
+  "inflation_reports",
+  "currency_reports",
+  "global_risk_reports",
+  "geopolitical_reports",
+  "economic_forecasts",
+  "research_downloads"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -413,6 +421,14 @@ export default function ExecutiveCommandCenterPage() {
     const affEditorialReviews = datasets.aff_editorial_reviews ?? [];
     const affCopyrightRegistry = datasets.aff_copyright_registry ?? [];
     const affSubstackArchive = datasets.aff_substack_archive ?? [];
+    const economicEvents = datasets.economic_events ?? [];
+    const centralBankReports = datasets.central_bank_reports ?? [];
+    const inflationReports = datasets.inflation_reports ?? [];
+    const currencyReports = datasets.currency_reports ?? [];
+    const globalRiskReports = datasets.global_risk_reports ?? [];
+    const geopoliticalReports = datasets.geopolitical_reports ?? [];
+    const economicForecasts = datasets.economic_forecasts ?? [];
+    const researchDownloads = datasets.research_downloads ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -476,7 +492,9 @@ export default function ExecutiveCommandCenterPage() {
       ...mobileActivity.map((row) => ({ type: "Mobile Super App", label: value(row, ["activity_label", "activity_type"], "Mobile activity"), date: value(row, ["created_at"]) })),
       ...alumni.map((row) => ({ type: "Alumni Network", label: value(row, ["full_name"], "Alumni profile"), date: value(row, ["created_at"]) })),
       ...alumniDonations.map((row) => ({ type: "Alumni Donation", label: value(row, ["donor_name", "campaign_name"], "Alumni contribution"), date: value(row, ["created_at"]) })),
-      ...affEditorialReviews.map((row) => ({ type: "Publishing House", label: value(row, ["submission_title"], "Editorial submission"), date: value(row, ["created_at"]) }))
+      ...affEditorialReviews.map((row) => ({ type: "Publishing House", label: value(row, ["submission_title"], "Editorial submission"), date: value(row, ["created_at"]) })),
+      ...economicEvents.map((row) => ({ type: "Economic Event", label: value(row, ["event_name"], "Economic calendar event"), date: value(row, ["event_time", "created_at"]) })),
+      ...economicForecasts.map((row) => ({ type: "Economic Forecast", label: value(row, ["forecast_title"], "Forecast published"), date: value(row, ["forecast_date", "created_at"]) }))
     ]
       .filter((item) => item.date)
       .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
@@ -645,6 +663,14 @@ export default function ExecutiveCommandCenterPage() {
       publishingSubscribers: affSubstackArchive.reduce((total, row) => total + numberValue(row, ["subscriber_count"]), 0),
       publishingReviews: affEditorialReviews.length,
       publishingCopyright: affCopyrightRegistry.length,
+      economicEvents: economicEvents.length,
+      economicHighImpactEvents: economicEvents.filter((row) => value(row, ["impact_level"]) === "High").length,
+      economicReports: centralBankReports.length + inflationReports.length + currencyReports.length + globalRiskReports.length + geopoliticalReports.length,
+      economicDownloads: researchDownloads.length,
+      economicForecasts: economicForecasts.length,
+      economicForecastAccuracy: economicForecasts.length ? Math.round(economicForecasts.reduce((total, row) => total + numberValue(row, ["accuracy_score"]), 0) / economicForecasts.length) : 0,
+      economicRiskScore: globalRiskReports.length ? Math.round(globalRiskReports.reduce((total, row) => total + numberValue(row, ["risk_score"]), 0) / globalRiskReports.length) : 0,
+      economicEngagement: researchDownloads.length + tradingFloorCommentary.length + economicEvents.length,
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -815,6 +841,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<Smartphone size={20} />} label="Mobile Super App" value={`${analytics.mobileActiveUsers}`} detail={`${analytics.mobileDevices} devices, ${analytics.mobileDownloads} offline downloads`} />
             <ExecutiveTile icon={<Award size={20} />} label="Global Alumni Network" value={`${analytics.alumni}`} detail={`${analytics.alumniEmploymentRate}% employment, ${money(analytics.alumniDonations)} donations`} />
             <ExecutiveTile icon={<BookOpenCheck size={20} />} label="Publishing House" value={`${analytics.publishingPublications}`} detail={`${analytics.publishingDownloads} downloads, ${analytics.publishingMediaViews} media views`} />
+            <ExecutiveTile icon={<LineChart size={20} />} label="Economic Intelligence" value={`${analytics.economicReports}`} detail={`${analytics.economicForecastAccuracy}% forecast accuracy, ${analytics.economicRiskScore}/100 risk`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

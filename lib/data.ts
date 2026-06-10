@@ -47,6 +47,7 @@ export const navItems = [
   { href: "/mobile-super-app", label: "Mobile Super App" },
   { href: "/alumni-network", label: "Alumni Network" },
   { href: "/publishing-house", label: "Publishing House" },
+  { href: "/economic-intelligence", label: "Economic Intelligence" },
   { href: "/live-trading-room", label: "Live Trading Room" },
   { href: "/journal", label: "Trading Journal" },
   { href: "/assignments", label: "Assignments" },

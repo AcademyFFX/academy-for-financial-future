@@ -48,6 +48,7 @@ export const navItems = [
   { href: "/alumni-network", label: "Alumni Network" },
   { href: "/publishing-house", label: "Publishing House" },
   { href: "/economic-intelligence", label: "Economic Intelligence" },
+  { href: "/investment-bank", label: "Investment Bank" },
   { href: "/live-trading-room", label: "Live Trading Room" },
   { href: "/journal", label: "Trading Journal" },
   { href: "/assignments", label: "Assignments" },

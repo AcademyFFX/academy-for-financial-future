@@ -189,7 +189,16 @@ const tables = [
   "global_risk_reports",
   "geopolitical_reports",
   "economic_forecasts",
-  "research_downloads"
+  "research_downloads",
+  "investment_portfolios",
+  "portfolio_holdings",
+  "asset_allocations",
+  "risk_reports",
+  "investment_committees",
+  "research_memos",
+  "student_funds",
+  "wealth_management_profiles",
+  "hedge_fund_strategies"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -429,6 +438,15 @@ export default function ExecutiveCommandCenterPage() {
     const geopoliticalReports = datasets.geopolitical_reports ?? [];
     const economicForecasts = datasets.economic_forecasts ?? [];
     const researchDownloads = datasets.research_downloads ?? [];
+    const investmentPortfolios = datasets.investment_portfolios ?? [];
+    const portfolioHoldings = datasets.portfolio_holdings ?? [];
+    const assetAllocations = datasets.asset_allocations ?? [];
+    const investmentRiskReports = datasets.risk_reports ?? [];
+    const investmentCommittees = datasets.investment_committees ?? [];
+    const investmentResearchMemos = datasets.research_memos ?? [];
+    const studentFunds = datasets.student_funds ?? [];
+    const wealthProfiles = datasets.wealth_management_profiles ?? [];
+    const hedgeFundStrategies = datasets.hedge_fund_strategies ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -494,7 +512,9 @@ export default function ExecutiveCommandCenterPage() {
       ...alumniDonations.map((row) => ({ type: "Alumni Donation", label: value(row, ["donor_name", "campaign_name"], "Alumni contribution"), date: value(row, ["created_at"]) })),
       ...affEditorialReviews.map((row) => ({ type: "Publishing House", label: value(row, ["submission_title"], "Editorial submission"), date: value(row, ["created_at"]) })),
       ...economicEvents.map((row) => ({ type: "Economic Event", label: value(row, ["event_name"], "Economic calendar event"), date: value(row, ["event_time", "created_at"]) })),
-      ...economicForecasts.map((row) => ({ type: "Economic Forecast", label: value(row, ["forecast_title"], "Forecast published"), date: value(row, ["forecast_date", "created_at"]) }))
+      ...economicForecasts.map((row) => ({ type: "Economic Forecast", label: value(row, ["forecast_title"], "Forecast published"), date: value(row, ["forecast_date", "created_at"]) })),
+      ...investmentCommittees.map((row) => ({ type: "Investment Committee", label: value(row, ["committee_title"], "Committee activity"), date: value(row, ["meeting_date", "created_at"]) })),
+      ...studentFunds.map((row) => ({ type: "Student Fund", label: value(row, ["fund_name"], "Student fund"), date: value(row, ["updated_at", "created_at"]) }))
     ]
       .filter((item) => item.date)
       .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
@@ -671,6 +691,19 @@ export default function ExecutiveCommandCenterPage() {
       economicForecastAccuracy: economicForecasts.length ? Math.round(economicForecasts.reduce((total, row) => total + numberValue(row, ["accuracy_score"]), 0) / economicForecasts.length) : 0,
       economicRiskScore: globalRiskReports.length ? Math.round(globalRiskReports.reduce((total, row) => total + numberValue(row, ["risk_score"]), 0) / globalRiskReports.length) : 0,
       economicEngagement: researchDownloads.length + tradingFloorCommentary.length + economicEvents.length,
+      investmentPortfolioValue: investmentPortfolios.reduce((total, row) => total + numberValue(row, ["portfolio_value"]), 0),
+      investmentPortfolioPerformance: investmentPortfolios.length ? Math.round(investmentPortfolios.reduce((total, row) => total + numberValue(row, ["performance_percent"]), 0) / investmentPortfolios.length) : 0,
+      investmentHoldings: portfolioHoldings.length,
+      investmentAllocations: assetAllocations.length,
+      investmentRiskReports: investmentRiskReports.length,
+      investmentAverageVar: investmentRiskReports.length ? Math.round(investmentRiskReports.reduce((total, row) => total + numberValue(row, ["var_percent"]), 0) / investmentRiskReports.length) : 0,
+      investmentCommitteeActivity: investmentCommittees.length,
+      investmentCommitteeApprovals: investmentCommittees.filter((row) => value(row, ["decision_status"]) === "Approved").length,
+      investmentResearchMemos: investmentResearchMemos.length,
+      studentFunds: studentFunds.length,
+      studentFundTopReturn: studentFunds.length ? Math.max(...studentFunds.map((row) => numberValue(row, ["risk_adjusted_return"]))) : 0,
+      wealthProfiles: wealthProfiles.length,
+      hedgeFundStrategies: hedgeFundStrategies.length,
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -842,6 +875,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<Award size={20} />} label="Global Alumni Network" value={`${analytics.alumni}`} detail={`${analytics.alumniEmploymentRate}% employment, ${money(analytics.alumniDonations)} donations`} />
             <ExecutiveTile icon={<BookOpenCheck size={20} />} label="Publishing House" value={`${analytics.publishingPublications}`} detail={`${analytics.publishingDownloads} downloads, ${analytics.publishingMediaViews} media views`} />
             <ExecutiveTile icon={<LineChart size={20} />} label="Economic Intelligence" value={`${analytics.economicReports}`} detail={`${analytics.economicForecastAccuracy}% forecast accuracy, ${analytics.economicRiskScore}/100 risk`} />
+            <ExecutiveTile icon={<CircleDollarSign size={20} />} label="Investment Bank Institute" value={money(analytics.investmentPortfolioValue)} detail={`${analytics.studentFunds} student funds, ${analytics.investmentAverageVar}% avg VaR`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

@@ -65,7 +65,13 @@ const tables = [
   "research_publications",
   "research_submissions",
   "research_analyst_profiles",
-  "research_citations"
+  "research_citations",
+  "event_calendar",
+  "event_registrations",
+  "event_speakers",
+  "event_sponsors",
+  "event_certificates",
+  "event_video_archive"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -188,6 +194,12 @@ export default function ExecutiveCommandCenterPage() {
     const researchSubmissions = datasets.research_submissions ?? [];
     const researchAnalysts = datasets.research_analyst_profiles ?? [];
     const researchCitations = datasets.research_citations ?? [];
+    const eventCalendar = datasets.event_calendar ?? [];
+    const eventRegistrations = datasets.event_registrations ?? [];
+    const eventSpeakers = datasets.event_speakers ?? [];
+    const eventSponsors = datasets.event_sponsors ?? [];
+    const eventCertificates = datasets.event_certificates ?? [];
+    const eventVideos = datasets.event_video_archive ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -277,6 +289,12 @@ export default function ExecutiveCommandCenterPage() {
       researchAnalysts: researchAnalysts.length,
       researchCitations: researchCitations.length,
       researchDownloads: researchPublications.filter((row) => value(row, ["pdf_url"]).length > 0).length,
+      events: eventCalendar.length,
+      eventRegistrations: eventRegistrations.length,
+      eventSpeakers: eventSpeakers.length,
+      eventSponsors: eventSponsors.length,
+      eventCertificates: eventCertificates.length,
+      eventVideos: eventVideos.length,
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -430,6 +448,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<Brain size={20} />} label="Simulator Performance" value={`${analytics.simulatorAvgPoints} pts`} detail={`${analytics.simulatorCredits} certification credits`} />
             <ExecutiveTile icon={<Radio size={20} />} label="TV Studio Viewership" value={`${analytics.tvUniqueViewers}`} detail={`${analytics.tvViews} total watch events`} />
             <ExecutiveTile icon={<BookOpenCheck size={20} />} label="Research Institute" value={`${analytics.researchPublications}`} detail={`${analytics.researchSubmissions} submissions, ${analytics.researchDownloads} PDFs`} />
+            <ExecutiveTile icon={<CalendarClock size={20} />} label="Events Division" value={`${analytics.events}`} detail={`${analytics.eventRegistrations} registrations, ${analytics.eventCertificates} certificates`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

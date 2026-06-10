@@ -22,6 +22,7 @@ import {
   Sprout,
   Star,
   TrendingUp,
+  Trophy,
   Tv,
   Users
 } from "lucide-react";
@@ -147,7 +148,14 @@ const tables = [
   "leadership_fellowships",
   "global_service_campaigns",
   "flourishing_reports",
-  "flourishing_impact_metrics"
+  "flourishing_impact_metrics",
+  "student_missions",
+  "student_streaks",
+  "student_badges",
+  "student_journal",
+  "student_recommendations",
+  "student_mentors",
+  "student_goals"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -347,6 +355,13 @@ export default function ExecutiveCommandCenterPage() {
     const globalServiceCampaigns = datasets.global_service_campaigns ?? [];
     const flourishingReports = datasets.flourishing_reports ?? [];
     const flourishingImpact = datasets.flourishing_impact_metrics ?? [];
+    const studentMissions = datasets.student_missions ?? [];
+    const studentStreaks = datasets.student_streaks ?? [];
+    const studentBadges = datasets.student_badges ?? [];
+    const studentJournal = datasets.student_journal ?? [];
+    const studentRecommendations = datasets.student_recommendations ?? [];
+    const studentMentors = datasets.student_mentors ?? [];
+    const studentGoals = datasets.student_goals ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -404,7 +419,9 @@ export default function ExecutiveCommandCenterPage() {
       ...globalRecruitment.map((row) => ({ type: "Global Recruitment", label: `${value(row, ["country"], "International")} - ${value(row, ["program_interest"], "AFF Program")}`, date: value(row, ["created_at"]) })),
       ...affOSActivity.map((row) => ({ type: "AFF OS", label: value(row, ["activity_summary"], "Operating system activity"), date: value(row, ["created_at"]) })),
       ...communityProjects.map((row) => ({ type: "Digital Civilization", label: value(row, ["project_title"], "Community project"), date: value(row, ["created_at"]) })),
-      ...globalServiceCampaigns.map((row) => ({ type: "Human Flourishing", label: value(row, ["campaign_name"], "Global service campaign"), date: value(row, ["created_at"]) }))
+      ...globalServiceCampaigns.map((row) => ({ type: "Human Flourishing", label: value(row, ["campaign_name"], "Global service campaign"), date: value(row, ["created_at"]) })),
+      ...studentMissions.map((row) => ({ type: "Student Mission", label: value(row, ["mission_title"], "Mission assigned"), date: value(row, ["completed_at", "created_at"]) })),
+      ...studentJournal.map((row) => ({ type: "Student Journal", label: value(row, ["journal_title"], "Reflection saved"), date: value(row, ["created_at"]) }))
     ]
       .filter((item) => item.date)
       .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
@@ -535,6 +552,14 @@ export default function ExecutiveCommandCenterPage() {
       flourishingReports: flourishingReports.length,
       flourishingBeneficiaries: flourishingImpact.reduce((total, row) => total + numberValue(row, ["beneficiaries_count"]), 0),
       flourishingWellbeingScore: flourishingImpact.length ? Math.round(flourishingImpact.reduce((total, row) => total + numberValue(row, ["wellbeing_score"]), 0) / flourishingImpact.length) : 0,
+      studentExperienceMissions: studentMissions.length,
+      studentExperienceCompletedMissions: studentMissions.filter((row) => value(row, ["mission_status"]).toLowerCase() === "completed").length,
+      studentExperienceBadges: studentBadges.length,
+      studentExperienceJournalEntries: studentJournal.length,
+      studentExperienceRecommendations: studentRecommendations.length,
+      studentExperienceMentors: studentMentors.length,
+      studentExperienceGoals: studentGoals.length,
+      studentExperienceAvgStreak: studentStreaks.length ? Math.round(studentStreaks.reduce((total, row) => total + numberValue(row, ["current_streak"]), 0) / studentStreaks.length) : 0,
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -701,6 +726,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<Network size={20} />} label="AFF OS" value={`${analytics.affIdentities}`} detail={`${analytics.affPassports} passports, ${analytics.affAchievements} achievements`} />
             <ExecutiveTile icon={<Sprout size={20} />} label="Digital Civilization" value={`${analytics.communityProjects}`} detail={`${analytics.civilizationBeneficiaries} beneficiaries, ${analytics.publicPolicyForums} forums`} />
             <ExecutiveTile icon={<HeartPulse size={20} />} label="Human Flourishing" value={`${analytics.flourishingPrograms}`} detail={`${analytics.flourishingBeneficiaries} beneficiaries, ${analytics.flourishingWellbeingScore} wellbeing score`} />
+            <ExecutiveTile icon={<Trophy size={20} />} label="Student Experience 2.0" value={`${analytics.studentExperienceCompletedMissions}/${analytics.studentExperienceMissions}`} detail={`${analytics.studentExperienceBadges} badges, ${analytics.studentExperienceAvgStreak} avg streak`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

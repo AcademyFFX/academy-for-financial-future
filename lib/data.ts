@@ -44,6 +44,7 @@ export const navItems = [
   { href: "/social-network", label: "Social Learning" },
   { href: "/tv-studio", label: "TV Studio" },
   { href: "/mobile-app", label: "Mobile App" },
+  { href: "/mobile-super-app", label: "Mobile Super App" },
   { href: "/live-trading-room", label: "Live Trading Room" },
   { href: "/journal", label: "Trading Journal" },
   { href: "/assignments", label: "Assignments" },

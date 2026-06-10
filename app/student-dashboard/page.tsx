@@ -34,6 +34,7 @@ import {
   ShoppingBag,
   Sparkles,
   Sprout,
+  TabletSmartphone,
   Target,
   Trophy,
   Tv,
@@ -73,6 +74,7 @@ type DatasetKey =
 
 const dashboardLinks = [
   { href: "/aff-os", label: "AFF Operating System", icon: Network },
+  { href: "/mobile-super-app", label: "AFF Mobile Super App", icon: TabletSmartphone },
   { href: "/university", label: "AFF Global University", icon: GraduationCap },
   { href: "/billing", label: "Membership Billing", icon: CreditCard },
   { href: "/marketplace", label: "AFF Marketplace", icon: ShoppingBag },

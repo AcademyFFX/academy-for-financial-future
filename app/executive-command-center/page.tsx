@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   Sprout,
   Star,
+  Smartphone,
   TrendingUp,
   Trophy,
   Tv,
@@ -155,7 +156,12 @@ const tables = [
   "student_journal",
   "student_recommendations",
   "student_mentors",
-  "student_goals"
+  "student_goals",
+  "mobile_devices",
+  "mobile_notifications",
+  "mobile_sessions",
+  "mobile_downloads",
+  "mobile_activity"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -362,6 +368,11 @@ export default function ExecutiveCommandCenterPage() {
     const studentRecommendations = datasets.student_recommendations ?? [];
     const studentMentors = datasets.student_mentors ?? [];
     const studentGoals = datasets.student_goals ?? [];
+    const mobileDevices = datasets.mobile_devices ?? [];
+    const mobileNotifications = datasets.mobile_notifications ?? [];
+    const mobileSessions = datasets.mobile_sessions ?? [];
+    const mobileDownloads = datasets.mobile_downloads ?? [];
+    const mobileActivity = datasets.mobile_activity ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -421,7 +432,8 @@ export default function ExecutiveCommandCenterPage() {
       ...communityProjects.map((row) => ({ type: "Digital Civilization", label: value(row, ["project_title"], "Community project"), date: value(row, ["created_at"]) })),
       ...globalServiceCampaigns.map((row) => ({ type: "Human Flourishing", label: value(row, ["campaign_name"], "Global service campaign"), date: value(row, ["created_at"]) })),
       ...studentMissions.map((row) => ({ type: "Student Mission", label: value(row, ["mission_title"], "Mission assigned"), date: value(row, ["completed_at", "created_at"]) })),
-      ...studentJournal.map((row) => ({ type: "Student Journal", label: value(row, ["journal_title"], "Reflection saved"), date: value(row, ["created_at"]) }))
+      ...studentJournal.map((row) => ({ type: "Student Journal", label: value(row, ["journal_title"], "Reflection saved"), date: value(row, ["created_at"]) })),
+      ...mobileActivity.map((row) => ({ type: "Mobile Super App", label: value(row, ["activity_label", "activity_type"], "Mobile activity"), date: value(row, ["created_at"]) }))
     ]
       .filter((item) => item.date)
       .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
@@ -560,6 +572,13 @@ export default function ExecutiveCommandCenterPage() {
       studentExperienceMentors: studentMentors.length,
       studentExperienceGoals: studentGoals.length,
       studentExperienceAvgStreak: studentStreaks.length ? Math.round(studentStreaks.reduce((total, row) => total + numberValue(row, ["current_streak"]), 0) / studentStreaks.length) : 0,
+      mobileDevices: mobileDevices.length,
+      mobileNotifications: mobileNotifications.length,
+      mobileUnreadNotifications: mobileNotifications.filter((row) => !row.read_at).length,
+      mobileSessions: mobileSessions.length,
+      mobileDownloads: mobileDownloads.length,
+      mobileActivity: mobileActivity.length,
+      mobileActiveUsers: uniqueCount([...mobileSessions, ...mobileActivity], ["student_id"]),
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -727,6 +746,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<Sprout size={20} />} label="Digital Civilization" value={`${analytics.communityProjects}`} detail={`${analytics.civilizationBeneficiaries} beneficiaries, ${analytics.publicPolicyForums} forums`} />
             <ExecutiveTile icon={<HeartPulse size={20} />} label="Human Flourishing" value={`${analytics.flourishingPrograms}`} detail={`${analytics.flourishingBeneficiaries} beneficiaries, ${analytics.flourishingWellbeingScore} wellbeing score`} />
             <ExecutiveTile icon={<Trophy size={20} />} label="Student Experience 2.0" value={`${analytics.studentExperienceCompletedMissions}/${analytics.studentExperienceMissions}`} detail={`${analytics.studentExperienceBadges} badges, ${analytics.studentExperienceAvgStreak} avg streak`} />
+            <ExecutiveTile icon={<Smartphone size={20} />} label="Mobile Super App" value={`${analytics.mobileActiveUsers}`} detail={`${analytics.mobileDevices} devices, ${analytics.mobileDownloads} offline downloads`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

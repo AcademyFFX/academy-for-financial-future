@@ -22,6 +22,7 @@ export const navItems = [
   { href: "/executive-command-center", label: "Executive Analytics" },
   { href: "/accreditation", label: "Accreditation" },
   { href: "/career-center", label: "Career Center" },
+  { href: "/research-institute", label: "Research Institute" },
   { href: "/marketplace", label: "Marketplace" },
   { href: "/billing", label: "Billing" },
   { href: "/messages", label: "Messages" },

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Award, Bot, BriefcaseBusiness, ClipboardCheck, CreditCard, Gamepad2, Mail, MessageSquare, NotebookPen, Radio, ShieldCheck, ShoppingBag, Tv, User, Users } from "lucide-react";
+import { Award, Bot, BookOpenText, BriefcaseBusiness, ClipboardCheck, CreditCard, Gamepad2, Mail, MessageSquare, NotebookPen, Radio, ShieldCheck, ShoppingBag, Tv, User, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase";
@@ -13,6 +13,7 @@ const dashboardLinks = [
   { href: "/billing", label: "Membership Billing", icon: CreditCard },
   { href: "/marketplace", label: "AFF Marketplace", icon: ShoppingBag },
   { href: "/career-center", label: "Career Center", icon: BriefcaseBusiness },
+  { href: "/research-institute", label: "Research Institute", icon: BookOpenText },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/ai-coach", label: "AI Forex Coach", icon: Bot },
   { href: "/trading-simulator", label: "Trading Simulator", icon: Gamepad2 },

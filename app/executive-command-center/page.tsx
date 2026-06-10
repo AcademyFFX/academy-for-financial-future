@@ -61,7 +61,11 @@ const tables = [
   "zoom_attendance",
   "live_market_commentary",
   "live_room_messages",
-  "live_trade_ideas"
+  "live_trade_ideas",
+  "research_publications",
+  "research_submissions",
+  "research_analyst_profiles",
+  "research_citations"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -180,6 +184,10 @@ export default function ExecutiveCommandCenterPage() {
     const commentary = datasets.live_market_commentary ?? [];
     const liveMessages = datasets.live_room_messages ?? [];
     const tradeIdeas = datasets.live_trade_ideas ?? [];
+    const researchPublications = datasets.research_publications ?? [];
+    const researchSubmissions = datasets.research_submissions ?? [];
+    const researchAnalysts = datasets.research_analyst_profiles ?? [];
+    const researchCitations = datasets.research_citations ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -264,6 +272,11 @@ export default function ExecutiveCommandCenterPage() {
       activeMembershipRate: percent(activeStudents, Math.max(memberships.length, 1)),
       revenue,
       instructorActions,
+      researchPublications: researchPublications.length,
+      researchSubmissions: researchSubmissions.length,
+      researchAnalysts: researchAnalysts.length,
+      researchCitations: researchCitations.length,
+      researchDownloads: researchPublications.filter((row) => value(row, ["pdf_url"]).length > 0).length,
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -416,6 +429,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<ClipboardCheck size={20} />} label="Grading Metrics" value={`${analytics.gradedAssignments}/${analytics.assignments}`} detail="graded submissions" />
             <ExecutiveTile icon={<Brain size={20} />} label="Simulator Performance" value={`${analytics.simulatorAvgPoints} pts`} detail={`${analytics.simulatorCredits} certification credits`} />
             <ExecutiveTile icon={<Radio size={20} />} label="TV Studio Viewership" value={`${analytics.tvUniqueViewers}`} detail={`${analytics.tvViews} total watch events`} />
+            <ExecutiveTile icon={<BookOpenCheck size={20} />} label="Research Institute" value={`${analytics.researchPublications}`} detail={`${analytics.researchSubmissions} submissions, ${analytics.researchDownloads} PDFs`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

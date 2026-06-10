@@ -110,7 +110,18 @@ const tables = [
   "university_transcripts",
   "university_degrees",
   "student_degree_progress",
-  "university_honors"
+  "university_honors",
+  "global_regional_directors",
+  "global_country_directors",
+  "global_campus_directory",
+  "global_student_recruitment",
+  "global_franchise_applications",
+  "global_partner_universities",
+  "global_language_localization",
+  "global_international_events",
+  "global_certification_standards",
+  "global_instructor_registry",
+  "global_campus_performance"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -276,6 +287,17 @@ export default function ExecutiveCommandCenterPage() {
     const universityDegrees = datasets.university_degrees ?? [];
     const universityProgress = datasets.student_degree_progress ?? [];
     const universityHonors = datasets.university_honors ?? [];
+    const globalRegionalDirectors = datasets.global_regional_directors ?? [];
+    const globalCountryDirectors = datasets.global_country_directors ?? [];
+    const globalCampuses = datasets.global_campus_directory ?? [];
+    const globalRecruitment = datasets.global_student_recruitment ?? [];
+    const globalFranchises = datasets.global_franchise_applications ?? [];
+    const globalPartners = datasets.global_partner_universities ?? [];
+    const globalLanguages = datasets.global_language_localization ?? [];
+    const globalEvents = datasets.global_international_events ?? [];
+    const globalStandards = datasets.global_certification_standards ?? [];
+    const globalInstructors = datasets.global_instructor_registry ?? [];
+    const globalPerformance = datasets.global_campus_performance ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -329,7 +351,8 @@ export default function ExecutiveCommandCenterPage() {
       ...voiceCoachUsage.map((row) => ({ type: "Voice Coach", label: value(row, ["coach_mode"], "Voice coaching session"), date: value(row, ["created_at"]) })),
       ...chartAnalystReports.map((row) => ({ type: "Chart Analyst", label: `${value(row, ["platform"], "Chart")} - ${numberValue(row, ["overall_grade"])}%`, date: value(row, ["created_at"]) })),
       ...tradingFloorTradeIdeas.map((row) => ({ type: "Trading Floor", label: `${value(row, ["pair"], "Idea")} ${value(row, ["direction"], "")}`, date: value(row, ["created_at"]) })),
-      ...universityTranscripts.map((row) => ({ type: "University Transcript", label: value(row, ["course_title"], "Academic record"), date: value(row, ["created_at", "completed_at"]) }))
+      ...universityTranscripts.map((row) => ({ type: "University Transcript", label: value(row, ["course_title"], "Academic record"), date: value(row, ["created_at", "completed_at"]) })),
+      ...globalRecruitment.map((row) => ({ type: "Global Recruitment", label: `${value(row, ["country"], "International")} - ${value(row, ["program_interest"], "AFF Program")}`, date: value(row, ["created_at"]) }))
     ]
       .filter((item) => item.date)
       .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
@@ -424,6 +447,17 @@ export default function ExecutiveCommandCenterPage() {
       universityCredits: universityTranscripts.reduce((total, row) => total + numberValue(row, ["credit_hours"]), 0),
       universityAvgProgress: universityProgress.length ? Math.round(universityProgress.reduce((total, row) => total + numberValue(row, ["completion_percentage"]), 0) / universityProgress.length) : 0,
       universityHonors: universityHonors.length,
+      globalRegionalDirectors: globalRegionalDirectors.length,
+      globalCountryDirectors: globalCountryDirectors.length,
+      globalCampuses: globalCampuses.length,
+      globalRecruitment: globalRecruitment.length,
+      globalFranchises: globalFranchises.length,
+      globalPartners: globalPartners.length,
+      globalLanguages: globalLanguages.length,
+      globalEvents: globalEvents.length,
+      globalStandards: globalStandards.length,
+      globalInstructors: globalInstructors.length,
+      globalEnrollment: globalPerformance.reduce((total, row) => total + numberValue(row, ["active_students"]), 0),
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -586,6 +620,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<BarChart3 size={20} />} label="AI Chart Analyst" value={`${analytics.chartAnalystReports}`} detail={`${analytics.chartAnalystAverage}% avg grade, ${analytics.chartAnalystReviewMode} Dr. reviews`} />
             <ExecutiveTile icon={<ChartCandlestick size={20} />} label="Virtual Trading Floor" value={`${analytics.tradingFloorActiveTraders}`} detail={`${analytics.tradingFloorTradeIdeas} ideas, ${analytics.tradingFloorAIInteractions} AI interactions`} />
             <ExecutiveTile icon={<GraduationCap size={20} />} label="Global University" value={`${analytics.universityColleges}`} detail={`${analytics.universityDegrees} degrees, ${analytics.universityTranscripts} transcripts`} />
+            <ExecutiveTile icon={<TrendingUp size={20} />} label="Global Network" value={`${analytics.globalCampuses}`} detail={`${analytics.globalCountryDirectors} country directors, ${analytics.globalEnrollment} students`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

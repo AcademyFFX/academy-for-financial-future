@@ -25,6 +25,7 @@ export const navItems = [
   { href: "/career-center", label: "Career Center" },
   { href: "/research-institute", label: "Research Institute" },
   { href: "/events", label: "Events" },
+  { href: "/global-network", label: "Global Network" },
   { href: "/campus-expansion", label: "Campus Expansion" },
   { href: "/endowment-fund", label: "Endowment Fund" },
   { href: "/foundation", label: "Foundation" },

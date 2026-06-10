@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Award, BarChart3, Bot, BookOpenText, BriefcaseBusiness, Building2, CalendarDays, ChartCandlestick, ClipboardCheck, CreditCard, Gamepad2, GraduationCap, HandHeart, Landmark, Mail, MessageSquare, Mic, NotebookPen, Radio, Scale, ShieldCheck, ShoppingBag, Tv, User, Users } from "lucide-react";
+import { Award, BarChart3, Bot, BookOpenText, BriefcaseBusiness, Building2, CalendarDays, ChartCandlestick, ClipboardCheck, CreditCard, Gamepad2, Globe2, GraduationCap, HandHeart, Landmark, Mail, MessageSquare, Mic, NotebookPen, Radio, Scale, ShieldCheck, ShoppingBag, Tv, User, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase";
@@ -16,6 +16,7 @@ const dashboardLinks = [
   { href: "/career-center", label: "Career Center", icon: BriefcaseBusiness },
   { href: "/research-institute", label: "Research Institute", icon: BookOpenText },
   { href: "/events", label: "Events Division", icon: CalendarDays },
+  { href: "/global-network", label: "Global Network", icon: Globe2 },
   { href: "/campus-expansion", label: "Campus Expansion", icon: Building2 },
   { href: "/endowment-fund", label: "Endowment Fund", icon: Landmark },
   { href: "/foundation", label: "Foundation", icon: HandHeart },

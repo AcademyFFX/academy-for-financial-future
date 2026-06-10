@@ -18,6 +18,7 @@ import {
   Network,
   Radio,
   ShieldCheck,
+  Sprout,
   Star,
   TrendingUp,
   Tv,
@@ -129,7 +130,15 @@ const tables = [
   "aff_mentor_network",
   "aff_knowledge_graph",
   "aff_legacy_vault",
-  "aff_os_activity"
+  "aff_os_activity",
+  "civilization_pillars",
+  "civilization_index_scores",
+  "global_citizenship_records",
+  "community_projects",
+  "public_policy_forums",
+  "civilization_library",
+  "global_leadership_programs",
+  "civilization_impact_metrics"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -313,6 +322,14 @@ export default function ExecutiveCommandCenterPage() {
     const affKnowledgeGraph = datasets.aff_knowledge_graph ?? [];
     const affLegacyVault = datasets.aff_legacy_vault ?? [];
     const affOSActivity = datasets.aff_os_activity ?? [];
+    const civilizationPillars = datasets.civilization_pillars ?? [];
+    const civilizationIndex = datasets.civilization_index_scores ?? [];
+    const citizenshipRecords = datasets.global_citizenship_records ?? [];
+    const communityProjects = datasets.community_projects ?? [];
+    const publicPolicyForums = datasets.public_policy_forums ?? [];
+    const civilizationLibrary = datasets.civilization_library ?? [];
+    const globalLeadershipPrograms = datasets.global_leadership_programs ?? [];
+    const civilizationImpact = datasets.civilization_impact_metrics ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -368,7 +385,8 @@ export default function ExecutiveCommandCenterPage() {
       ...tradingFloorTradeIdeas.map((row) => ({ type: "Trading Floor", label: `${value(row, ["pair"], "Idea")} ${value(row, ["direction"], "")}`, date: value(row, ["created_at"]) })),
       ...universityTranscripts.map((row) => ({ type: "University Transcript", label: value(row, ["course_title"], "Academic record"), date: value(row, ["created_at", "completed_at"]) })),
       ...globalRecruitment.map((row) => ({ type: "Global Recruitment", label: `${value(row, ["country"], "International")} - ${value(row, ["program_interest"], "AFF Program")}`, date: value(row, ["created_at"]) })),
-      ...affOSActivity.map((row) => ({ type: "AFF OS", label: value(row, ["activity_summary"], "Operating system activity"), date: value(row, ["created_at"]) }))
+      ...affOSActivity.map((row) => ({ type: "AFF OS", label: value(row, ["activity_summary"], "Operating system activity"), date: value(row, ["created_at"]) })),
+      ...communityProjects.map((row) => ({ type: "Digital Civilization", label: value(row, ["project_title"], "Community project"), date: value(row, ["created_at"]) }))
     ]
       .filter((item) => item.date)
       .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
@@ -481,6 +499,15 @@ export default function ExecutiveCommandCenterPage() {
       affKnowledgeGraph: affKnowledgeGraph.length,
       affLegacyVault: affLegacyVault.length,
       affOSActivity: affOSActivity.length,
+      civilizationPillars: civilizationPillars.length,
+      civilizationIndexRecords: civilizationIndex.length,
+      citizenshipRecords: citizenshipRecords.length,
+      communityProjects: communityProjects.length,
+      publicPolicyForums: publicPolicyForums.length,
+      civilizationLibrary: civilizationLibrary.length,
+      globalLeadershipPrograms: globalLeadershipPrograms.length,
+      civilizationBeneficiaries: civilizationImpact.reduce((total, row) => total + numberValue(row, ["beneficiaries_count"]), 0),
+      civilizationImpactScore: civilizationImpact.reduce((total, row) => total + numberValue(row, ["impact_score"]), 0),
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -645,6 +672,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<GraduationCap size={20} />} label="Global University" value={`${analytics.universityColleges}`} detail={`${analytics.universityDegrees} degrees, ${analytics.universityTranscripts} transcripts`} />
             <ExecutiveTile icon={<TrendingUp size={20} />} label="Global Network" value={`${analytics.globalCampuses}`} detail={`${analytics.globalCountryDirectors} country directors, ${analytics.globalEnrollment} students`} />
             <ExecutiveTile icon={<Network size={20} />} label="AFF OS" value={`${analytics.affIdentities}`} detail={`${analytics.affPassports} passports, ${analytics.affAchievements} achievements`} />
+            <ExecutiveTile icon={<Sprout size={20} />} label="Digital Civilization" value={`${analytics.communityProjects}`} detail={`${analytics.civilizationBeneficiaries} beneficiaries, ${analytics.publicPolicyForums} forums`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

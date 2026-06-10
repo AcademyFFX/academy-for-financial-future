@@ -8,6 +8,7 @@ import {
   BookOpenCheck,
   Brain,
   CalendarClock,
+  ChartCandlestick,
   CheckCircle2,
   CircleDollarSign,
   ClipboardCheck,
@@ -96,7 +97,14 @@ const tables = [
   "voice_coach_conversations",
   "voice_coach_usage_events",
   "chart_analyst_reports",
-  "chart_analyst_usage_events"
+  "chart_analyst_usage_events",
+  "trading_floor_sessions",
+  "trading_floor_messages",
+  "trade_ideas",
+  "market_commentary",
+  "student_watchlists",
+  "daily_bias_reports",
+  "leaderboard_scores"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -249,6 +257,13 @@ export default function ExecutiveCommandCenterPage() {
     const voiceCoachUsage = datasets.voice_coach_usage_events ?? [];
     const chartAnalystReports = datasets.chart_analyst_reports ?? [];
     const chartAnalystUsage = datasets.chart_analyst_usage_events ?? [];
+    const tradingFloorSessions = datasets.trading_floor_sessions ?? [];
+    const tradingFloorMessages = datasets.trading_floor_messages ?? [];
+    const tradingFloorTradeIdeas = datasets.trade_ideas ?? [];
+    const tradingFloorCommentary = datasets.market_commentary ?? [];
+    const studentWatchlists = datasets.student_watchlists ?? [];
+    const dailyBiasReports = datasets.daily_bias_reports ?? [];
+    const leaderboardScores = datasets.leaderboard_scores ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -300,7 +315,8 @@ export default function ExecutiveCommandCenterPage() {
       ...civicJournals.map((row) => ({ type: "Leadership Journal", label: value(row, ["journal_title"], "Civic journal submitted"), date: value(row, ["created_at"]) })),
       ...civicExams.map((row) => ({ type: "Civic Exam", label: `${value(row, ["exam_title"], "Leadership exam")} - ${value(row, ["result"], "In Progress")}`, date: value(row, ["submitted_at"]) })),
       ...voiceCoachUsage.map((row) => ({ type: "Voice Coach", label: value(row, ["coach_mode"], "Voice coaching session"), date: value(row, ["created_at"]) })),
-      ...chartAnalystReports.map((row) => ({ type: "Chart Analyst", label: `${value(row, ["platform"], "Chart")} - ${numberValue(row, ["overall_grade"])}%`, date: value(row, ["created_at"]) }))
+      ...chartAnalystReports.map((row) => ({ type: "Chart Analyst", label: `${value(row, ["platform"], "Chart")} - ${numberValue(row, ["overall_grade"])}%`, date: value(row, ["created_at"]) })),
+      ...tradingFloorTradeIdeas.map((row) => ({ type: "Trading Floor", label: `${value(row, ["pair"], "Idea")} ${value(row, ["direction"], "")}`, date: value(row, ["created_at"]) }))
     ]
       .filter((item) => item.date)
       .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
@@ -377,6 +393,17 @@ export default function ExecutiveCommandCenterPage() {
       chartAnalystUsage: chartAnalystUsage.length,
       chartAnalystAverage: chartAnalystReports.length ? Math.round(chartAnalystReports.reduce((total, row) => total + numberValue(row, ["overall_grade"]), 0) / chartAnalystReports.length) : 0,
       chartAnalystReviewMode: chartAnalystReports.filter((row) => value(row, ["dr_moricette_review_mode"]) === "true").length,
+      tradingFloorSessions: tradingFloorSessions.length,
+      tradingFloorMessages: tradingFloorMessages.length,
+      tradingFloorTradeIdeas: tradingFloorTradeIdeas.length,
+      tradingFloorCommentary: tradingFloorCommentary.length,
+      tradingFloorWatchlists: studentWatchlists.length,
+      tradingFloorBiasReports: dailyBiasReports.length,
+      tradingFloorLeaderboard: leaderboardScores.length,
+      tradingFloorActiveTraders: uniqueCount([...tradingFloorMessages, ...tradingFloorTradeIdeas, ...studentWatchlists], ["student_id"]),
+      tradingFloorAIInteractions: voiceCoachUsage.length + chartAnalystUsage.length,
+      tradingFloorSessionAttendance: tradingFloorMessages.length + studentWatchlists.length,
+      tradingFloorSimulatorActivity: simulatorAttempts.length + simulatorAccounts.length,
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -537,6 +564,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<ShieldCheck size={20} />} label="Civic Leadership" value={`${analytics.civicPrograms}`} detail={`${analytics.civicServiceHours} service hours, ${analytics.civicCertifications} ethics certifications`} />
             <ExecutiveTile icon={<Mic size={20} />} label="AI Voice Coach" value={`${analytics.voiceCoachExchanges}`} detail={`${analytics.voiceCoachMessages} messages, ${analytics.voiceCoachSeconds} recorded seconds`} />
             <ExecutiveTile icon={<BarChart3 size={20} />} label="AI Chart Analyst" value={`${analytics.chartAnalystReports}`} detail={`${analytics.chartAnalystAverage}% avg grade, ${analytics.chartAnalystReviewMode} Dr. reviews`} />
+            <ExecutiveTile icon={<ChartCandlestick size={20} />} label="Virtual Trading Floor" value={`${analytics.tradingFloorActiveTraders}`} detail={`${analytics.tradingFloorTradeIdeas} ideas, ${analytics.tradingFloorAIInteractions} AI interactions`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

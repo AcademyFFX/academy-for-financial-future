@@ -35,6 +35,7 @@ export const navItems = [
   { href: "/voice-coach", label: "AI Voice Coach" },
   { href: "/chart-analyst", label: "AI Chart Analyst" },
   { href: "/trading-simulator", label: "Trading Simulator" },
+  { href: "/trading-floor", label: "Trading Floor" },
   { href: "/social-network", label: "Social Learning" },
   { href: "/tv-studio", label: "TV Studio" },
   { href: "/mobile-app", label: "Mobile App" },

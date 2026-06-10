@@ -32,6 +32,7 @@ export const navItems = [
   { href: "/foundation", label: "Foundation" },
   { href: "/civic-leadership", label: "Civic Leadership" },
   { href: "/digital-civilization", label: "Digital Civilization" },
+  { href: "/human-flourishing", label: "Human Flourishing" },
   { href: "/marketplace", label: "Marketplace" },
   { href: "/billing", label: "Billing" },
   { href: "/messages", label: "Messages" },

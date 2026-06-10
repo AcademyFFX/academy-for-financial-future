@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Award, BarChart3, Bot, BookOpenText, BriefcaseBusiness, Building2, CalendarDays, ChartCandlestick, ClipboardCheck, CreditCard, Gamepad2, Globe2, GraduationCap, HandHeart, Landmark, Mail, MessageSquare, Mic, Network, NotebookPen, Radio, Scale, ShieldCheck, ShoppingBag, Sprout, Tv, User, Users } from "lucide-react";
+import { Award, BarChart3, Bot, BookOpenText, BriefcaseBusiness, Building2, CalendarDays, ChartCandlestick, ClipboardCheck, CreditCard, Gamepad2, Globe2, GraduationCap, HandHeart, HeartPulse, Landmark, Mail, MessageSquare, Mic, Network, NotebookPen, Radio, Scale, ShieldCheck, ShoppingBag, Sprout, Tv, User, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase";
@@ -23,6 +23,7 @@ const dashboardLinks = [
   { href: "/foundation", label: "Foundation", icon: HandHeart },
   { href: "/civic-leadership", label: "Civic Leadership", icon: Scale },
   { href: "/digital-civilization", label: "Digital Civilization", icon: Sprout },
+  { href: "/human-flourishing", label: "Human Flourishing", icon: HeartPulse },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/ai-coach", label: "AI Forex Coach", icon: Bot },
   { href: "/voice-coach", label: "AI Voice Coach", icon: Mic },

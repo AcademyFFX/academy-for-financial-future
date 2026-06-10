@@ -198,7 +198,15 @@ const tables = [
   "research_memos",
   "student_funds",
   "wealth_management_profiles",
-  "hedge_fund_strategies"
+  "hedge_fund_strategies",
+  "constitutional_courses",
+  "leadership_programs",
+  "public_policy_cases",
+  "nation_building_projects",
+  "community_service_records",
+  "leadership_certifications",
+  "civic_publications",
+  "governance_metrics"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -447,6 +455,14 @@ export default function ExecutiveCommandCenterPage() {
     const studentFunds = datasets.student_funds ?? [];
     const wealthProfiles = datasets.wealth_management_profiles ?? [];
     const hedgeFundStrategies = datasets.hedge_fund_strategies ?? [];
+    const constitutionalCourses = datasets.constitutional_courses ?? [];
+    const governanceLeadershipPrograms = datasets.leadership_programs ?? [];
+    const publicPolicyCases = datasets.public_policy_cases ?? [];
+    const nationBuildingProjects = datasets.nation_building_projects ?? [];
+    const communityServiceRecords = datasets.community_service_records ?? [];
+    const leadershipCertifications = datasets.leadership_certifications ?? [];
+    const governancePublicationsRows = datasets.civic_publications ?? [];
+    const governanceMetrics = datasets.governance_metrics ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -514,7 +530,9 @@ export default function ExecutiveCommandCenterPage() {
       ...economicEvents.map((row) => ({ type: "Economic Event", label: value(row, ["event_name"], "Economic calendar event"), date: value(row, ["event_time", "created_at"]) })),
       ...economicForecasts.map((row) => ({ type: "Economic Forecast", label: value(row, ["forecast_title"], "Forecast published"), date: value(row, ["forecast_date", "created_at"]) })),
       ...investmentCommittees.map((row) => ({ type: "Investment Committee", label: value(row, ["committee_title"], "Committee activity"), date: value(row, ["meeting_date", "created_at"]) })),
-      ...studentFunds.map((row) => ({ type: "Student Fund", label: value(row, ["fund_name"], "Student fund"), date: value(row, ["updated_at", "created_at"]) }))
+      ...studentFunds.map((row) => ({ type: "Student Fund", label: value(row, ["fund_name"], "Student fund"), date: value(row, ["updated_at", "created_at"]) })),
+      ...leadershipCertifications.map((row) => ({ type: "Governance Certification", label: value(row, ["certification_title"], "Leadership certification"), date: value(row, ["issued_at", "created_at"]) })),
+      ...publicPolicyCases.map((row) => ({ type: "Governance Simulation", label: value(row, ["case_title"], "Public policy case"), date: value(row, ["created_at"]) }))
     ]
       .filter((item) => item.date)
       .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
@@ -704,6 +722,15 @@ export default function ExecutiveCommandCenterPage() {
       studentFundTopReturn: studentFunds.length ? Math.max(...studentFunds.map((row) => numberValue(row, ["risk_adjusted_return"]))) : 0,
       wealthProfiles: wealthProfiles.length,
       hedgeFundStrategies: hedgeFundStrategies.length,
+      governanceCourses: constitutionalCourses.length,
+      governancePrograms: governanceLeadershipPrograms.length,
+      governancePolicyCases: publicPolicyCases.length,
+      governanceProjects: nationBuildingProjects.length,
+      governanceServiceHours: communityServiceRecords.reduce((total, row) => total + numberValue(row, ["service_hours"]), 0),
+      governanceCertifications: leadershipCertifications.length,
+      governancePublications: governancePublicationsRows.length,
+      governanceEngagementScore: governanceMetrics.length ? Math.round(governanceMetrics.reduce((total, row) => total + numberValue(row, ["civic_engagement_score"]), 0) / governanceMetrics.length) : 0,
+      governancePolicyParticipation: governanceMetrics.reduce((total, row) => total + numberValue(row, ["public_policy_participation"]), 0),
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -876,6 +903,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<BookOpenCheck size={20} />} label="Publishing House" value={`${analytics.publishingPublications}`} detail={`${analytics.publishingDownloads} downloads, ${analytics.publishingMediaViews} media views`} />
             <ExecutiveTile icon={<LineChart size={20} />} label="Economic Intelligence" value={`${analytics.economicReports}`} detail={`${analytics.economicForecastAccuracy}% forecast accuracy, ${analytics.economicRiskScore}/100 risk`} />
             <ExecutiveTile icon={<CircleDollarSign size={20} />} label="Investment Bank Institute" value={money(analytics.investmentPortfolioValue)} detail={`${analytics.studentFunds} student funds, ${analytics.investmentAverageVar}% avg VaR`} />
+            <ExecutiveTile icon={<ShieldCheck size={20} />} label="Governance School" value={`${analytics.governanceCertifications}`} detail={`${analytics.governanceServiceHours} service hours, ${analytics.governanceEngagementScore}/100 civic score`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

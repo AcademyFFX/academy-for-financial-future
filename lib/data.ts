@@ -27,6 +27,7 @@ export const navItems = [
   { href: "/campus-expansion", label: "Campus Expansion" },
   { href: "/endowment-fund", label: "Endowment Fund" },
   { href: "/foundation", label: "Foundation" },
+  { href: "/civic-leadership", label: "Civic Leadership" },
   { href: "/marketplace", label: "Marketplace" },
   { href: "/billing", label: "Billing" },
   { href: "/messages", label: "Messages" },

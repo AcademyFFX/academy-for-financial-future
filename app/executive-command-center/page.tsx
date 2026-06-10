@@ -83,7 +83,15 @@ const tables = [
   "foundation_programs",
   "foundation_humanitarian_campaigns",
   "foundation_grant_distributions",
-  "foundation_impact_reports"
+  "foundation_impact_reports",
+  "civic_programs",
+  "civic_service_hours",
+  "civic_student_journals",
+  "civic_policy_forums",
+  "civic_research_publications",
+  "civic_outreach_projects",
+  "civic_ethics_certifications",
+  "civic_leadership_exams"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -224,6 +232,14 @@ export default function ExecutiveCommandCenterPage() {
     const foundationCampaigns = datasets.foundation_humanitarian_campaigns ?? [];
     const foundationGrants = datasets.foundation_grant_distributions ?? [];
     const foundationReports = datasets.foundation_impact_reports ?? [];
+    const civicPrograms = datasets.civic_programs ?? [];
+    const civicServiceHours = datasets.civic_service_hours ?? [];
+    const civicJournals = datasets.civic_student_journals ?? [];
+    const civicForums = datasets.civic_policy_forums ?? [];
+    const civicPublications = datasets.civic_research_publications ?? [];
+    const civicOutreach = datasets.civic_outreach_projects ?? [];
+    const civicCertifications = datasets.civic_ethics_certifications ?? [];
+    const civicExams = datasets.civic_leadership_exams ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -271,7 +287,9 @@ export default function ExecutiveCommandCenterPage() {
       ...certificates.map((row) => ({ type: "Certificate", label: value(row, ["student_name", "certificate_number"], "Certificate issued"), date: value(row, ["issue_date", "created_at"]) })),
       ...assignments.map((row) => ({ type: "Assignment", label: value(row, ["title", "assignment_title"], "Assignment submitted"), date: value(row, ["submission_date", "created_at"]) })),
       ...exams.map((row) => ({ type: "Exam", label: `${value(row, ["exam_title"], "Exam")} - ${numberValue(row, ["score"])}%`, date: value(row, ["submitted_at", "created_at"]) })),
-      ...tvViewership.map((row) => ({ type: "TV View", label: `Broadcast ${value(row, ["broadcast_id"], "viewed")}`, date: value(row, ["watched_at", "created_at"]) }))
+      ...tvViewership.map((row) => ({ type: "TV View", label: `Broadcast ${value(row, ["broadcast_id"], "viewed")}`, date: value(row, ["watched_at", "created_at"]) })),
+      ...civicJournals.map((row) => ({ type: "Leadership Journal", label: value(row, ["journal_title"], "Civic journal submitted"), date: value(row, ["created_at"]) })),
+      ...civicExams.map((row) => ({ type: "Civic Exam", label: `${value(row, ["exam_title"], "Leadership exam")} - ${value(row, ["result"], "In Progress")}`, date: value(row, ["submitted_at"]) }))
     ]
       .filter((item) => item.date)
       .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
@@ -332,6 +350,15 @@ export default function ExecutiveCommandCenterPage() {
       foundationGrants: foundationGrants.reduce((total, row) => total + numberValue(row, ["distribution_amount"]), 0),
       foundationCampaigns: foundationCampaigns.length,
       foundationReports: foundationReports.length,
+      civicPrograms: civicPrograms.length,
+      civicServiceHours: civicServiceHours.reduce((total, row) => total + numberValue(row, ["hours"]), 0),
+      civicJournals: civicJournals.length,
+      civicForums: civicForums.length,
+      civicPublications: civicPublications.length,
+      civicOutreachProjects: civicOutreach.length,
+      civicImpactScore: civicOutreach.reduce((total, row) => total + numberValue(row, ["impact_score"]), 0),
+      civicCertifications: civicCertifications.length,
+      civicExams: civicExams.length,
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -489,6 +516,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<GraduationCap size={20} />} label="Campus Expansion" value={`${analytics.campuses}`} detail={`${analytics.campusApplications} applications, ${money(analytics.campusRevenue)} revenue`} />
             <ExecutiveTile icon={<CircleDollarSign size={20} />} label="Endowment Fund" value={money(analytics.endowmentValue)} detail={`${analytics.endowmentDonors} donors, ${money(analytics.scholarshipFunds)} scholarships`} />
             <ExecutiveTile icon={<Award size={20} />} label="Foundation Impact" value={`${analytics.foundationBeneficiaries}`} detail={`${analytics.foundationPrograms} programs, ${money(analytics.foundationGrants)} grants`} />
+            <ExecutiveTile icon={<ShieldCheck size={20} />} label="Civic Leadership" value={`${analytics.civicPrograms}`} detail={`${analytics.civicServiceHours} service hours, ${analytics.civicCertifications} ethics certifications`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

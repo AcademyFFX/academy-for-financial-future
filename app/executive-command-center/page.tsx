@@ -206,7 +206,15 @@ const tables = [
   "community_service_records",
   "leadership_certifications",
   "civic_publications",
-  "governance_metrics"
+  "governance_metrics",
+  "think_tank_reports",
+  "policy_briefs",
+  "research_fellows",
+  "research_grants",
+  "future_scenarios",
+  "foresight_studies",
+  "policy_impact_metrics",
+  "think_tank_publications"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -463,6 +471,14 @@ export default function ExecutiveCommandCenterPage() {
     const leadershipCertifications = datasets.leadership_certifications ?? [];
     const governancePublicationsRows = datasets.civic_publications ?? [];
     const governanceMetrics = datasets.governance_metrics ?? [];
+    const thinkTankReports = datasets.think_tank_reports ?? [];
+    const policyBriefs = datasets.policy_briefs ?? [];
+    const researchFellows = datasets.research_fellows ?? [];
+    const thinkTankResearchGrants = datasets.research_grants ?? [];
+    const futureScenarios = datasets.future_scenarios ?? [];
+    const foresightStudies = datasets.foresight_studies ?? [];
+    const policyImpactMetrics = datasets.policy_impact_metrics ?? [];
+    const thinkTankPublications = datasets.think_tank_publications ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -532,7 +548,9 @@ export default function ExecutiveCommandCenterPage() {
       ...investmentCommittees.map((row) => ({ type: "Investment Committee", label: value(row, ["committee_title"], "Committee activity"), date: value(row, ["meeting_date", "created_at"]) })),
       ...studentFunds.map((row) => ({ type: "Student Fund", label: value(row, ["fund_name"], "Student fund"), date: value(row, ["updated_at", "created_at"]) })),
       ...leadershipCertifications.map((row) => ({ type: "Governance Certification", label: value(row, ["certification_title"], "Leadership certification"), date: value(row, ["issued_at", "created_at"]) })),
-      ...publicPolicyCases.map((row) => ({ type: "Governance Simulation", label: value(row, ["case_title"], "Public policy case"), date: value(row, ["created_at"]) }))
+      ...publicPolicyCases.map((row) => ({ type: "Governance Simulation", label: value(row, ["case_title"], "Public policy case"), date: value(row, ["created_at"]) })),
+      ...thinkTankReports.map((row) => ({ type: "Think Tank Report", label: value(row, ["report_title"], "Strategic report"), date: value(row, ["published_at", "created_at"]) })),
+      ...policyBriefs.map((row) => ({ type: "Policy Brief", label: value(row, ["brief_title"], "Policy brief"), date: value(row, ["published_at", "created_at"]) }))
     ]
       .filter((item) => item.date)
       .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
@@ -731,6 +749,15 @@ export default function ExecutiveCommandCenterPage() {
       governancePublications: governancePublicationsRows.length,
       governanceEngagementScore: governanceMetrics.length ? Math.round(governanceMetrics.reduce((total, row) => total + numberValue(row, ["civic_engagement_score"]), 0) / governanceMetrics.length) : 0,
       governancePolicyParticipation: governanceMetrics.reduce((total, row) => total + numberValue(row, ["public_policy_participation"]), 0),
+      thinkTankOutput: thinkTankReports.length + policyBriefs.length + foresightStudies.length + thinkTankPublications.length,
+      thinkTankDownloads: [...thinkTankReports, ...policyBriefs, ...foresightStudies, ...thinkTankPublications].reduce((total, row) => total + numberValue(row, ["download_count"]), 0),
+      thinkTankCitations: [...thinkTankReports, ...policyBriefs, ...foresightStudies, ...thinkTankPublications].reduce((total, row) => total + numberValue(row, ["citation_count"]), 0),
+      thinkTankPolicyImpact: policyImpactMetrics.length ? Math.round(policyImpactMetrics.reduce((total, row) => total + numberValue(row, ["policy_impact_score"]), 0) / policyImpactMetrics.length) : 0,
+      thinkTankFellows: researchFellows.length,
+      thinkTankFellowPerformance: researchFellows.length ? Math.round(researchFellows.reduce((total, row) => total + numberValue(row, ["performance_score"]), 0) / researchFellows.length) : 0,
+      thinkTankGrants: thinkTankResearchGrants.length,
+      thinkTankScenarios: futureScenarios.length,
+      thinkTankGlobalReach: policyImpactMetrics.reduce((total, row) => total + numberValue(row, ["countries_reached"]), 0),
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -904,6 +931,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<LineChart size={20} />} label="Economic Intelligence" value={`${analytics.economicReports}`} detail={`${analytics.economicForecastAccuracy}% forecast accuracy, ${analytics.economicRiskScore}/100 risk`} />
             <ExecutiveTile icon={<CircleDollarSign size={20} />} label="Investment Bank Institute" value={money(analytics.investmentPortfolioValue)} detail={`${analytics.studentFunds} student funds, ${analytics.investmentAverageVar}% avg VaR`} />
             <ExecutiveTile icon={<ShieldCheck size={20} />} label="Governance School" value={`${analytics.governanceCertifications}`} detail={`${analytics.governanceServiceHours} service hours, ${analytics.governanceEngagementScore}/100 civic score`} />
+            <ExecutiveTile icon={<Brain size={20} />} label="Global Think Tank" value={`${analytics.thinkTankOutput}`} detail={`${analytics.thinkTankDownloads} downloads, ${analytics.thinkTankPolicyImpact}/100 policy impact`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

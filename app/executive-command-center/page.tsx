@@ -75,7 +75,11 @@ const tables = [
   "campus_directory",
   "campus_franchise_applications",
   "campus_revenue_reports",
-  "campus_territories"
+  "campus_territories",
+  "endowment_donors",
+  "endowment_scholarship_funds",
+  "endowment_investment_portfolio",
+  "endowment_research_grant_allocations"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -208,6 +212,10 @@ export default function ExecutiveCommandCenterPage() {
     const campusApplications = datasets.campus_franchise_applications ?? [];
     const campusRevenue = datasets.campus_revenue_reports ?? [];
     const campusTerritories = datasets.campus_territories ?? [];
+    const endowmentDonors = datasets.endowment_donors ?? [];
+    const scholarshipFunds = datasets.endowment_scholarship_funds ?? [];
+    const endowmentPortfolio = datasets.endowment_investment_portfolio ?? [];
+    const researchGrantAllocations = datasets.endowment_research_grant_allocations ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -307,6 +315,10 @@ export default function ExecutiveCommandCenterPage() {
       campusApplications: campusApplications.length,
       campusRevenue: campusRevenue.reduce((total, row) => total + numberValue(row, ["gross_revenue"]), 0),
       campusTerritories: campusTerritories.length,
+      endowmentDonors: endowmentDonors.length,
+      endowmentValue: endowmentPortfolio.reduce((total, row) => total + numberValue(row, ["current_value"]), 0),
+      scholarshipFunds: scholarshipFunds.reduce((total, row) => total + numberValue(row, ["fund_balance"]), 0),
+      researchGrantAllocations: researchGrantAllocations.length,
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -462,6 +474,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<BookOpenCheck size={20} />} label="Research Institute" value={`${analytics.researchPublications}`} detail={`${analytics.researchSubmissions} submissions, ${analytics.researchDownloads} PDFs`} />
             <ExecutiveTile icon={<CalendarClock size={20} />} label="Events Division" value={`${analytics.events}`} detail={`${analytics.eventRegistrations} registrations, ${analytics.eventCertificates} certificates`} />
             <ExecutiveTile icon={<GraduationCap size={20} />} label="Campus Expansion" value={`${analytics.campuses}`} detail={`${analytics.campusApplications} applications, ${money(analytics.campusRevenue)} revenue`} />
+            <ExecutiveTile icon={<CircleDollarSign size={20} />} label="Endowment Fund" value={money(analytics.endowmentValue)} detail={`${analytics.endowmentDonors} donors, ${money(analytics.scholarshipFunds)} scholarships`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

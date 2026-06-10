@@ -170,7 +170,18 @@ const tables = [
   "alumni_events",
   "alumni_donations",
   "alumni_awards",
-  "alumni_success_stories"
+  "alumni_success_stories",
+  "aff_books",
+  "aff_authors",
+  "aff_publications",
+  "aff_research_papers",
+  "aff_journals",
+  "aff_articles",
+  "aff_media_library",
+  "aff_podcasts",
+  "aff_editorial_reviews",
+  "aff_copyright_registry",
+  "aff_substack_archive"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -391,6 +402,17 @@ export default function ExecutiveCommandCenterPage() {
     const alumniDonations = datasets.alumni_donations ?? [];
     const alumniAwards = datasets.alumni_awards ?? [];
     const alumniStories = datasets.alumni_success_stories ?? [];
+    const affBooks = datasets.aff_books ?? [];
+    const affAuthors = datasets.aff_authors ?? [];
+    const affPublications = datasets.aff_publications ?? [];
+    const affResearchPapers = datasets.aff_research_papers ?? [];
+    const affJournals = datasets.aff_journals ?? [];
+    const affArticles = datasets.aff_articles ?? [];
+    const affMediaLibrary = datasets.aff_media_library ?? [];
+    const affPodcasts = datasets.aff_podcasts ?? [];
+    const affEditorialReviews = datasets.aff_editorial_reviews ?? [];
+    const affCopyrightRegistry = datasets.aff_copyright_registry ?? [];
+    const affSubstackArchive = datasets.aff_substack_archive ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -453,7 +475,8 @@ export default function ExecutiveCommandCenterPage() {
       ...studentJournal.map((row) => ({ type: "Student Journal", label: value(row, ["journal_title"], "Reflection saved"), date: value(row, ["created_at"]) })),
       ...mobileActivity.map((row) => ({ type: "Mobile Super App", label: value(row, ["activity_label", "activity_type"], "Mobile activity"), date: value(row, ["created_at"]) })),
       ...alumni.map((row) => ({ type: "Alumni Network", label: value(row, ["full_name"], "Alumni profile"), date: value(row, ["created_at"]) })),
-      ...alumniDonations.map((row) => ({ type: "Alumni Donation", label: value(row, ["donor_name", "campaign_name"], "Alumni contribution"), date: value(row, ["created_at"]) }))
+      ...alumniDonations.map((row) => ({ type: "Alumni Donation", label: value(row, ["donor_name", "campaign_name"], "Alumni contribution"), date: value(row, ["created_at"]) })),
+      ...affEditorialReviews.map((row) => ({ type: "Publishing House", label: value(row, ["submission_title"], "Editorial submission"), date: value(row, ["created_at"]) }))
     ]
       .filter((item) => item.date)
       .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
@@ -613,6 +636,15 @@ export default function ExecutiveCommandCenterPage() {
       alumniDonations: alumniDonations.reduce((total, row) => total + numberValue(row, ["donation_amount"]), 0),
       alumniAwards: alumniAwards.length,
       alumniStories: alumniStories.length,
+      publishingPublications: affBooks.length + affPublications.length + affResearchPapers.length + affJournals.length + affArticles.length,
+      publishingBooks: affBooks.length,
+      publishingAuthors: affAuthors.length,
+      publishingDownloads: [...affBooks, ...affPublications, ...affResearchPapers, ...affJournals, ...affArticles].reduce((total, row) => total + numberValue(row, ["download_count"]), 0),
+      publishingCitations: affResearchPapers.reduce((total, row) => total + numberValue(row, ["citation_count"]), 0),
+      publishingMediaViews: [...affMediaLibrary, ...affPodcasts].reduce((total, row) => total + numberValue(row, ["view_count", "listen_count"]), 0),
+      publishingSubscribers: affSubstackArchive.reduce((total, row) => total + numberValue(row, ["subscriber_count"]), 0),
+      publishingReviews: affEditorialReviews.length,
+      publishingCopyright: affCopyrightRegistry.length,
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -782,6 +814,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<Trophy size={20} />} label="Student Experience 2.0" value={`${analytics.studentExperienceCompletedMissions}/${analytics.studentExperienceMissions}`} detail={`${analytics.studentExperienceBadges} badges, ${analytics.studentExperienceAvgStreak} avg streak`} />
             <ExecutiveTile icon={<Smartphone size={20} />} label="Mobile Super App" value={`${analytics.mobileActiveUsers}`} detail={`${analytics.mobileDevices} devices, ${analytics.mobileDownloads} offline downloads`} />
             <ExecutiveTile icon={<Award size={20} />} label="Global Alumni Network" value={`${analytics.alumni}`} detail={`${analytics.alumniEmploymentRate}% employment, ${money(analytics.alumniDonations)} donations`} />
+            <ExecutiveTile icon={<BookOpenCheck size={20} />} label="Publishing House" value={`${analytics.publishingPublications}`} detail={`${analytics.publishingDownloads} downloads, ${analytics.publishingMediaViews} media views`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

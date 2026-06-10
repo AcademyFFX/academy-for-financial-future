@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Award, BarChart3, Bot, BookOpenText, BriefcaseBusiness, Building2, CalendarDays, ChartCandlestick, ClipboardCheck, CreditCard, Gamepad2, Globe2, GraduationCap, HandHeart, Landmark, Mail, MessageSquare, Mic, NotebookPen, Radio, Scale, ShieldCheck, ShoppingBag, Tv, User, Users } from "lucide-react";
+import { Award, BarChart3, Bot, BookOpenText, BriefcaseBusiness, Building2, CalendarDays, ChartCandlestick, ClipboardCheck, CreditCard, Gamepad2, Globe2, GraduationCap, HandHeart, Landmark, Mail, MessageSquare, Mic, Network, NotebookPen, Radio, Scale, ShieldCheck, ShoppingBag, Tv, User, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase";
@@ -10,6 +10,7 @@ import { DashboardCourseSummary } from "@/components/dashboard-course-summary";
 import { ZoomClassesPanel } from "@/components/zoom-classes-panel";
 
 const dashboardLinks = [
+  { href: "/aff-os", label: "AFF Operating System", icon: Network },
   { href: "/university", label: "AFF Global University", icon: GraduationCap },
   { href: "/billing", label: "Membership Billing", icon: CreditCard },
   { href: "/marketplace", label: "AFF Marketplace", icon: ShoppingBag },

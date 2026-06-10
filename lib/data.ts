@@ -19,6 +19,7 @@ export const navItems = [
   { href: "/about", label: "About Academy" },
   { href: "/courses", label: "Forex Courses" },
   { href: "/dashboard", label: "Student Dashboard" },
+  { href: "/aff-os", label: "AFF OS" },
   { href: "/university", label: "University" },
   { href: "/executive-command-center", label: "Executive Analytics" },
   { href: "/accreditation", label: "Accreditation" },

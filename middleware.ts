@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import type { ResponseCookie } from "next/dist/compiled/@edge-runtime/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 
-const protectedRoutes = ["/student-dashboard", "/dashboard", "/courses", "/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/trading-simulator", "/trading-floor", "/social-network", "/tv-studio", "/executive-command-center", "/accreditation", "/career-center", "/research-institute", "/events", "/campus-expansion", "/endowment-fund", "/foundation", "/civic-leadership", "/marketplace", "/billing", "/messages", "/ai-coach", "/voice-coach", "/chart-analyst", "/admin"];
+const protectedRoutes = ["/student-dashboard", "/dashboard", "/university", "/courses", "/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/trading-simulator", "/trading-floor", "/social-network", "/tv-studio", "/executive-command-center", "/accreditation", "/career-center", "/research-institute", "/events", "/campus-expansion", "/endowment-fund", "/foundation", "/civic-leadership", "/marketplace", "/billing", "/messages", "/ai-coach", "/voice-coach", "/chart-analyst", "/admin"];
 const enrollmentRestrictedRoutes = ["/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/trading-simulator", "/social-network", "/tv-studio"];
 
 export async function middleware(request: NextRequest) {
@@ -88,5 +88,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/student-dashboard/:path*", "/dashboard/:path*", "/courses/:path*", "/journal/:path*", "/assignments/:path*", "/exams/:path*", "/certificates/:path*", "/live-trading-room/:path*", "/trading-simulator/:path*", "/trading-floor/:path*", "/social-network/:path*", "/tv-studio/:path*", "/executive-command-center/:path*", "/accreditation/:path*", "/career-center/:path*", "/research-institute/:path*", "/events/:path*", "/campus-expansion/:path*", "/endowment-fund/:path*", "/foundation/:path*", "/civic-leadership/:path*", "/marketplace/:path*", "/billing/:path*", "/messages/:path*", "/ai-coach/:path*", "/voice-coach/:path*", "/chart-analyst/:path*", "/admin/:path*"]
+  matcher: ["/student-dashboard/:path*", "/dashboard/:path*", "/university/:path*", "/courses/:path*", "/journal/:path*", "/assignments/:path*", "/exams/:path*", "/certificates/:path*", "/live-trading-room/:path*", "/trading-simulator/:path*", "/trading-floor/:path*", "/social-network/:path*", "/tv-studio/:path*", "/executive-command-center/:path*", "/accreditation/:path*", "/career-center/:path*", "/research-institute/:path*", "/events/:path*", "/campus-expansion/:path*", "/endowment-fund/:path*", "/foundation/:path*", "/civic-leadership/:path*", "/marketplace/:path*", "/billing/:path*", "/messages/:path*", "/ai-coach/:path*", "/voice-coach/:path*", "/chart-analyst/:path*", "/admin/:path*"]
 };

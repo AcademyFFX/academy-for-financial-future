@@ -104,7 +104,13 @@ const tables = [
   "market_commentary",
   "student_watchlists",
   "daily_bias_reports",
-  "leaderboard_scores"
+  "leaderboard_scores",
+  "university_colleges",
+  "university_programs",
+  "university_transcripts",
+  "university_degrees",
+  "student_degree_progress",
+  "university_honors"
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -264,6 +270,12 @@ export default function ExecutiveCommandCenterPage() {
     const studentWatchlists = datasets.student_watchlists ?? [];
     const dailyBiasReports = datasets.daily_bias_reports ?? [];
     const leaderboardScores = datasets.leaderboard_scores ?? [];
+    const universityColleges = datasets.university_colleges ?? [];
+    const universityPrograms = datasets.university_programs ?? [];
+    const universityTranscripts = datasets.university_transcripts ?? [];
+    const universityDegrees = datasets.university_degrees ?? [];
+    const universityProgress = datasets.student_degree_progress ?? [];
+    const universityHonors = datasets.university_honors ?? [];
 
     const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
     const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
@@ -316,7 +328,8 @@ export default function ExecutiveCommandCenterPage() {
       ...civicExams.map((row) => ({ type: "Civic Exam", label: `${value(row, ["exam_title"], "Leadership exam")} - ${value(row, ["result"], "In Progress")}`, date: value(row, ["submitted_at"]) })),
       ...voiceCoachUsage.map((row) => ({ type: "Voice Coach", label: value(row, ["coach_mode"], "Voice coaching session"), date: value(row, ["created_at"]) })),
       ...chartAnalystReports.map((row) => ({ type: "Chart Analyst", label: `${value(row, ["platform"], "Chart")} - ${numberValue(row, ["overall_grade"])}%`, date: value(row, ["created_at"]) })),
-      ...tradingFloorTradeIdeas.map((row) => ({ type: "Trading Floor", label: `${value(row, ["pair"], "Idea")} ${value(row, ["direction"], "")}`, date: value(row, ["created_at"]) }))
+      ...tradingFloorTradeIdeas.map((row) => ({ type: "Trading Floor", label: `${value(row, ["pair"], "Idea")} ${value(row, ["direction"], "")}`, date: value(row, ["created_at"]) })),
+      ...universityTranscripts.map((row) => ({ type: "University Transcript", label: value(row, ["course_title"], "Academic record"), date: value(row, ["created_at", "completed_at"]) }))
     ]
       .filter((item) => item.date)
       .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
@@ -404,6 +417,13 @@ export default function ExecutiveCommandCenterPage() {
       tradingFloorAIInteractions: voiceCoachUsage.length + chartAnalystUsage.length,
       tradingFloorSessionAttendance: tradingFloorMessages.length + studentWatchlists.length,
       tradingFloorSimulatorActivity: simulatorAttempts.length + simulatorAccounts.length,
+      universityColleges: universityColleges.length,
+      universityPrograms: universityPrograms.length,
+      universityDegrees: universityDegrees.length,
+      universityTranscripts: universityTranscripts.length,
+      universityCredits: universityTranscripts.reduce((total, row) => total + numberValue(row, ["credit_hours"]), 0),
+      universityAvgProgress: universityProgress.length ? Math.round(universityProgress.reduce((total, row) => total + numberValue(row, ["completion_percentage"]), 0) / universityProgress.length) : 0,
+      universityHonors: universityHonors.length,
       zoomAttendance: zoomAttendance.length,
       courseCompletion,
       revenueByPlan,
@@ -565,6 +585,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<Mic size={20} />} label="AI Voice Coach" value={`${analytics.voiceCoachExchanges}`} detail={`${analytics.voiceCoachMessages} messages, ${analytics.voiceCoachSeconds} recorded seconds`} />
             <ExecutiveTile icon={<BarChart3 size={20} />} label="AI Chart Analyst" value={`${analytics.chartAnalystReports}`} detail={`${analytics.chartAnalystAverage}% avg grade, ${analytics.chartAnalystReviewMode} Dr. reviews`} />
             <ExecutiveTile icon={<ChartCandlestick size={20} />} label="Virtual Trading Floor" value={`${analytics.tradingFloorActiveTraders}`} detail={`${analytics.tradingFloorTradeIdeas} ideas, ${analytics.tradingFloorAIInteractions} AI interactions`} />
+            <ExecutiveTile icon={<GraduationCap size={20} />} label="Global University" value={`${analytics.universityColleges}`} detail={`${analytics.universityDegrees} degrees, ${analytics.universityTranscripts} transcripts`} />
             <ExecutiveTile icon={<Star size={20} />} label="Academy Growth" value={`${analytics.newStudents30}`} detail="new enrollments in 30 days" />
           </section>
 

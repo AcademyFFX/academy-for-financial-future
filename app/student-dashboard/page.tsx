@@ -15,6 +15,7 @@ import {
   ChartCandlestick,
   ClipboardCheck,
   CreditCard,
+  FileUp,
   Flame,
   Gamepad2,
   Globe2,
@@ -39,7 +40,8 @@ import {
   Trophy,
   Tv,
   User,
-  Users
+  Users,
+  Video
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
@@ -50,6 +52,21 @@ import { DashboardCourseSummary } from "@/components/dashboard-course-summary";
 import { ZoomClassesPanel } from "@/components/zoom-classes-panel";
 
 type DbRow = Record<string, unknown>;
+type StudentProfile = {
+  id: string;
+  fullName: string;
+  email: string;
+  enrollmentDate: string;
+  certificationLevel: string;
+  status: string;
+};
+
+type MembershipProfile = {
+  membershipPlan: string;
+  membershipStatus: string;
+  accountStatus: string;
+};
+
 type DatasetKey =
   | "missions"
   | "streaks"
@@ -60,11 +77,14 @@ type DatasetKey =
   | "goals"
   | "messages"
   | "certificates"
+  | "certifications"
   | "exams"
   | "degreeProgress"
   | "civicService"
   | "researchSubmissions"
   | "tradeIdeas"
+  | "tvBroadcasts"
+  | "liveTradingRooms"
   | "chartReports"
   | "voiceUsage"
   | "eventRegistrations"
@@ -106,6 +126,8 @@ const dashboardLinks = [
   { href: "/live-trading-room", label: "Live Trading Room", icon: Radio },
   { href: "/journal", label: "Trading Journal", icon: NotebookPen },
   { href: "/assignments", label: "Assignments", icon: ClipboardCheck },
+  { href: "/homework-center", label: "Homework Center", icon: FileUp },
+  { href: "/live-classroom", label: "AFF Live Classroom", icon: Video },
   { href: "/exams", label: "Certification Exams", icon: ShieldCheck },
   { href: "/certificates", label: "Certificates", icon: Award }
 ];
@@ -120,11 +142,14 @@ const emptyDatasets: Record<DatasetKey, DbRow[]> = {
   goals: [],
   messages: [],
   certificates: [],
+  certifications: [],
   exams: [],
   degreeProgress: [],
   civicService: [],
   researchSubmissions: [],
   tradeIdeas: [],
+  tvBroadcasts: [],
+  liveTradingRooms: [],
   chartReports: [],
   voiceUsage: [],
   eventRegistrations: [],
@@ -210,9 +235,34 @@ async function safeSelect(supabase: ReturnType<typeof createClient>, table: stri
   }
 }
 
+async function safeMaybeSingle(supabase: ReturnType<typeof createClient>, table: string, query: (tableName: string) => PromiseLike<{ data: unknown; error: { message: string } | null }>) {
+  try {
+    const { data, error } = await query(table);
+    if (error) return null;
+    return (data ?? null) as DbRow | null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveAuthFullName(user: SupabaseUser | null) {
+  if (!user) return "";
+  if (typeof user.user_metadata?.full_name === "string" && user.user_metadata.full_name.trim().length > 0) {
+    return user.user_metadata.full_name.trim();
+  }
+  if (typeof user.user_metadata?.name === "string" && user.user_metadata.name.trim().length > 0) {
+    return user.user_metadata.name.trim();
+  }
+  const firstName = typeof user.user_metadata?.first_name === "string" ? user.user_metadata.first_name.trim() : "";
+  const lastName = typeof user.user_metadata?.last_name === "string" ? user.user_metadata.last_name.trim() : "";
+  return `${firstName} ${lastName}`.trim();
+}
+
 export default function StudentDashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null);
+  const [membershipProfile, setMembershipProfile] = useState<MembershipProfile | null>(null);
   const [datasets, setDatasets] = useState<Record<DatasetKey, DbRow[]>>(emptyDatasets);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -222,12 +272,7 @@ export default function StudentDashboardPage() {
   const [goalTitle, setGoalTitle] = useState("");
   const [goalCategory, setGoalCategory] = useState("Learning Path");
 
-  const studentName =
-    typeof user?.user_metadata?.name === "string" && user.user_metadata.name.trim().length > 0
-      ? user.user_metadata.name
-      : typeof user?.user_metadata?.full_name === "string" && user.user_metadata.full_name.trim().length > 0
-        ? user.user_metadata.full_name
-        : user?.email?.split("@")[0] ?? "Student";
+  const studentName = studentProfile?.fullName || resolveAuthFullName(user) || user?.email || "Not recorded";
 
   const loadExperience = useCallback(async () => {
     setLoading(true);
@@ -243,12 +288,53 @@ export default function StudentDashboardPage() {
       }
 
       setUser(currentUser);
-      const name =
-        typeof currentUser.user_metadata?.name === "string" && currentUser.user_metadata.name.trim().length > 0
-          ? currentUser.user_metadata.name
-          : typeof currentUser.user_metadata?.full_name === "string" && currentUser.user_metadata.full_name.trim().length > 0
-            ? currentUser.user_metadata.full_name
-            : currentUser.email?.split("@")[0] ?? "Student";
+      const authName = resolveAuthFullName(currentUser);
+      const authEmail = currentUser.email ?? "";
+
+      const [profileRow, membershipRow] = await Promise.all([
+        authEmail
+          ? safeMaybeSingle(supabase, "students", (table) =>
+              supabase
+                .from(table)
+                .select("id, full_name, email, enrollment_date, certification_level, status, created_at")
+                .eq("email", authEmail)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle()
+            )
+          : Promise.resolve(null),
+        safeMaybeSingle(supabase, "student_memberships", (table) =>
+          supabase
+            .from(table)
+            .select("membership_plan, membership_status, account_status")
+            .eq("student_id", currentUser.id)
+            .maybeSingle()
+        )
+      ]);
+
+      const resolvedProfile: StudentProfile = {
+        id: value(profileRow ?? {}, ["id"], currentUser.id),
+        fullName: value(profileRow ?? {}, ["full_name", "name"], authName || authEmail || "Not recorded"),
+        email: value(profileRow ?? {}, ["email"], authEmail || "Not recorded"),
+        enrollmentDate: value(profileRow ?? {}, ["enrollment_date", "created_at"], ""),
+        certificationLevel: value(profileRow ?? {}, ["certification_level"], "Not recorded"),
+        status: value(profileRow ?? {}, ["status"], "Not recorded")
+      };
+
+      setStudentProfile(resolvedProfile);
+      setMembershipProfile(
+        membershipRow
+          ? {
+              membershipPlan: value(membershipRow, ["membership_plan"], "Not selected"),
+              membershipStatus: value(membershipRow, ["membership_status"], "Not enrolled"),
+              accountStatus: value(membershipRow, ["account_status"], "Not recorded")
+            }
+          : {
+              membershipPlan: "Not selected",
+              membershipStatus: "Not enrolled",
+              accountStatus: "Not recorded"
+            }
+      );
 
       const [
         missions,
@@ -260,11 +346,14 @@ export default function StudentDashboardPage() {
         goals,
         messages,
         certificates,
+        certifications,
         exams,
         degreeProgress,
         civicService,
         researchSubmissions,
         tradeIdeas,
+        tvBroadcasts,
+        liveTradingRooms,
         chartReports,
         voiceUsage,
         eventRegistrations,
@@ -282,11 +371,14 @@ export default function StudentDashboardPage() {
         safeSelect(supabase, "student_goals", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("created_at", { ascending: false }).limit(5)),
         safeSelect(supabase, "student_messages", (table) => supabase.from(table).select("*").eq("recipient_id", currentUser.id).is("deleted_at", null).limit(100)),
         safeSelect(supabase, "certificates", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("issue_date", { ascending: false })),
+        safeSelect(supabase, "certifications", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("issued_at", { ascending: false })),
         safeSelect(supabase, "exams", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("submitted_at", { ascending: false })),
         safeSelect(supabase, "student_degree_progress", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("updated_at", { ascending: false })),
         safeSelect(supabase, "civic_service_hours", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("service_date", { ascending: false })),
         safeSelect(supabase, "research_submissions", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("submitted_at", { ascending: false })),
         safeSelect(supabase, "trade_ideas", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("created_at", { ascending: false })),
+        safeSelect(supabase, "tv_broadcasts", (table) => supabase.from(table).select("*").in("status", ["Live", "Scheduled", "Replay", "Published"]).order("scheduled_at", { ascending: true }).limit(4)),
+        safeSelect(supabase, "live_trading_rooms", (table) => supabase.from(table).select("*").in("room_status", ["Live", "Open", "Scheduled"]).order("session_date", { ascending: true }).limit(4)),
         safeSelect(supabase, "chart_analyst_reports", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("created_at", { ascending: false })),
         safeSelect(supabase, "voice_coach_usage_events", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("created_at", { ascending: false })),
         safeSelect(supabase, "event_registrations", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("created_at", { ascending: false })),
@@ -351,11 +443,14 @@ export default function StudentDashboardPage() {
         goals,
         messages,
         certificates,
+        certifications,
         exams,
         degreeProgress,
         civicService,
         researchSubmissions,
         tradeIdeas,
+        tvBroadcasts,
+        liveTradingRooms,
         chartReports,
         voiceUsage,
         eventRegistrations,
@@ -364,7 +459,7 @@ export default function StudentDashboardPage() {
         careerApplications,
         careerOpportunities
       });
-      setMessage(`Welcome back, ${name}. Your AFF operating hub is synchronized.`);
+      setMessage(`Welcome back, ${resolvedProfile.fullName}. Your AFF operating hub is synchronized.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to load Student Experience 2.0.");
     } finally {
@@ -381,7 +476,8 @@ export default function StudentDashboardPage() {
     const currentStreak = datasets.streaks.length ? numberValue(datasets.streaks[0], ["current_streak"]) : 0;
     const longestStreak = datasets.streaks.length ? numberValue(datasets.streaks[0], ["longest_streak"]) : 0;
     const passingExams = datasets.exams.filter((row) => value(row, ["result", "status"]).toLowerCase() === "pass" || numberValue(row, ["score"]) >= 80).length;
-    const certificationProgress = datasets.certificates.length > 0 ? 100 : percent(passingExams, 1);
+    const issuedCredentials = datasets.certificates.length + datasets.certifications.length;
+    const certificationProgress = issuedCredentials > 0 ? 100 : percent(passingExams, 1);
     const degreeProgress = datasets.degreeProgress.length
       ? Math.round(datasets.degreeProgress.reduce((total, row) => total + numberValue(row, ["completion_percentage"]), 0) / datasets.degreeProgress.length)
       : 0;
@@ -407,6 +503,18 @@ export default function StudentDashboardPage() {
       careerApplications
     };
   }, [datasets]);
+
+  const certificationStatus = useMemo(() => {
+    if (datasets.certificates.length > 0 || datasets.certifications.length > 0) return "Certified";
+    if (datasets.exams.some((row) => value(row, ["result", "status"]).toLowerCase() === "pass" || numberValue(row, ["score"]) >= 80)) {
+      return "Exam Passed";
+    }
+    return studentProfile?.status && studentProfile.status !== "Not recorded" ? studentProfile.status : "In Progress";
+  }, [datasets.certificates, datasets.certifications, datasets.exams, studentProfile?.status]);
+
+  const membershipLevel = membershipProfile?.membershipPlan && membershipProfile.membershipPlan !== "Not selected"
+    ? membershipProfile.membershipPlan
+    : membershipProfile?.membershipStatus ?? "Not enrolled";
 
   async function completeMission(mission: DbRow) {
     if (!user) return;
@@ -484,14 +592,12 @@ export default function StudentDashboardPage() {
               <p className="mt-6 text-ink/72">Loading student account...</p>
             ) : (
               <div className="mt-6 grid gap-4">
-                <p className="flex items-center gap-3 text-white">
-                  <User className="text-gold-300" size={20} />
-                  <span>{studentName}</span>
-                </p>
-                <p className="flex items-center gap-3 text-ink/76">
-                  <Mail className="text-gold-300" size={20} />
-                  <span>{user?.email}</span>
-                </p>
+                <ProfileLine icon={<User size={18} />} label="Full Name" value={studentProfile?.fullName ?? studentName} />
+                <ProfileLine icon={<BadgeCheck size={18} />} label="Student ID" value={studentProfile?.id ?? user?.id ?? "Not recorded"} />
+                <ProfileLine icon={<Mail size={18} />} label="Email" value={studentProfile?.email ?? user?.email ?? "Not recorded"} />
+                <ProfileLine icon={<CalendarDays size={18} />} label="Enrollment Date" value={shortDate(studentProfile?.enrollmentDate ?? "")} />
+                <ProfileLine icon={<CreditCard size={18} />} label="Membership Level" value={membershipLevel} />
+                <ProfileLine icon={<ShieldCheck size={18} />} label="Certification Status" value={certificationStatus} />
                 <Link href="/messages" className="flex items-center justify-between border border-gold-500/25 px-4 py-3 text-sm font-semibold text-gold-300">
                   <span>Unread Messages</span>
                   <span>{unreadCount}</span>
@@ -560,7 +666,7 @@ export default function StudentDashboardPage() {
             </section>
 
             <section className="grid gap-6 xl:grid-cols-3">
-              <ProgressPanel title="Certification Tracker" icon={<ShieldCheck size={20} />} value={metrics.certificationProgress} detail={`${datasets.exams.length} exam attempts, ${datasets.certificates.length} certificates`} href="/certificates" />
+              <ProgressPanel title="Certification Tracker" icon={<ShieldCheck size={20} />} value={metrics.certificationProgress} detail={`${datasets.exams.length} exam attempts, ${datasets.certificates.length + datasets.certifications.length} credentials`} href="/certificates" />
               <ProgressPanel title="Degree Progress" icon={<GraduationCap size={20} />} value={metrics.degreeProgress} detail={`${datasets.degreeProgress.length} university progress records`} href="/university" />
               <ProgressPanel title="Scholarship Eligibility" icon={<Sparkles size={20} />} value={metrics.scholarshipScore} detail="Calculated from certification, degree, service, and research activity" href="/endowment-fund" />
               <ProgressPanel title="Research Contribution" icon={<BookOpenText size={20} />} value={Math.min(100, metrics.researchCount * 25)} detail={`${metrics.researchCount} research submissions`} href="/research-institute" />
@@ -652,6 +758,40 @@ export default function StudentDashboardPage() {
               <ZoomClassesPanel user={user} />
             </section>
 
+            <section className="grid gap-6 xl:grid-cols-2">
+              <Panel title="AFF TV Studio Broadcasts" icon={<Tv size={22} />}>
+                <div className="grid gap-3">
+                  {datasets.tvBroadcasts.length === 0 ? (
+                    <p className="text-sm text-ink/68">No live or scheduled AFF TV broadcasts found.</p>
+                  ) : (
+                    datasets.tvBroadcasts.map((broadcast) => (
+                      <Link key={value(broadcast, ["id", "title"])} href="/tv-studio" className="border border-gold-500/20 bg-navy-950 p-4 transition hover:border-gold-400/60">
+                        <p className="text-xs uppercase tracking-[.18em] text-gold-300">{value(broadcast, ["status"], "Scheduled")}</p>
+                        <h3 className="mt-2 font-semibold text-white">{value(broadcast, ["title"], "AFF Broadcast")}</h3>
+                        <p className="mt-2 text-sm text-ink/64">{shortDate(value(broadcast, ["scheduled_at", "created_at"]))}</p>
+                      </Link>
+                    ))
+                  )}
+                </div>
+              </Panel>
+
+              <Panel title="Live Trading Rooms" icon={<Radio size={22} />}>
+                <div className="grid gap-3">
+                  {datasets.liveTradingRooms.length === 0 ? (
+                    <p className="text-sm text-ink/68">No active trading room sessions found.</p>
+                  ) : (
+                    datasets.liveTradingRooms.map((room) => (
+                      <Link key={value(room, ["id", "room_title"])} href="/live-trading-room" className="border border-gold-500/20 bg-navy-950 p-4 transition hover:border-gold-400/60">
+                        <p className="text-xs uppercase tracking-[.18em] text-gold-300">{value(room, ["room_status"], "Scheduled")}</p>
+                        <h3 className="mt-2 font-semibold text-white">{value(room, ["room_title"], "Live Trading Room")}</h3>
+                        <p className="mt-2 text-sm text-ink/64">{value(room, ["market_focus", "session_name"], "Institutional market preparation")}</p>
+                      </Link>
+                    ))
+                  )}
+                </div>
+              </Panel>
+            </section>
+
             <DashboardCourseSummary />
 
             <section className="terminal-panel p-5">
@@ -677,6 +817,18 @@ export default function StudentDashboardPage() {
         </div>
       </div>
     </section>
+  );
+}
+
+function ProfileLine({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="border border-gold-500/16 bg-navy-950 p-3">
+      <div className="flex items-center gap-2 text-gold-300">
+        {icon}
+        <span className="text-[10px] font-semibold uppercase tracking-[.18em]">{label}</span>
+      </div>
+      <p className="mt-2 break-words text-sm font-semibold text-white">{value || "Not recorded"}</p>
+    </div>
   );
 }
 

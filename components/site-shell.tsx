@@ -36,6 +36,8 @@ const navGroups: NavGroup[] = [
       { href: "/student-dashboard", label: "Student Dashboard" },
       { href: "/aff-os", label: "AFF OS" },
       { href: "/assignments", label: "Assignments" },
+      { href: "/homework-center", label: "Homework Center" },
+      { href: "/live-classroom", label: "Live Classroom" },
       { href: "/certificates", label: "Certificates" },
       { href: "/messages", label: "Messages" }
     ]

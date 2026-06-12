@@ -75,7 +75,7 @@ export const billingPlans: BillingPlan[] = [
   }
 ];
 
-export const restrictedEnrollmentRoutes = ["/assignments", "/exams", "/certificates", "/journal", "/live-trading-room"];
+export const restrictedEnrollmentRoutes = ["/assignments", "/homework-center", "/live-classroom", "/exams", "/certificates", "/journal", "/live-trading-room"];
 
 export function getBillingPlan(planId: string) {
   return billingPlans.find((plan) => plan.id === planId);

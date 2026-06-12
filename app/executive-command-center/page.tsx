@@ -51,8 +51,10 @@ const tables = [
   "lessons",
   "lesson_progress",
   "assignments",
+  "homework_submissions",
   "exams",
   "certificates",
+  "certifications",
   "simulator_accounts",
   "simulator_attempts",
   "social_posts",
@@ -66,6 +68,7 @@ const tables = [
   "student_messages",
   "zoom_class_sessions",
   "zoom_attendance",
+  "live_trading_rooms",
   "live_market_commentary",
   "live_room_messages",
   "live_trade_ideas",
@@ -315,8 +318,10 @@ export default function ExecutiveCommandCenterPage() {
     const lessons = datasets.lessons ?? [];
     const progress = datasets.lesson_progress ?? [];
     const assignments = datasets.assignments ?? [];
+    const homeworkSubmissions = datasets.homework_submissions ?? [];
     const exams = datasets.exams ?? [];
     const certificates = datasets.certificates ?? [];
+    const certifications = datasets.certifications ?? [];
     const simulatorAccounts = datasets.simulator_accounts ?? [];
     const simulatorAttempts = datasets.simulator_attempts ?? [];
     const socialPosts = datasets.social_posts ?? [];
@@ -330,6 +335,7 @@ export default function ExecutiveCommandCenterPage() {
     const messages = datasets.student_messages ?? [];
     const zoomSessions = datasets.zoom_class_sessions ?? [];
     const zoomAttendance = datasets.zoom_attendance ?? [];
+    const liveTradingRooms = datasets.live_trading_rooms ?? [];
     const commentary = datasets.live_market_commentary ?? [];
     const liveMessages = datasets.live_room_messages ?? [];
     const tradeIdeas = datasets.live_trade_ideas ?? [];
@@ -524,7 +530,9 @@ export default function ExecutiveCommandCenterPage() {
     const recentActivity = [
       ...students.map((row) => ({ type: "Enrollment", label: value(row, ["full_name", "name", "email"], "New student"), date: value(row, ["enrollment_date", "created_at"]) })),
       ...certificates.map((row) => ({ type: "Certificate", label: value(row, ["student_name", "certificate_number"], "Certificate issued"), date: value(row, ["issue_date", "created_at"]) })),
+      ...certifications.map((row) => ({ type: "Certification", label: value(row, ["student_name", "certification_title", "course_name"], "Certification record"), date: value(row, ["issued_at", "created_at"]) })),
       ...assignments.map((row) => ({ type: "Assignment", label: value(row, ["title", "assignment_title"], "Assignment submitted"), date: value(row, ["submission_date", "created_at"]) })),
+      ...homeworkSubmissions.map((row) => ({ type: "Homework", label: value(row, ["title"], "Homework submitted"), date: value(row, ["graded_at", "created_at"]) })),
       ...exams.map((row) => ({ type: "Exam", label: `${value(row, ["exam_title"], "Exam")} - ${numberValue(row, ["score"])}%`, date: value(row, ["submitted_at", "created_at"]) })),
       ...tvViewership.map((row) => ({ type: "TV View", label: `Broadcast ${value(row, ["broadcast_id"], "viewed")}`, date: value(row, ["watched_at", "created_at"]) })),
       ...civicJournals.map((row) => ({ type: "Leadership Journal", label: value(row, ["journal_title"], "Civic journal submitted"), date: value(row, ["created_at"]) })),
@@ -567,11 +575,11 @@ export default function ExecutiveCommandCenterPage() {
       exams: exams.length,
       examPassRate: percent(examPasses, exams.length),
       examAverage,
-      certificates: certificates.length,
-      certificateRate: percent(certificates.length, totalStudents),
-      assignments: assignments.length,
-      gradedAssignments: gradedAssignments.length,
-      approvedAssignments,
+      certificates: certificates.length + certifications.length,
+      certificateRate: percent(certificates.length + certifications.length, totalStudents),
+      assignments: assignments.length + homeworkSubmissions.length,
+      gradedAssignments: gradedAssignments.length + homeworkSubmissions.filter((row) => row.score !== null && row.score !== undefined).length,
+      approvedAssignments: approvedAssignments + homeworkSubmissions.filter((row) => value(row, ["status"]) === "Approved").length,
       averageGrade,
       simulatorAttempts: simulatorAttempts.length,
       simulatorAvgPoints,
@@ -627,7 +635,7 @@ export default function ExecutiveCommandCenterPage() {
       chartAnalystUsage: chartAnalystUsage.length,
       chartAnalystAverage: chartAnalystReports.length ? Math.round(chartAnalystReports.reduce((total, row) => total + numberValue(row, ["overall_grade"]), 0) / chartAnalystReports.length) : 0,
       chartAnalystReviewMode: chartAnalystReports.filter((row) => value(row, ["dr_moricette_review_mode"]) === "true").length,
-      tradingFloorSessions: tradingFloorSessions.length,
+      tradingFloorSessions: tradingFloorSessions.length + liveTradingRooms.length,
       tradingFloorMessages: tradingFloorMessages.length,
       tradingFloorTradeIdeas: tradingFloorTradeIdeas.length,
       tradingFloorCommentary: tradingFloorCommentary.length,

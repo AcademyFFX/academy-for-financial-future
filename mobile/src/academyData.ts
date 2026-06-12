@@ -109,7 +109,7 @@ export const examStatus = [
 export const certificates = [
   {
     number: "AFF-2026-00001",
-    course: "Forex Training Division",
+    course: "Academy for Financial Future",
     status: "Verified"
   }
 ];

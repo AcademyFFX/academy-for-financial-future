@@ -7,7 +7,7 @@ export default function RegisterPage() {
     <>
       <PageHeader
         eyebrow="Student Registration"
-        title="Apply to the Forex Training Division."
+        title="Apply to the Academy for Financial Future."
         text="Create your Academy for Financial Future student account and begin enrollment."
       />
       <Section>

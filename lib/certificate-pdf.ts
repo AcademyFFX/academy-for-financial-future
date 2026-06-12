@@ -62,7 +62,7 @@ export function createCertificatePdfBlob(certificate: PrintableCertificate, veri
 0.82 0.64 0.28 RG 1.5 w 50 50 512 692 re S
 0.82 0.64 0.28 rg
 BT /F1 14 Tf 92 700 Td (${escapePdfText("ACADEMY FOR FINANCIAL FUTURE")}) Tj ET
-BT /F2 10 Tf 206 676 Td (${escapePdfText("Forex Training Division")}) Tj ET
+BT /F2 10 Tf 206 676 Td (${escapePdfText("Academy for Financial Future")}) Tj ET
 BT /F1 28 Tf 145 616 Td (${escapePdfText("Certificate of Completion")}) Tj ET
 1 1 1 rg
 BT /F2 12 Tf 155 574 Td (${escapePdfText("This certifies that")}) Tj ET

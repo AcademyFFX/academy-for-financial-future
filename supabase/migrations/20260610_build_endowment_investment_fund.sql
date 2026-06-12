@@ -175,7 +175,7 @@ values ('Academy for Financial Future Founding Fund', 'acafffx@gmail.com', 'Foun
 on conflict do nothing;
 
 insert into public.endowment_scholarship_funds (fund_name, fund_purpose, fund_balance, awarded_amount, fund_status)
-values ('AFF Forex Training Scholarship Fund', 'Scholarship support for students pursuing Forex Training Division certification and career readiness.', 25000, 5000, 'Active')
+values ('AFF Forex Training Scholarship Fund', 'Scholarship support for students pursuing Academy for Financial Future certification and career readiness.', 25000, 5000, 'Active')
 on conflict do nothing;
 
 insert into public.endowment_grants (grant_name, grant_purpose, grant_amount, grant_status)

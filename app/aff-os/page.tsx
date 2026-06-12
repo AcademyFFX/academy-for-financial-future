@@ -43,7 +43,7 @@ const initialIdentity = {
   displayName: "",
   professionalTitle: "AFF Student",
   country: "",
-  primaryDivision: "Forex Training Division",
+  primaryDivision: "Academy for Financial Future",
   missionStatement: ""
 };
 
@@ -170,7 +170,7 @@ export default function AFFOSPage() {
           displayName: value(identity, ["display_name"], name),
           professionalTitle: value(identity, ["professional_title"], "AFF Student"),
           country: value(identity, ["country"]),
-          primaryDivision: value(identity, ["primary_division"], "Forex Training Division"),
+          primaryDivision: value(identity, ["primary_division"], "Academy for Financial Future"),
           missionStatement: value(identity, ["mission_statement"])
         });
       }

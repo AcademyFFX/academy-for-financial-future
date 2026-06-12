@@ -236,7 +236,7 @@ on conflict do nothing;
 insert into public.university_honors (student_name, honor_title, honor_level, college_name)
 values
   ('AFF Global University Cohort', 'Founding Academic Cohort', 'University Honor', 'AFF Global University'),
-  ('Forex Training Division', 'Institutional Excellence Track', 'Dean Honor', 'College of Financial Markets')
+  ('Academy for Financial Future', 'Institutional Excellence Track', 'Dean Honor', 'College of Financial Markets')
 on conflict do nothing;
 
 notify pgrst, 'reload schema';

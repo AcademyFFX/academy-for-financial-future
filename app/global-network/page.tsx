@@ -33,7 +33,7 @@ const initialRecruitment = {
   studentEmail: "",
   country: "",
   preferredLanguage: "English",
-  programInterest: "Forex Training Division",
+  programInterest: "Academy for Financial Future",
   notes: ""
 };
 

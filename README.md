@@ -1,6 +1,6 @@
 # Academy for Financial Future
 
-Professional educational platform for the **Forex Training Division**, administered by **Dr. Jean Rene Moricette**.
+Professional educational platform for the **Academy for Financial Future**, administered by **Dr. Jean Rene Moricette**.
 
 Built with:
 

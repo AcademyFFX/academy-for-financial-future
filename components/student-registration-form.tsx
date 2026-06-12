@@ -58,7 +58,7 @@ export function StudentRegistrationForm() {
             full_name: fullName,
             phone: form.phone.trim(),
             country: form.country.trim(),
-            division: "Forex Training Division"
+            division: "Academy for Financial Future"
           }
         }
       });
@@ -83,7 +83,7 @@ export function StudentRegistrationForm() {
         phone: form.phone.trim(),
         country: form.country.trim(),
         enrollment_date: new Date().toISOString().slice(0, 10),
-        certification_level: "Forex Training Division",
+        certification_level: "Academy for Financial Future",
         status: "Active"
       });
 

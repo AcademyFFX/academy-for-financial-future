@@ -5,7 +5,7 @@ import { Section, SectionInner } from "@/components/section";
 export default function ContactPage() {
   return (
     <>
-      <PageHeader eyebrow="Contact" title="Connect with the Forex Training Division." text="Use the inquiry form for admissions, course support, corporate cohorts, or certificate verification." />
+      <PageHeader eyebrow="Contact" title="Connect with the Academy for Financial Future." text="Use the inquiry form for admissions, course support, corporate cohorts, or certificate verification." />
       <Section>
         <SectionInner className="grid gap-8 lg:grid-cols-[.8fr_1fr]">
           <div className="terminal-panel grid h-fit gap-5 p-6 text-ink/76">

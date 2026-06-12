@@ -20,7 +20,7 @@ export function AuthPanel({ mode }: { mode: "login" | "register" }) {
       const result =
         mode === "login"
           ? await supabase.auth.signInWithPassword({ email, password })
-          : await supabase.auth.signUp({ email, password, options: { data: { name, division: "Forex Training Division" } } });
+          : await supabase.auth.signUp({ email, password, options: { data: { name, division: "Academy for Financial Future" } } });
 
       if (result.error) setMessage(result.error.message);
       else if (mode === "login") router.push("/student-dashboard");

@@ -8,7 +8,7 @@ create table if not exists public.students (
   phone text,
   country text,
   enrollment_date date not null default current_date,
-  certification_level text not null default 'Forex Training Division',
+  certification_level text not null default 'Academy for Financial Future',
   status text not null default 'Active',
   created_at timestamptz not null default now()
 );
@@ -19,7 +19,7 @@ alter table public.students
   add column if not exists phone text,
   add column if not exists country text,
   add column if not exists enrollment_date date not null default current_date,
-  add column if not exists certification_level text not null default 'Forex Training Division',
+  add column if not exists certification_level text not null default 'Academy for Financial Future',
   add column if not exists status text not null default 'Active',
   add column if not exists created_at timestamptz not null default now();
 

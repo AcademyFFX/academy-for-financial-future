@@ -281,7 +281,7 @@ export default function AssignmentsPage() {
       <PageHeader
         eyebrow="Assignments"
         title="Submit work that proves process, not luck."
-        text="Upload assignment links, course modules, notes, and submission dates for review by the Forex Training Division."
+        text="Upload assignment links, course modules, notes, and submission dates for review by the Academy for Financial Future."
       />
       <Section>
         <SectionInner className="grid gap-6 lg:grid-cols-[420px_1fr]">

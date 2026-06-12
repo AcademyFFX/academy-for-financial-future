@@ -161,7 +161,7 @@ export default function AdminPage() {
       name: value(row, ["name", "full_name", "student_name"], "Student"),
       email: value(row, ["email", "student_email"], "Not recorded"),
       enrollmentDate: normalizeDate(value(row, ["enrollment_date", "created_at", "date_enrolled"])),
-      certificationLevel: value(row, ["certification_level", "level", "course_name"], "Forex Training Division")
+      certificationLevel: value(row, ["certification_level", "level", "course_name"], "Academy for Financial Future")
     };
   }
 

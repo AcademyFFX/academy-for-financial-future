@@ -36,7 +36,7 @@ export const courseCatalog: CourseDefinition[] = [
         overview: "A foundational tour of participants, sessions, liquidity, and how currency markets move.",
         summary: "Students learn how banks, institutions, brokers, businesses, and traders interact inside the global currency market, then connect that map to professional trade preparation.",
         objectives: ["Identify the major forex market participants.", "Explain liquidity across the trading day.", "Map session behavior to planning routines."],
-        pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
+        pdfs: [{ title: "Academy for Financial Future Syllabus", href: "/downloads/forex-syllabus.pdf" }]
       },
       {
         id: "currency-pairs",
@@ -69,7 +69,7 @@ export const courseCatalog: CourseDefinition[] = [
         overview: "Review market, limit, stop, and protective order behavior under real market conditions.",
         summary: "This lesson introduces order types, broker interfaces, and the execution controls students need before placing or managing live trades.",
         objectives: ["Differentiate market, limit, stop, and stop-limit orders.", "Explain broker execution basics.", "Select protective orders for a trade plan."],
-        pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
+        pdfs: [{ title: "Academy for Financial Future Syllabus", href: "/downloads/forex-syllabus.pdf" }]
       }
     ]
   },
@@ -89,7 +89,7 @@ export const courseCatalog: CourseDefinition[] = [
         overview: "Study market structure as the framework that gives price movement its readable form.",
         summary: "Students learn how higher highs, higher lows, lower highs, lower lows, and trend structure create the framework for professional forex analysis.",
         objectives: ["Understand Higher Highs", "Higher Lows", "Lower Highs", "Lower Lows", "Trend Structure"],
-        pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
+        pdfs: [{ title: "Academy for Financial Future Syllabus", href: "/downloads/forex-syllabus.pdf" }]
       },
       {
         id: "institutional-orders-muscles",
@@ -122,7 +122,7 @@ export const courseCatalog: CourseDefinition[] = [
         overview: "Understand economic data as the signal system that can trigger volatility and reshape currency expectations.",
         summary: "This lesson introduces CPI, NFP, interest rates, GDP, and inflation as economic forces that can trigger volatility and reshape currency expectations.",
         objectives: ["CPI", "NFP", "Interest Rates", "GDP", "Inflation"],
-        pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
+        pdfs: [{ title: "Academy for Financial Future Syllabus", href: "/downloads/forex-syllabus.pdf" }]
       },
       {
         id: "liquidity-heart",
@@ -155,7 +155,7 @@ export const courseCatalog: CourseDefinition[] = [
         overview: "Review the broker interface as the visible layer where analysis becomes execution.",
         summary: "Students learn how MT4, MT5, TradingView, buy/sell functions, and order execution shape the final step between analysis and trade management.",
         objectives: ["MT4", "MT5", "TradingView", "Buy/Sell Functions", "Order Execution"],
-        pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
+        pdfs: [{ title: "Academy for Financial Future Syllabus", href: "/downloads/forex-syllabus.pdf" }]
       },
       {
         id: "central-banks-brain",
@@ -174,7 +174,7 @@ export const courseCatalog: CourseDefinition[] = [
           "Understand currency intervention",
           "Understand why central banks move forex markets"
         ],
-        pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
+        pdfs: [{ title: "Academy for Financial Future Syllabus", href: "/downloads/forex-syllabus.pdf" }]
       }
     ]
   },
@@ -205,7 +205,7 @@ export const courseCatalog: CourseDefinition[] = [
         overview: "Identify decision areas where price reacts, pauses, or hunts liquidity.",
         summary: "This lesson teaches support and resistance as decision zones that must be validated by repeated price behavior and liquidity context.",
         objectives: ["Mark support and resistance with evidence.", "Recognize liquidity resting near levels.", "Separate reaction zones from prediction lines."],
-        pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
+        pdfs: [{ title: "Academy for Financial Future Syllabus", href: "/downloads/forex-syllabus.pdf" }]
       },
       {
         id: "trend-confirmation",
@@ -300,7 +300,7 @@ export const courseCatalog: CourseDefinition[] = [
         overview: "Study how resting orders, liquidity pools, and execution incentives shape movement.",
         summary: "Students examine liquidity behavior from an institutional perspective and learn how resting orders can influence price movement.",
         objectives: ["Identify common liquidity pools.", "Explain how stops can fuel price movement.", "Build liquidity context into planning."],
-        pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
+        pdfs: [{ title: "Academy for Financial Future Syllabus", href: "/downloads/forex-syllabus.pdf" }]
       },
       {
         id: "macro-catalysts",
@@ -311,7 +311,7 @@ export const courseCatalog: CourseDefinition[] = [
         overview: "Use macro events, rates, and risk sentiment to frame currency bias.",
         summary: "This lesson connects macro catalysts, interest-rate expectations, and market sentiment to practical currency bias formation.",
         objectives: ["Connect rate expectations to currency bias.", "Track macro catalysts before trading.", "Use risk sentiment as market context."],
-        pdfs: [{ title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" }]
+        pdfs: [{ title: "Academy for Financial Future Syllabus", href: "/downloads/forex-syllabus.pdf" }]
       },
       {
         id: "news-discipline",

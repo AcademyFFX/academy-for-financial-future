@@ -2,7 +2,7 @@ create table if not exists public.aff_accreditation_records (
   id bigserial primary key,
   accreditation_number text not null unique,
   academy_name text not null default 'Academy for Financial Future',
-  division_name text not null default 'Forex Training Division',
+  division_name text not null default 'Academy for Financial Future',
   accreditation_scope text not null,
   accreditation_status text not null default 'Active',
   issued_by text not null default 'Academy for Financial Future Accreditation & Licensing Division',
@@ -231,7 +231,7 @@ grant usage, select on sequence public.aff_compliance_reviews_id_seq to authenti
 grant usage, select on sequence public.aff_digital_credentials_id_seq to authenticated;
 
 insert into public.aff_accreditation_records (accreditation_number, accreditation_scope, accreditation_status, expiration_date, compliance_notes)
-values ('AFF-ACC-2026-0001', 'Forex Training Division academic standards, instructor training, certification exams, digital credentials, and institutional partnership oversight.', 'Active', current_date + interval '1 year', 'Initial executive accreditation record for Academy for Financial Future.')
+values ('AFF-ACC-2026-0001', 'Academy for Financial Future academic standards, instructor training, certification exams, digital credentials, and institutional partnership oversight.', 'Active', current_date + interval '1 year', 'Initial executive accreditation record for Academy for Financial Future.')
 on conflict (accreditation_number) do update
 set accreditation_scope = excluded.accreditation_scope,
     accreditation_status = excluded.accreditation_status,
@@ -272,7 +272,7 @@ values
 on conflict do nothing;
 
 insert into public.aff_compliance_reviews (review_number, review_subject, review_type, review_status, next_review_date, findings, corrective_actions)
-values ('AFF-COMP-2026-0001', 'Academy for Financial Future Forex Training Division', 'Annual Accreditation Review', 'Compliant', current_date + interval '6 months', 'Initial review confirms division records, curriculum pathway, credential controls, and verification workflow are established.', 'Continue quarterly record reviews and credential audit preparation.')
+values ('AFF-COMP-2026-0001', 'Academy for Financial Future Academy for Financial Future', 'Annual Accreditation Review', 'Compliant', current_date + interval '6 months', 'Initial review confirms division records, curriculum pathway, credential controls, and verification workflow are established.', 'Continue quarterly record reviews and credential audit preparation.')
 on conflict (review_number) do update
 set review_status = excluded.review_status,
     next_review_date = excluded.next_review_date,

@@ -6,20 +6,22 @@ const config: Config = {
     extend: {
       colors: {
         navy: {
-          950: "#07111f",
-          900: "#0b1728",
-          800: "#10233c",
-          700: "#17365c"
+          950: "#0A1833",
+          900: "#102142",
+          800: "#172B52",
+          700: "#203B69"
         },
         gold: {
-          500: "#d6ad55",
-          400: "#e3c675",
-          300: "#f3dc9b"
+          500: "#D4AF37",
+          400: "#E0C15C",
+          300: "#F1D98A"
         },
-        ink: "#dce6f5"
+        charcoal: "#2F3542",
+        cream: "#F7F3EB",
+        ink: "#F7F3EB"
       },
       boxShadow: {
-        gold: "0 0 0 1px rgba(214, 173, 85, .26), 0 24px 80px rgba(0, 0, 0, .28)"
+        gold: "0 0 0 1px rgba(212, 175, 55, .26), 0 24px 80px rgba(0, 0, 0, .28)"
       },
       fontFamily: {
         sans: ["Arial", "Helvetica", "sans-serif"],

@@ -6,7 +6,7 @@ create table if not exists public.aff_identity_profiles (
   display_name text not null,
   professional_title text not null default 'AFF Student',
   country text,
-  primary_division text not null default 'Forex Training Division',
+  primary_division text not null default 'Academy for Financial Future',
   mission_statement text,
   updated_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
@@ -20,7 +20,7 @@ create table if not exists public.aff_passports (
   student_email text,
   passport_number text not null unique,
   passport_status text not null default 'Active',
-  primary_division text not null default 'Forex Training Division',
+  primary_division text not null default 'Academy for Financial Future',
   lifelong_record_status text not null default 'Open',
   issued_at timestamptz not null default now(),
   constraint aff_passports_student_id_key unique (student_id)

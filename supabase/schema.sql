@@ -3,8 +3,8 @@ create table public.profiles (
   full_name text not null,
   email text,
   role text not null default 'student',
-  division text not null default 'Forex Training Division',
-  certification_level text not null default 'Forex Training Division',
+  division text not null default 'Academy for Financial Future',
+  certification_level text not null default 'Academy for Financial Future',
   created_at timestamptz not null default now()
 );
 

@@ -38,7 +38,7 @@ create table if not exists public.global_student_recruitment (
   student_email text not null,
   country text not null,
   preferred_language text not null default 'English',
-  program_interest text not null default 'Forex Training Division',
+  program_interest text not null default 'Academy for Financial Future',
   recruitment_status text not null default 'Inquiry',
   notes text,
   created_at timestamptz not null default now()
@@ -100,7 +100,7 @@ create table if not exists public.global_instructor_registry (
   instructor_email text not null,
   region text not null,
   country text not null,
-  certification_level text not null default 'Forex Training Division',
+  certification_level text not null default 'Academy for Financial Future',
   registry_status text not null default 'Certified',
   created_at timestamptz not null default now()
 );
@@ -244,7 +244,7 @@ on conflict do nothing;
 
 insert into public.global_certification_standards (standard_name, standard_level, standard_status, requirements)
 values
-  ('AFF Forex Training Division Global Standard', 'Professional Certification', 'Active', 'Lessons, assignments, journal, certification exam, and ethical trading standards.'),
+  ('AFF Academy for Financial Future Global Standard', 'Professional Certification', 'Active', 'Lessons, assignments, journal, certification exam, and ethical trading standards.'),
   ('AFF Instructor International Registry Standard', 'Instructor Certification', 'Active', 'Instructor certification, continuing education, compliance, and campus governance review.')
 on conflict do nothing;
 

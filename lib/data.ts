@@ -105,7 +105,7 @@ export const courses = [
 ];
 
 export const announcements = [
-  { title: "June Market Intensive Opens", date: "June 10, 2026", body: "Live London and New York session analysis begins for enrolled Forex Training Division students." },
+  { title: "June Market Intensive Opens", date: "June 10, 2026", body: "Live London and New York session analysis begins for enrolled Academy for Financial Future students." },
   { title: "Certification Exam Window", date: "June 24, 2026", body: "Students who complete all core modules may schedule their proctored final assessment." },
   { title: "Risk Management Workshop", date: "July 2, 2026", body: "A practical workshop on capital protection, risk sizing, and journal-based accountability." }
 ];
@@ -137,7 +137,7 @@ export const examSections = [
 ];
 
 export const downloads = [
-  { title: "Forex Training Division Syllabus", href: "/downloads/forex-syllabus.pdf" },
+  { title: "Academy for Financial Future Syllabus", href: "/downloads/forex-syllabus.pdf" },
   { title: "Professional Trading Journal Template", href: "/downloads/trading-journal-template.pdf" },
   { title: "Risk Management Worksheet", href: "/downloads/risk-management-worksheet.pdf" }
 ];

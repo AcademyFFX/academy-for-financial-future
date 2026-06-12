@@ -41,7 +41,7 @@ const initialMentor = {
   mentorName: "",
   mentorEmail: "",
   mentorType: "Career Coaching",
-  expertise: "Forex Training Division, certification readiness, career direction",
+  expertise: "Academy for Financial Future, certification readiness, career direction",
   availability: "Monthly"
 };
 

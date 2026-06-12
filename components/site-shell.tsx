@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, Menu, ShieldCheck, X } from "lucide-react";
+import { ChevronDown, Menu, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
+import { AFFStandardLogo } from "@/components/aff-logo";
 import { createClient } from "@/lib/supabase";
 
 type NavLink = {
@@ -117,20 +118,24 @@ export function SiteShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-navy-950">
       <header className="sticky top-0 z-50 border-b border-gold-500/20 bg-navy-950/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1440px] items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
-          <Link href="/" className="flex min-w-0 shrink-0 items-center gap-3 xl:w-[320px] 2xl:w-[390px]">
-            <span className="grid h-11 w-11 shrink-0 place-items-center border border-gold-500/45 bg-navy-800 text-gold-300 shadow-gold">
-              <ShieldCheck size={22} />
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate font-serif text-base font-semibold uppercase tracking-[.06em] text-white xl:text-lg">
-                Academy for Financial Future
+        <div className="mx-auto flex max-w-[1440px] items-center gap-4 px-4 py-2 sm:px-6 lg:px-8">
+          <Link href="/" className="logo-section flex min-w-0 shrink-0 items-center gap-4">
+            <AFFStandardLogo
+              priority
+              className="h-12 w-[300px] sm:h-14 sm:w-[350px] lg:h-16 lg:max-h-[72px] lg:w-[150px]"
+              imageClassName="object-contain object-left"
+            />
+            <span className="hidden min-w-0 lg:block">
+              <span className="brand-title block font-serif text-[15px] font-semibold uppercase tracking-[.08em] text-white">
+                ACADEMY FOR FINANCIAL FUTURE
               </span>
-              <span className="block truncate text-[11px] uppercase tracking-[.2em] text-gold-300 xl:text-xs">Forex Training Division</span>
+              <span className="block whitespace-nowrap text-[10px] font-semibold uppercase tracking-[.22em] text-gold-300">
+                LEARN • GROW • PROSPER
+              </span>
             </span>
           </Link>
 
-          <nav className="hidden min-w-0 flex-1 items-center justify-end gap-1 xl:flex">
+          <nav className="hidden min-w-0 flex-1 items-center justify-end gap-0 overflow-x-auto lg:flex xl:gap-1">
             <TopLink href="/" label="Home" active={pathname === "/"} />
             {navGroups.map((group, index) => (
               <DesktopDropdown
@@ -156,14 +161,14 @@ export function SiteShell({ children }: { children: ReactNode }) {
             aria-expanded={mobileOpen}
             aria-label="Toggle navigation"
             onClick={() => setMobileOpen((value) => !value)}
-            className="ml-auto grid h-11 w-11 shrink-0 place-items-center border border-gold-500/40 text-gold-300 xl:hidden"
+            className="ml-auto grid h-11 w-11 shrink-0 place-items-center border border-gold-500/40 text-gold-300 lg:hidden"
           >
             {mobileOpen ? <X size={21} /> : <Menu size={21} />}
           </button>
         </div>
 
         {mobileOpen ? (
-          <div className="max-h-[calc(100vh-72px)] overflow-y-auto border-t border-gold-500/20 bg-navy-900 px-4 py-4 xl:hidden">
+          <div className="max-h-[calc(100vh-72px)] overflow-y-auto border-t border-gold-500/20 bg-navy-900 px-4 py-4 lg:hidden">
             <div className="mx-auto grid max-w-7xl gap-3">
               <Link
                 href="/"
@@ -196,8 +201,11 @@ export function SiteShell({ children }: { children: ReactNode }) {
       <main>{children}</main>
       <footer className="border-t border-gold-500/20 bg-navy-950 px-4 py-10 text-sm text-ink/68">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <p>© 2026 Academy for Financial Future. All rights reserved.</p>
-          <p>Administrator: Dr. Jean Rene Moricette</p>
+          <AFFStandardLogo className="h-14 w-72" />
+          <div className="space-y-1 sm:text-right">
+            <p>© 2026 Academy for Financial Future. All rights reserved.</p>
+            <p>Administrator: Dr. Jean Rene Moricette</p>
+          </div>
         </div>
       </footer>
     </div>

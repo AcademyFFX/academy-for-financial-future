@@ -1,6 +1,6 @@
 # Academy for Financial Future Mobile Companion
 
-Expo companion app for the Academy for Financial Future Forex Training Division.
+Expo companion app for the Academy for Financial Future Academy for Financial Future.
 
 ## Included Mobile Views
 

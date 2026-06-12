@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, PlayCircle } from "lucide-react";
 import { featureCards, metrics } from "@/lib/data";
+import { AFFInstitutionalLogo } from "@/components/aff-logo";
 import { Section, SectionInner } from "@/components/section";
 
 export default function HomePage() {
@@ -11,7 +12,8 @@ export default function HomePage() {
         <Image src="/images/academy-hero.png" alt="Luxury financial academy trading classroom" fill priority className="object-cover" />
         <div className="absolute inset-0 bg-gradient-to-r from-navy-950 via-navy-950/86 to-navy-900/24" />
         <div className="relative mx-auto flex min-h-[calc(100vh-77px)] max-w-7xl flex-col justify-center px-4 py-20 sm:px-6 lg:px-8">
-          <p className="text-xs font-bold uppercase tracking-[.32em] text-gold-300">Forex Training Division</p>
+          <AFFInstitutionalLogo priority className="h-48 w-72" />
+          <p className="mt-8 text-xs font-bold uppercase tracking-[.32em] text-gold-300">Learn • Grow • Prosper</p>
           <h1 className="mt-5 max-w-4xl font-serif text-5xl font-semibold leading-tight text-white sm:text-6xl lg:text-7xl">
             Academy for Financial Future
           </h1>

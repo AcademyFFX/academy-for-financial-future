@@ -222,7 +222,7 @@ on conflict do nothing;
 
 insert into public.event_speakers (speaker_name, speaker_title, speaker_email, topic, bio, speaker_status)
 values
-  ('Dr. Jean Rene Moricette', 'Administrator, Academy for Financial Future', 'acafffx@gmail.com', 'Forex Anatomy, Certification, and Global Financial Readiness', 'Lead administrator for Academy for Financial Future and the Forex Training Division.', 'Confirmed'),
+  ('Dr. Jean Rene Moricette', 'Administrator, Academy for Financial Future', 'acafffx@gmail.com', 'Forex Anatomy, Certification, and Global Financial Readiness', 'Lead administrator for Academy for Financial Future and the Academy for Financial Future.', 'Confirmed'),
   ('AFF Research Desk', 'Economic Intelligence Panel', 'acafffx@gmail.com', 'Central Bank Intelligence and Currency Forecasts', 'Research desk panel for macro, central bank, and currency outlook programming.', 'Confirmed')
 on conflict do nothing;
 

@@ -193,7 +193,7 @@ on conflict do nothing;
 
 insert into public.research_citations (source_title, citation_style, reference_text, source_url)
 values
-  ('AFF Forex Anatomy Curriculum', 'APA', 'Academy for Financial Future. (2026). Forex Anatomy Curriculum. Forex Training Division.', '/courses'),
+  ('AFF Forex Anatomy Curriculum', 'APA', 'Academy for Financial Future. (2026). Forex Anatomy Curriculum. Academy for Financial Future.', '/courses'),
   ('AFF Certificate Verification Portal', 'APA', 'Academy for Financial Future. (2026). Certificate Verification Portal. https://academyforfinancialfuture.com/verify', '/verify')
 on conflict do nothing;
 

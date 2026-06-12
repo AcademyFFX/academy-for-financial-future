@@ -62,7 +62,7 @@ export default function App() {
         </View>
         <View style={styles.headerText}>
           <Text style={styles.brand}>Academy for Financial Future</Text>
-          <Text style={styles.division}>Forex Training Division</Text>
+          <Text style={styles.division}>Academy for Financial Future</Text>
         </View>
       </View>
 

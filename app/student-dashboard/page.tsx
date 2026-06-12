@@ -44,6 +44,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { AFFInstitutionalLogo } from "@/components/aff-logo";
 import { createClient } from "@/lib/supabase";
 import { DashboardCourseSummary } from "@/components/dashboard-course-summary";
 import { ZoomClassesPanel } from "@/components/zoom-classes-panel";
@@ -330,7 +331,7 @@ export default function StudentDashboardPage() {
           .insert({
             student_id: currentUser.id,
             mentor_name: "AFF Mentor Desk",
-            mentor_role: "Forex Training Division Advisor",
+            mentor_role: "Academy for Financial Future Advisor",
             mentor_email: "acafffx@gmail.com",
             mentor_status: "Assigned"
           })
@@ -474,7 +475,8 @@ export default function StudentDashboardPage() {
       <div className="mx-auto max-w-7xl">
         <div className="grid gap-8 lg:grid-cols-[390px_1fr]">
           <aside className="terminal-panel h-fit p-6 shadow-gold">
-            <p className="text-xs font-semibold uppercase tracking-[.28em] text-gold-300">AFF Student Experience 2.0</p>
+            <AFFInstitutionalLogo className="h-32 w-48" />
+            <p className="mt-6 text-xs font-semibold uppercase tracking-[.28em] text-gold-300">AFF Student Experience 2.0</p>
             <h1 className="mt-4 font-serif text-4xl font-semibold text-white">Your academy operating hub.</h1>
             <p className="mt-4 leading-7 text-ink/72">{message}</p>
 

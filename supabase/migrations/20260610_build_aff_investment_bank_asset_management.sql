@@ -232,7 +232,7 @@ select 'AFF Investment Committee Opening Mandate', 'Capital Allocation', 'Review
 where not exists (select 1 from public.investment_committees where committee_title = 'AFF Investment Committee Opening Mandate');
 
 insert into public.student_funds (fund_name, team_name, fund_nav, performance_rank, risk_adjusted_return)
-select 'AFF Student Global Macro Fund', 'Forex Training Division Analysts', 1000000, 1, 0
+select 'AFF Student Global Macro Fund', 'Academy for Financial Future Analysts', 1000000, 1, 0
 where not exists (select 1 from public.student_funds where fund_name = 'AFF Student Global Macro Fund');
 
 grant select, insert, update, delete on public.investment_portfolios to authenticated;

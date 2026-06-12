@@ -2,7 +2,7 @@ import { AFFInstitutionalLogo } from "@/components/aff-logo";
 
 export function PageHeader({ eyebrow, title, text }: { eyebrow: string; title: string; text: string }) {
   return (
-    <section className="market-grid border-b border-gold-500/20 bg-navy-900 px-4 py-16 sm:px-6 lg:px-8">
+    <section className="market-grid relative z-[1] border-b border-gold-500/20 bg-navy-900 px-4 py-16 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
           <AFFInstitutionalLogo className="h-20 w-32" />

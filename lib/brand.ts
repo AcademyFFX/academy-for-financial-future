@@ -9,5 +9,6 @@ export const affBrand = {
   name: "Academy for Financial Future",
   initials: "AFF",
   motto: "Learn • Grow • Prosper",
+  statement: "Building Financial Literacy, Leadership, Research, and Institutional Excellence.",
   administrator: "Dr. Jean Rene Moricette"
 } as const;

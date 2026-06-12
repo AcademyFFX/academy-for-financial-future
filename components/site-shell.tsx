@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, Menu, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AFFStandardLogo } from "@/components/aff-logo";
 import { createClient } from "@/lib/supabase";
 
@@ -83,10 +83,13 @@ const navGroups: NavGroup[] = [
 export function SiteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const headerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     setMobileOpen(false);
+    setOpenMenu(null);
   }, [pathname]);
 
   useEffect(() => {
@@ -115,14 +118,36 @@ export function SiteShell({ children }: { children: ReactNode }) {
     loadUnreadCount();
   }, [pathname]);
 
+  useEffect(() => {
+    function handleOutsideClick(event: MouseEvent | PointerEvent) {
+      if (!headerRef.current?.contains(event.target as Node)) {
+        setOpenMenu(null);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpenMenu(null);
+      }
+    }
+
+    document.addEventListener("pointerdown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-navy-950">
-      <header className="sticky top-0 z-50 border-b border-gold-500/20 bg-navy-950/95 backdrop-blur">
+      <header ref={headerRef} className="sticky top-0 z-[9999] border-b border-gold-500/20 bg-navy-950/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1440px] items-center gap-4 px-4 py-2 sm:px-6 lg:px-8">
           <Link href="/" className="logo-section flex min-w-0 shrink-0 items-center gap-4">
             <AFFStandardLogo
               priority
-              className="h-12 w-[300px] sm:h-14 sm:w-[350px] lg:h-16 lg:max-h-[72px] lg:w-[150px]"
+              className="h-12 w-[300px] sm:h-14 sm:w-[350px] lg:h-[72px] lg:max-h-[72px] lg:w-[380px]"
               imageClassName="object-contain object-left"
             />
             <span className="hidden min-w-0 lg:block">
@@ -135,7 +160,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
             </span>
           </Link>
 
-          <nav className="hidden min-w-0 flex-1 items-center justify-end gap-0 overflow-x-auto lg:flex xl:gap-1">
+          <nav className="relative hidden min-w-0 flex-1 items-center justify-end gap-0 overflow-visible lg:flex xl:gap-1">
             <TopLink href="/" label="Home" active={pathname === "/"} />
             {navGroups.map((group, index) => (
               <DesktopDropdown
@@ -143,18 +168,21 @@ export function SiteShell({ children }: { children: ReactNode }) {
                 group={group}
                 pathname={pathname}
                 unreadCount={unreadCount}
+                openMenu={openMenu}
+                setOpenMenu={setOpenMenu}
                 alignRight={index >= navGroups.length - 2}
               />
             ))}
-            <div className="ml-3 flex shrink-0 items-center gap-2 border-l border-gold-500/20 pl-3">
-              <Link href="/login" className="border border-gold-500/45 px-3 py-2 text-xs font-semibold text-gold-300 transition hover:border-gold-300 hover:text-white">
-                Login
-              </Link>
-              <Link href="/register" className="bg-gold-500 px-3 py-2 text-xs font-bold text-navy-950 transition hover:bg-gold-300">
-                Register
-              </Link>
-            </div>
           </nav>
+
+          <div className="hidden shrink-0 items-center gap-2 border-l border-gold-500/20 pl-3 lg:flex">
+            <Link href="/login" className="border border-gold-500/45 px-3 py-2 text-xs font-semibold text-gold-300 transition hover:border-gold-300 hover:text-white">
+              Login
+            </Link>
+            <Link href="/register" className="bg-gold-500 px-3 py-2 text-xs font-bold text-navy-950 transition hover:bg-gold-300">
+              Register
+            </Link>
+          </div>
 
           <button
             type="button"
@@ -220,33 +248,53 @@ function TopLink({ href, label, active }: NavLink & { active: boolean }) {
   );
 }
 
-function DesktopDropdown({ group, pathname, unreadCount, alignRight }: { group: NavGroup; pathname: string; unreadCount: number; alignRight?: boolean }) {
+function DesktopDropdown({
+  group,
+  pathname,
+  unreadCount,
+  openMenu,
+  setOpenMenu,
+  alignRight
+}: {
+  group: NavGroup;
+  pathname: string;
+  unreadCount: number;
+  openMenu: string | null;
+  setOpenMenu: (menu: string | null) => void;
+  alignRight?: boolean;
+}) {
   const active = group.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+  const isOpen = openMenu === group.label;
 
   return (
-    <div className="group relative shrink-0">
+    <div className="relative shrink-0">
       <button
         type="button"
         aria-haspopup="menu"
-        className={`inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold uppercase tracking-[.12em] transition ${active ? "text-gold-300" : "text-ink/76 hover:text-white"}`}
+        aria-expanded={isOpen}
+        onClick={() => setOpenMenu(openMenu === group.label ? null : group.label)}
+        className={`inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold uppercase tracking-[.12em] transition ${active || isOpen ? "text-gold-300" : "text-ink/76 hover:text-white"}`}
       >
         {group.label}
-        <ChevronDown className="transition group-hover:rotate-180" size={14} />
+        <ChevronDown className={`transition ${isOpen ? "rotate-180" : ""}`} size={14} />
       </button>
-      <div className={`invisible absolute top-full z-50 w-64 pt-3 opacity-0 transition group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 ${alignRight ? "right-0" : "left-0"}`}>
-        <div className="border border-gold-500/24 bg-navy-950 p-2 shadow-gold">
-          {group.items.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center justify-between gap-3 px-3 py-2.5 text-sm transition ${pathname === item.href ? "bg-gold-500 text-navy-950" : "text-ink/78 hover:bg-navy-800 hover:text-white"}`}
-            >
-              <span>{item.label}</span>
-              {item.href === "/messages" && unreadCount > 0 ? <NotificationBadge count={unreadCount} /> : null}
-            </Link>
-          ))}
+      {isOpen ? (
+        <div className={`absolute top-full z-[99999] w-64 pt-3 pointer-events-auto ${alignRight ? "right-0" : "left-0"}`}>
+          <div className="border border-[rgba(212,175,55,0.32)] bg-navy-950 p-2 shadow-gold">
+            {group.items.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpenMenu(null)}
+                className={`flex items-center justify-between gap-3 px-3 py-2.5 text-sm transition ${pathname === item.href ? "bg-gold-500 text-navy-950" : "text-ink/78 hover:bg-navy-800 hover:text-white"}`}
+              >
+                <span>{item.label}</span>
+                {item.href === "/messages" && unreadCount > 0 ? <NotificationBadge count={unreadCount} /> : null}
+              </Link>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }

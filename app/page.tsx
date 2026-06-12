@@ -4,21 +4,26 @@ import { ArrowRight, PlayCircle } from "lucide-react";
 import { featureCards, metrics } from "@/lib/data";
 import { AFFInstitutionalLogo } from "@/components/aff-logo";
 import { Section, SectionInner } from "@/components/section";
+import { affBrand } from "@/lib/brand";
 
 export default function HomePage() {
   return (
     <>
-      <section className="relative min-h-[calc(100vh-77px)] overflow-hidden border-b border-gold-500/20">
+      <section className="relative z-[1] min-h-[calc(100vh-77px)] overflow-hidden border-b border-gold-500/20">
         <Image src="/images/academy-hero.png" alt="Luxury financial academy trading classroom" fill priority className="object-cover" />
         <div className="absolute inset-0 bg-gradient-to-r from-navy-950 via-navy-950/86 to-navy-900/24" />
         <div className="relative mx-auto flex min-h-[calc(100vh-77px)] max-w-7xl flex-col justify-center px-4 py-20 sm:px-6 lg:px-8">
           <AFFInstitutionalLogo priority className="h-48 w-72" />
           <p className="mt-8 text-xs font-bold uppercase tracking-[.32em] text-gold-300">Learn • Grow • Prosper</p>
           <h1 className="mt-5 max-w-4xl font-serif text-5xl font-semibold leading-tight text-white sm:text-6xl lg:text-7xl">
-            Academy for Financial Future
+            {affBrand.name}
           </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/82">
-            A professional financial education platform for disciplined forex training, course accountability, certification readiness, and institutional-grade student development.
+          <p className="mt-6 max-w-3xl text-2xl font-semibold leading-9 text-ink/88 sm:text-3xl sm:leading-[1.35]">
+            Building Financial Literacy,
+            <br />
+            Leadership, Research,
+            <br />
+            and Institutional Excellence.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link href="/register" className="inline-flex items-center justify-center gap-2 bg-gold-500 px-6 py-3 font-bold text-navy-950">

@@ -143,24 +143,16 @@ export function SiteShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-navy-950">
       <header ref={headerRef} className="sticky top-0 z-[9999] border-b border-gold-500/20 bg-navy-950/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1440px] items-center gap-4 px-4 py-2 sm:px-6 lg:px-8">
-          <Link href="/" className="logo-section flex min-w-0 shrink-0 items-center gap-4">
+        <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-8 overflow-visible px-4 py-2 sm:px-6 lg:px-8">
+          <Link href="/" className="logo-section flex shrink-0 items-center">
             <AFFStandardLogo
               priority
-              className="h-12 w-[300px] sm:h-14 sm:w-[350px] lg:h-[72px] lg:max-h-[72px] lg:w-[380px]"
+              className="h-12 w-[300px] sm:h-14 sm:w-[350px] lg:h-[72px] lg:w-[260px]"
               imageClassName="object-contain object-left"
             />
-            <span className="hidden min-w-0 lg:block">
-              <span className="brand-title block font-serif text-[15px] font-semibold uppercase tracking-[.08em] text-white">
-                ACADEMY FOR FINANCIAL FUTURE
-              </span>
-              <span className="block whitespace-nowrap text-[10px] font-semibold uppercase tracking-[.22em] text-gold-300">
-                LEARN • GROW • PROSPER
-              </span>
-            </span>
           </Link>
 
-          <nav className="relative hidden min-w-0 flex-1 items-center justify-end gap-0 overflow-visible lg:flex xl:gap-1">
+          <nav className="relative hidden min-w-0 flex-1 shrink items-center justify-center gap-7 overflow-visible lg:flex">
             <TopLink href="/" label="Home" active={pathname === "/"} />
             {navGroups.map((group, index) => (
               <DesktopDropdown

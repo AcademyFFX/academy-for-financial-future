@@ -45,14 +45,8 @@ body {
   flex-shrink: 0;
 }
 
-.brand-title {
-  overflow: visible;
-  text-overflow: unset;
-  white-space: nowrap;
-}
-
 @media (min-width: 1024px) {
   .logo-section {
-    min-width: 420px;
+    width: 260px;
   }
 }

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { billingPlans } from "@/lib/billing";
 import { createClient } from "@/lib/supabase";
 
 const initialForm = {
@@ -10,6 +11,7 @@ const initialForm = {
   email: "",
   phone: "",
   country: "",
+  membership_plan: "Free Trial",
   password: "",
   confirm_password: ""
 };
@@ -58,6 +60,7 @@ export function StudentRegistrationForm() {
             full_name: fullName,
             phone: form.phone.trim(),
             country: form.country.trim(),
+            membership_plan: form.membership_plan,
             division: "Academy for Financial Future"
           }
         }
@@ -78,16 +81,36 @@ export function StudentRegistrationForm() {
       }
 
       const { error: studentError } = await supabase.from("students").insert({
+        auth_user_id: signupData.user?.id ?? null,
+        first_name: form.first_name.trim(),
+        last_name: form.last_name.trim(),
         full_name: fullName,
         email,
         phone: form.phone.trim(),
         country: form.country.trim(),
         enrollment_date: new Date().toISOString().slice(0, 10),
+        membership_plan: form.membership_plan,
+        membership_status: form.membership_plan === "Free Trial" ? "Free Trial" : "Pending",
         certification_level: "Academy for Financial Future",
         status: "Active"
       });
 
       if (studentError) throw studentError;
+
+      if (signupData.user?.id) {
+        const selectedPlan = billingPlans.find((plan) => plan.name === form.membership_plan);
+        const { error: membershipError } = await supabase.from("student_memberships").upsert({
+          student_id: signupData.user.id,
+          student_email: email,
+          membership_plan: form.membership_plan,
+          membership_status: selectedPlan?.membershipStatus ?? form.membership_plan,
+          account_status: selectedPlan?.accountStatus ?? "Pending",
+          trial_ends_at: form.membership_plan === "Free Trial" ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null,
+          updated_at: new Date().toISOString()
+        }, { onConflict: "student_id" });
+
+        if (membershipError) throw membershipError;
+      }
 
       setMessage("Registration successful. Redirecting to login...");
       router.push("/login");
@@ -153,6 +176,20 @@ export function StudentRegistrationForm() {
           />
         </label>
       </div>
+
+      <label className="grid gap-2 text-sm text-ink/78">
+        Membership Plan
+        <select
+          className="border border-gold-500/25 bg-navy-950 px-4 py-3 text-white outline-none focus:border-gold-400"
+          value={form.membership_plan}
+          onChange={(event) => updateField("membership_plan", event.target.value)}
+          required
+        >
+          {billingPlans.map((plan) => (
+            <option key={plan.id} value={plan.name}>{plan.name}</option>
+          ))}
+        </select>
+      </label>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="grid gap-2 text-sm text-ink/78">

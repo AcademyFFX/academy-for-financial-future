@@ -26,7 +26,7 @@ export default function HomePage() {
             and Institutional Excellence.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link href="/register" className="inline-flex items-center justify-center gap-2 bg-gold-500 px-6 py-3 font-bold text-navy-950">
+            <Link href="/enrollment" className="inline-flex items-center justify-center gap-2 bg-gold-500 px-6 py-3 font-bold text-navy-950">
               Enroll Now <ArrowRight size={18} />
             </Link>
             <Link href="/courses" className="inline-flex items-center justify-center gap-2 border border-gold-500/45 px-6 py-3 font-semibold text-gold-300">
@@ -61,7 +61,7 @@ export default function HomePage() {
               );
 
               return feature.title === "Student Registration" ? (
-                <Link key={feature.title} href="/register" className="terminal-panel block p-6 transition hover:border-gold-400/60">
+                <Link key={feature.title} href="/enrollment" className="terminal-panel block p-6 transition hover:border-gold-400/60">
                   {content}
                 </Link>
               ) : (

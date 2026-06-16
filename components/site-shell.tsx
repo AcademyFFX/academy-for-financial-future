@@ -34,10 +34,13 @@ const navGroups: NavGroup[] = [
     label: "Student",
     items: [
       { href: "/student-dashboard", label: "Student Dashboard" },
+      { href: "/student-profile", label: "Student Profile" },
+      { href: "/student-directory", label: "Student Directory" },
       { href: "/aff-os", label: "AFF OS" },
       { href: "/assignments", label: "Assignments" },
       { href: "/homework-center", label: "Homework Center" },
       { href: "/live-classroom", label: "Live Classroom" },
+      { href: "/certifications", label: "Certification Center" },
       { href: "/certificates", label: "Certificates" },
       { href: "/messages", label: "Messages" }
     ]
@@ -173,8 +176,8 @@ export function SiteShell({ children }: { children: ReactNode }) {
             <Link href="/login" className="border border-gold-500/45 px-3 py-2 text-xs font-semibold text-gold-300 transition hover:border-gold-300 hover:text-white">
               Login
             </Link>
-            <Link href="/register" className="bg-gold-500 px-3 py-2 text-xs font-bold text-navy-950 transition hover:bg-gold-300">
-              Register
+            <Link href="/enrollment" className="bg-gold-500 px-3 py-2 text-xs font-bold text-navy-950 transition hover:bg-gold-300">
+              Enroll
             </Link>
           </div>
 
@@ -212,8 +215,8 @@ export function SiteShell({ children }: { children: ReactNode }) {
                 <Link href="/login" onClick={() => setMobileOpen(false)} className="border border-gold-500/40 px-3 py-3 text-center text-sm font-semibold text-gold-300">
                   Login
                 </Link>
-                <Link href="/register" onClick={() => setMobileOpen(false)} className="bg-gold-500 px-3 py-3 text-center text-sm font-bold text-navy-950">
-                  Register
+                <Link href="/enrollment" onClick={() => setMobileOpen(false)} className="bg-gold-500 px-3 py-3 text-center text-sm font-bold text-navy-950">
+                  Enroll
                 </Link>
               </div>
             </div>

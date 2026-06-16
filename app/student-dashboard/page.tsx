@@ -54,6 +54,7 @@ import { ZoomClassesPanel } from "@/components/zoom-classes-panel";
 type DbRow = Record<string, unknown>;
 type StudentProfile = {
   id: string;
+  studentId: string;
   fullName: string;
   email: string;
   enrollmentDate: string;
@@ -78,7 +79,9 @@ type DatasetKey =
   | "messages"
   | "certificates"
   | "certifications"
+  | "digitalCertificates"
   | "exams"
+  | "certificationAttempts"
   | "degreeProgress"
   | "civicService"
   | "researchSubmissions"
@@ -94,6 +97,8 @@ type DatasetKey =
   | "careerOpportunities";
 
 const dashboardLinks = [
+  { href: "/student-profile", label: "Student Profile", icon: User },
+  { href: "/student-directory", label: "Student Directory", icon: Users },
   { href: "/aff-os", label: "AFF Operating System", icon: Network },
   { href: "/mobile-super-app", label: "AFF Mobile Super App", icon: TabletSmartphone },
   { href: "/alumni-network", label: "AFF Global Alumni Network", icon: Trophy },
@@ -128,6 +133,7 @@ const dashboardLinks = [
   { href: "/assignments", label: "Assignments", icon: ClipboardCheck },
   { href: "/homework-center", label: "Homework Center", icon: FileUp },
   { href: "/live-classroom", label: "AFF Live Classroom", icon: Video },
+  { href: "/certifications", label: "Certification Center", icon: ShieldCheck },
   { href: "/exams", label: "Certification Exams", icon: ShieldCheck },
   { href: "/certificates", label: "Certificates", icon: Award }
 ];
@@ -143,7 +149,9 @@ const emptyDatasets: Record<DatasetKey, DbRow[]> = {
   messages: [],
   certificates: [],
   certifications: [],
+  digitalCertificates: [],
   exams: [],
+  certificationAttempts: [],
   degreeProgress: [],
   civicService: [],
   researchSubmissions: [],
@@ -296,7 +304,7 @@ export default function StudentDashboardPage() {
           ? safeMaybeSingle(supabase, "students", (table) =>
               supabase
                 .from(table)
-                .select("id, full_name, email, enrollment_date, certification_level, status, created_at")
+                .select("id, student_id, full_name, email, enrollment_date, certification_level, status, membership_plan, membership_status, created_at")
                 .eq("email", authEmail)
                 .order("created_at", { ascending: false })
                 .limit(1)
@@ -314,6 +322,7 @@ export default function StudentDashboardPage() {
 
       const resolvedProfile: StudentProfile = {
         id: value(profileRow ?? {}, ["id"], currentUser.id),
+        studentId: value(profileRow ?? {}, ["student_id"], currentUser.id),
         fullName: value(profileRow ?? {}, ["full_name", "name"], authName || authEmail || "Not recorded"),
         email: value(profileRow ?? {}, ["email"], authEmail || "Not recorded"),
         enrollmentDate: value(profileRow ?? {}, ["enrollment_date", "created_at"], ""),
@@ -326,12 +335,12 @@ export default function StudentDashboardPage() {
         membershipRow
           ? {
               membershipPlan: value(membershipRow, ["membership_plan"], "Not selected"),
-              membershipStatus: value(membershipRow, ["membership_status"], "Not enrolled"),
+              membershipStatus: value(membershipRow, ["membership_status"], value(profileRow ?? {}, ["membership_status"], "Not enrolled")),
               accountStatus: value(membershipRow, ["account_status"], "Not recorded")
             }
           : {
-              membershipPlan: "Not selected",
-              membershipStatus: "Not enrolled",
+              membershipPlan: value(profileRow ?? {}, ["membership_plan"], "Not selected"),
+              membershipStatus: value(profileRow ?? {}, ["membership_status"], "Not enrolled"),
               accountStatus: "Not recorded"
             }
       );
@@ -347,7 +356,9 @@ export default function StudentDashboardPage() {
         messages,
         certificates,
         certifications,
+        digitalCertificates,
         exams,
+        certificationAttempts,
         degreeProgress,
         civicService,
         researchSubmissions,
@@ -372,7 +383,9 @@ export default function StudentDashboardPage() {
         safeSelect(supabase, "student_messages", (table) => supabase.from(table).select("*").eq("recipient_id", currentUser.id).is("deleted_at", null).limit(100)),
         safeSelect(supabase, "certificates", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("issue_date", { ascending: false })),
         safeSelect(supabase, "certifications", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("issued_at", { ascending: false })),
+        safeSelect(supabase, "digital_certificates", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("issue_date", { ascending: false })),
         safeSelect(supabase, "exams", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("submitted_at", { ascending: false })),
+        safeSelect(supabase, "certification_exam_attempts", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("submitted_at", { ascending: false })),
         safeSelect(supabase, "student_degree_progress", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("updated_at", { ascending: false })),
         safeSelect(supabase, "civic_service_hours", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("service_date", { ascending: false })),
         safeSelect(supabase, "research_submissions", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("submitted_at", { ascending: false })),
@@ -444,7 +457,9 @@ export default function StudentDashboardPage() {
         messages,
         certificates,
         certifications,
+        digitalCertificates,
         exams,
+        certificationAttempts,
         degreeProgress,
         civicService,
         researchSubmissions,
@@ -475,8 +490,9 @@ export default function StudentDashboardPage() {
     const completedMissions = datasets.missions.filter((row) => value(row, ["mission_status"]).toLowerCase() === "completed").length;
     const currentStreak = datasets.streaks.length ? numberValue(datasets.streaks[0], ["current_streak"]) : 0;
     const longestStreak = datasets.streaks.length ? numberValue(datasets.streaks[0], ["longest_streak"]) : 0;
-    const passingExams = datasets.exams.filter((row) => value(row, ["result", "status"]).toLowerCase() === "pass" || numberValue(row, ["score"]) >= 80).length;
-    const issuedCredentials = datasets.certificates.length + datasets.certifications.length;
+    const allExamRows = [...datasets.exams, ...datasets.certificationAttempts];
+    const passingExams = allExamRows.filter((row) => value(row, ["result", "status", "pass_fail"]).toLowerCase() === "pass" || numberValue(row, ["score"]) >= 80).length;
+    const issuedCredentials = datasets.certificates.length + datasets.certifications.length + datasets.digitalCertificates.length;
     const certificationProgress = issuedCredentials > 0 ? 100 : percent(passingExams, 1);
     const degreeProgress = datasets.degreeProgress.length
       ? Math.round(datasets.degreeProgress.reduce((total, row) => total + numberValue(row, ["completion_percentage"]), 0) / datasets.degreeProgress.length)
@@ -505,12 +521,12 @@ export default function StudentDashboardPage() {
   }, [datasets]);
 
   const certificationStatus = useMemo(() => {
-    if (datasets.certificates.length > 0 || datasets.certifications.length > 0) return "Certified";
-    if (datasets.exams.some((row) => value(row, ["result", "status"]).toLowerCase() === "pass" || numberValue(row, ["score"]) >= 80)) {
+    if (datasets.certificates.length > 0 || datasets.certifications.length > 0 || datasets.digitalCertificates.length > 0) return "Certified";
+    if ([...datasets.exams, ...datasets.certificationAttempts].some((row) => value(row, ["result", "status", "pass_fail"]).toLowerCase() === "pass" || numberValue(row, ["score"]) >= 80)) {
       return "Exam Passed";
     }
     return studentProfile?.status && studentProfile.status !== "Not recorded" ? studentProfile.status : "In Progress";
-  }, [datasets.certificates, datasets.certifications, datasets.exams, studentProfile?.status]);
+  }, [datasets.certificates, datasets.certifications, datasets.digitalCertificates, datasets.exams, datasets.certificationAttempts, studentProfile?.status]);
 
   const membershipLevel = membershipProfile?.membershipPlan && membershipProfile.membershipPlan !== "Not selected"
     ? membershipProfile.membershipPlan
@@ -593,9 +609,10 @@ export default function StudentDashboardPage() {
             ) : (
               <div className="mt-6 grid gap-4">
                 <ProfileLine icon={<User size={18} />} label="Full Name" value={studentProfile?.fullName ?? studentName} />
-                <ProfileLine icon={<BadgeCheck size={18} />} label="Student ID" value={studentProfile?.id ?? user?.id ?? "Not recorded"} />
+                <ProfileLine icon={<BadgeCheck size={18} />} label="Student ID" value={studentProfile?.studentId ?? user?.id ?? "Not recorded"} />
                 <ProfileLine icon={<Mail size={18} />} label="Email" value={studentProfile?.email ?? user?.email ?? "Not recorded"} />
                 <ProfileLine icon={<CalendarDays size={18} />} label="Enrollment Date" value={shortDate(studentProfile?.enrollmentDate ?? "")} />
+                <ProfileLine icon={<BadgeCheck size={18} />} label="Enrollment Status" value={studentProfile?.status ?? "Pending Review"} />
                 <ProfileLine icon={<CreditCard size={18} />} label="Membership Level" value={membershipLevel} />
                 <ProfileLine icon={<ShieldCheck size={18} />} label="Certification Status" value={certificationStatus} />
                 <Link href="/messages" className="flex items-center justify-between border border-gold-500/25 px-4 py-3 text-sm font-semibold text-gold-300">
@@ -666,7 +683,7 @@ export default function StudentDashboardPage() {
             </section>
 
             <section className="grid gap-6 xl:grid-cols-3">
-              <ProgressPanel title="Certification Tracker" icon={<ShieldCheck size={20} />} value={metrics.certificationProgress} detail={`${datasets.exams.length} exam attempts, ${datasets.certificates.length + datasets.certifications.length} credentials`} href="/certificates" />
+              <ProgressPanel title="Certification Tracker" icon={<ShieldCheck size={20} />} value={metrics.certificationProgress} detail={`${datasets.exams.length + datasets.certificationAttempts.length} exam attempts, ${datasets.certificates.length + datasets.certifications.length + datasets.digitalCertificates.length} credentials`} href="/certifications" />
               <ProgressPanel title="Degree Progress" icon={<GraduationCap size={20} />} value={metrics.degreeProgress} detail={`${datasets.degreeProgress.length} university progress records`} href="/university" />
               <ProgressPanel title="Scholarship Eligibility" icon={<Sparkles size={20} />} value={metrics.scholarshipScore} detail="Calculated from certification, degree, service, and research activity" href="/endowment-fund" />
               <ProgressPanel title="Research Contribution" icon={<BookOpenText size={20} />} value={Math.min(100, metrics.researchCount * 25)} detail={`${metrics.researchCount} research submissions`} href="/research-institute" />

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Award, ClipboardCheck, ExternalLink, FileCheck, FileX, Megaphone, Save, ShieldCheck, Trash2, Users } from "lucide-react";
+import { Award, ClipboardCheck, CreditCard, ExternalLink, FileCheck, FileX, Megaphone, Save, Search, Send, ShieldCheck, Trash2, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
@@ -18,10 +18,31 @@ type DbRow = Record<string, unknown>;
 
 type Student = {
   id: string;
+  authUserId: string;
+  studentId: string;
   name: string;
   email: string;
   enrollmentDate: string;
   certificationLevel: string;
+  membershipPlan: string;
+  membershipStatus: string;
+  status: string;
+  profilePhotoUrl: string;
+};
+
+type StudentApplication = {
+  id: string;
+  authUserId: string;
+  studentId: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  country: string;
+  programInterest: string;
+  membershipPlan: string;
+  goalStatement: string;
+  applicationStatus: string;
+  createdAt: string;
 };
 
 type Assignment = {
@@ -114,13 +135,30 @@ export default function AdminPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [announcementForm, setAnnouncementForm] = useState(initialAnnouncement);
   const [assignmentReviews, setAssignmentReviews] = useState<Record<string, { status: string; grade: string; instructorFeedback: string }>>({});
+  const [studentSearch, setStudentSearch] = useState("");
+  const [membershipDrafts, setMembershipDrafts] = useState<Record<string, string>>({});
+  const [messageDrafts, setMessageDrafts] = useState<Record<string, string>>({});
+  const [applications, setApplications] = useState<StudentApplication[]>([]);
+  const [mentorDrafts, setMentorDrafts] = useState<Record<string, string>>({});
 
   const studentMap = useMemo(() => {
     return new Map(students.map((student) => [student.id, student]));
   }, [students]);
 
+  const filteredStudents = useMemo(() => {
+    const term = studentSearch.trim().toLowerCase();
+    if (!term) return students;
+    return students.filter((student) =>
+      [student.name, student.email, student.studentId, student.certificationLevel, student.membershipPlan, student.membershipStatus, student.status]
+        .join(" ")
+        .toLowerCase()
+        .includes(term)
+    );
+  }, [studentSearch, students]);
+
   const cards = [
     { label: "Total Students", value: students.length, icon: Users },
+    { label: "Pending Applicants", value: applications.filter((application) => application.applicationStatus === "Pending Review").length, icon: ClipboardCheck },
     { label: "Total Assignments Submitted", value: assignments.length, icon: ClipboardCheck },
     { label: "Total Exam Attempts", value: exams.length, icon: ShieldCheck },
     { label: "Total Certificates Issued", value: certificates.length, icon: Award }
@@ -158,11 +196,38 @@ export default function AdminPage() {
   function normalizeStudent(row: DbRow): Student {
     return {
       id: value(row, ["id", "student_id"]),
+      authUserId: value(row, ["auth_user_id"]),
+      studentId: value(row, ["student_id"], value(row, ["id"], "Pending")),
       name: value(row, ["name", "full_name", "student_name"], "Student"),
       email: value(row, ["email", "student_email"], "Not recorded"),
       enrollmentDate: normalizeDate(value(row, ["enrollment_date", "created_at", "date_enrolled"])),
-      certificationLevel: value(row, ["certification_level", "level", "course_name"], "Academy for Financial Future")
+      certificationLevel: value(row, ["certification_level", "level", "course_name"], "Academy for Financial Future"),
+      membershipPlan: value(row, ["membership_plan"], "Free Trial"),
+      membershipStatus: value(row, ["membership_status"], "Active"),
+      status: value(row, ["status"], "Active"),
+      profilePhotoUrl: value(row, ["profile_photo_url"])
     };
+  }
+
+  function normalizeApplication(row: DbRow): StudentApplication {
+    return {
+      id: value(row, ["id"], crypto.randomUUID()),
+      authUserId: value(row, ["auth_user_id"]),
+      studentId: value(row, ["student_id"], "Pending"),
+      fullName: value(row, ["full_name"], "Applicant"),
+      email: value(row, ["email"]),
+      phone: value(row, ["phone"]),
+      country: value(row, ["country"]),
+      programInterest: value(row, ["program_interest"], "Academy for Financial Future"),
+      membershipPlan: value(row, ["membership_plan"], "Free Trial"),
+      goalStatement: value(row, ["goal_statement"]),
+      applicationStatus: value(row, ["application_status"], "Pending Review"),
+      createdAt: normalizeDate(value(row, ["created_at"]))
+    };
+  }
+
+  function findStudentByApplication(application: StudentApplication) {
+    return students.find((student) => student.authUserId === application.authUserId || student.email.toLowerCase() === application.email.toLowerCase());
   }
 
   function normalizeAssignment(row: DbRow): Assignment {
@@ -258,19 +323,21 @@ export default function AdminPage() {
 
       setAuthorized(true);
 
-      const [studentsResult, assignmentsResult, examsResult, certificatesResult, announcementsResult] = await Promise.all([
+      const [studentsResult, applicationsResult, assignmentsResult, examsResult, certificatesResult, announcementsResult] = await Promise.all([
         supabase.from("students").select("*"),
+        supabase.from("student_applications").select("*").order("created_at", { ascending: false }),
         supabase.from("assignments").select("*"),
         supabase.from("exams").select("*"),
         supabase.from("certificates").select("*"),
         supabase.from("announcements").select("*").order("published_at", { ascending: false })
       ]);
 
-      for (const result of [studentsResult, assignmentsResult, examsResult, certificatesResult, announcementsResult]) {
+      for (const result of [studentsResult, applicationsResult, assignmentsResult, examsResult, certificatesResult, announcementsResult]) {
         if (result.error) throw result.error;
       }
 
       const normalizedStudents = ((studentsResult.data ?? []) as DbRow[]).map(normalizeStudent);
+      const normalizedApplications = ((applicationsResult.data ?? []) as DbRow[]).map(normalizeApplication);
       const normalizedAssignments = ((assignmentsResult.data ?? []) as DbRow[])
         .map(normalizeAssignment)
         .sort((a, b) => new Date(b.submissionDate).getTime() - new Date(a.submissionDate).getTime());
@@ -282,6 +349,10 @@ export default function AdminPage() {
         .sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime());
 
       setStudents(normalizedStudents);
+      setApplications(normalizedApplications);
+      setMembershipDrafts(Object.fromEntries(normalizedStudents.map((student) => [student.id, student.membershipPlan])));
+      setMessageDrafts(Object.fromEntries(normalizedStudents.map((student) => [student.id, ""])));
+      setMentorDrafts(Object.fromEntries(normalizedApplications.map((application) => [application.id, "Dr. Jean Rene Moricette"])));
       setAssignments(normalizedAssignments);
       setAssignmentReviews(Object.fromEntries(normalizedAssignments.map((assignment) => [
         assignment.id,
@@ -387,6 +458,227 @@ export default function AdminPage() {
     }
   }
 
+  async function updateStudentStatus(student: Student, nextStatus: string) {
+    setMessage(`Updating ${student.name}...`);
+
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("students")
+        .update({
+          status: nextStatus,
+          membership_status: nextStatus === "Suspended" ? "Suspended" : student.membershipStatus === "Suspended" ? "Active" : student.membershipStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", student.id)
+        .select("*")
+        .single();
+
+      if (error) throw error;
+
+      await supabase.from("student_profiles").update({
+        enrollment_status: nextStatus,
+        certification_status: nextStatus === "Graduated" ? "Graduated" : nextStatus,
+        updated_at: new Date().toISOString()
+      }).eq("auth_user_id", student.authUserId);
+
+      await supabase.from("student_status_history").insert({
+        auth_user_id: student.authUserId || null,
+        student_id: student.studentId,
+        previous_status: student.status,
+        new_status: nextStatus,
+        changed_by: adminEmail,
+        note: `Admin changed student status to ${nextStatus}.`
+      });
+
+      if (student.authUserId) {
+        await supabase
+          .from("student_memberships")
+          .update({
+            account_status: nextStatus === "Suspended" ? "Restricted" : "Active",
+            updated_at: new Date().toISOString()
+          })
+          .eq("student_id", student.authUserId);
+      }
+
+      setStudents((current) => current.map((item) => (item.id === student.id ? normalizeStudent(data as DbRow) : item)));
+      setMessage(`Student ${nextStatus.toLowerCase()} status saved.`);
+    } catch (error) {
+      setMessage(getErrorMessage(error, "Unable to update student status."));
+    }
+  }
+
+  async function reviewApplication(application: StudentApplication, nextStatus: "Approved" | "Rejected" | "Suspended") {
+    setMessage(`Saving ${nextStatus.toLowerCase()} review for ${application.fullName}...`);
+
+    try {
+      const supabase = createClient();
+      const reviewedAt = new Date().toISOString();
+      const student = findStudentByApplication(application);
+      const welcomeBody = "Welcome to Academy for Financial Future.";
+      const mentorName = mentorDrafts[application.id]?.trim() || "Dr. Jean Rene Moricette";
+
+      const [applicationResult, studentResult, profileResult, membershipResult, historyResult] = await Promise.all([
+        supabase.from("student_applications").update({
+          application_status: nextStatus,
+          reviewed_by: adminEmail,
+          reviewed_at: reviewedAt,
+          review_notes: nextStatus === "Approved" ? welcomeBody : `Application marked ${nextStatus}.`,
+          updated_at: reviewedAt
+        }).eq("id", application.id).select("*").single(),
+        student
+          ? supabase.from("students").update({
+              status: nextStatus === "Approved" ? "Active" : nextStatus,
+              membership_status: nextStatus === "Approved" ? "Active" : nextStatus,
+              updated_at: reviewedAt
+            }).eq("id", student.id).select("*").single()
+          : Promise.resolve({ data: null, error: null }),
+        application.authUserId
+          ? supabase.from("student_profiles").upsert({
+              auth_user_id: application.authUserId,
+              student_id: application.studentId,
+              full_name: application.fullName,
+              email: application.email,
+              phone: application.phone,
+              country: application.country,
+              program_interest: application.programInterest,
+              membership_level: application.membershipPlan,
+              certification_status: nextStatus === "Approved" ? "Active" : nextStatus,
+              enrollment_status: nextStatus === "Approved" ? "Active" : nextStatus,
+              updated_at: reviewedAt
+            }, { onConflict: "auth_user_id" }).select("*").single()
+          : Promise.resolve({ data: null, error: null }),
+        application.authUserId
+          ? supabase.from("student_memberships").upsert({
+              student_id: application.authUserId,
+              student_email: application.email,
+              membership_plan: application.membershipPlan,
+              membership_status: nextStatus === "Approved" ? application.membershipPlan : nextStatus,
+              account_status: nextStatus === "Approved" ? "Active" : "Restricted",
+              updated_at: reviewedAt
+            }, { onConflict: "student_id" })
+          : Promise.resolve({ data: null, error: null }),
+        supabase.from("student_status_history").insert({
+          auth_user_id: application.authUserId || null,
+          student_id: application.studentId,
+          previous_status: application.applicationStatus,
+          new_status: nextStatus === "Approved" ? "Active" : nextStatus,
+          changed_by: adminEmail,
+          note: nextStatus === "Approved" ? welcomeBody : `Application review: ${nextStatus}.`
+        })
+      ]);
+
+      for (const result of [applicationResult, studentResult, profileResult, membershipResult, historyResult]) {
+        if (result.error) throw result.error;
+      }
+
+      if (nextStatus === "Approved" && application.authUserId) {
+        await Promise.all([
+          supabase.from("student_mentor_assignments").insert({
+            auth_user_id: application.authUserId,
+            student_id: application.studentId,
+            mentor_name: mentorName,
+            mentor_email: adminEmail,
+            assigned_by: adminEmail
+          }),
+          supabase.from("student_messages").insert({
+            recipient_id: application.authUserId,
+            recipient_name: application.fullName,
+            recipient_email: application.email,
+            sender_name: "Dr. Jean Rene Moricette",
+            sender_email: adminEmail,
+            category: "Direct Message",
+            priority: "Important",
+            title: "Welcome to Academy for Financial Future",
+            body: welcomeBody,
+            action_url: "/student-dashboard"
+          })
+        ]);
+      }
+
+      setApplications((current) => current.map((item) => (item.id === application.id ? normalizeApplication(applicationResult.data as DbRow) : item)));
+      if (studentResult.data) {
+        setStudents((current) => current.map((item) => (item.id === student?.id ? normalizeStudent(studentResult.data as DbRow) : item)));
+      }
+      setMessage(nextStatus === "Approved" ? welcomeBody : `Application ${nextStatus.toLowerCase()}.`);
+    } catch (error) {
+      setMessage(getErrorMessage(error, "Unable to review application."));
+    }
+  }
+
+  async function upgradeMembership(student: Student) {
+    const nextPlan = membershipDrafts[student.id] ?? student.membershipPlan;
+    setMessage(`Updating membership for ${student.name}...`);
+
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("students")
+        .update({
+          membership_plan: nextPlan,
+          membership_status: nextPlan === "Free Trial" ? "Free Trial" : "Active",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", student.id)
+        .select("*")
+        .single();
+
+      if (error) throw error;
+
+      if (student.authUserId) {
+        await supabase.from("student_memberships").upsert({
+          student_id: student.authUserId,
+          student_email: student.email,
+          membership_plan: nextPlan,
+          membership_status: nextPlan,
+          account_status: nextPlan === "Free Trial" ? "Trial" : "Active",
+          updated_at: new Date().toISOString()
+        }, { onConflict: "student_id" });
+      }
+
+      setStudents((current) => current.map((item) => (item.id === student.id ? normalizeStudent(data as DbRow) : item)));
+      setMessage("Membership updated.");
+    } catch (error) {
+      setMessage(getErrorMessage(error, "Unable to update membership."));
+    }
+  }
+
+  async function sendStudentMessage(student: Student) {
+    const body = messageDrafts[student.id]?.trim();
+    if (!body) {
+      setMessage("Enter a message before sending.");
+      return;
+    }
+
+    if (!student.authUserId) {
+      setMessage("This student is missing an auth user ID. Ask the student to log in once or update the profile manually.");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from("student_messages").insert({
+        recipient_id: student.authUserId,
+        recipient_name: student.name,
+        recipient_email: student.email,
+        sender_name: "Dr. Jean Rene Moricette",
+        sender_email: adminEmail,
+        category: "Direct Message",
+        priority: "Important",
+        title: "Message from AFF Administration",
+        body,
+        action_url: "/messages"
+      });
+
+      if (error) throw error;
+
+      setMessageDrafts((current) => ({ ...current, [student.id]: "" }));
+      setMessage("Student message sent.");
+    } catch (error) {
+      setMessage(getErrorMessage(error, "Unable to send student message."));
+    }
+  }
+
   async function deleteAnnouncement(id: string) {
     setMessage("Deleting announcement...");
 
@@ -425,7 +717,16 @@ export default function AdminPage() {
                 <ExternalLink className="text-gold-300" size={24} />
               </Link>
 
-              <div className="grid gap-4 md:grid-cols-4">
+              <Link href="/certifications" className="terminal-panel flex flex-col gap-3 p-5 transition hover:border-gold-400/60 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[.22em] text-gold-300">Admin Certification Center</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">Manage exams, questions, certificates, and grading queue</h2>
+                  <p className="mt-2 text-sm text-ink/68">Open the AFF Certification and Examination Center to review essays, chart analysis responses, automatic scores, pass/fail status, and digital certificate issuance.</p>
+                </div>
+                <ShieldCheck className="text-gold-300" size={24} />
+              </Link>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                 {cards.map((card) => (
                   <div key={card.label} className="terminal-panel p-5">
                     <card.icon className="text-gold-300" size={22} />
@@ -435,16 +736,157 @@ export default function AdminPage() {
                 ))}
               </div>
 
-              <AdminTable title="Students" headers={["Name", "Email", "Enrollment Date", "Certification Level"]}>
-                {students.map((student) => (
-                  <TableRow key={student.id} cells={[
-                    student.name,
-                    student.email,
-                    new Date(student.enrollmentDate).toLocaleDateString(),
-                    student.certificationLevel
-                  ]} />
-                ))}
-              </AdminTable>
+              <section className="terminal-panel overflow-hidden">
+                <div className="border-b border-gold-500/20 p-5">
+                  <h2 className="text-xl font-semibold text-white">Admin Enrollment Review</h2>
+                  <p className="mt-2 text-sm text-ink/68">Review new applicants, approve or reject enrollment, assign mentors, suspend access, and send the welcome message.</p>
+                </div>
+                {applications.length === 0 ? (
+                  <p className="p-5 text-ink/68">No enrollment applications found.</p>
+                ) : (
+                  <div className="grid gap-px bg-gold-500/16">
+                    {applications.map((application) => (
+                      <article key={application.id} className="bg-navy-950 p-5">
+                        <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
+                          <div>
+                            <p className="text-xs uppercase tracking-[.2em] text-gold-300">{application.applicationStatus}</p>
+                            <h3 className="mt-2 text-xl font-semibold text-white">{application.fullName}</h3>
+                            <p className="mt-2 text-sm text-ink/64">{application.email} - {application.phone} - {application.country}</p>
+                            <div className="mt-4 grid gap-3 md:grid-cols-3">
+                              <Metric label="Student ID" value={application.studentId} />
+                              <Metric label="Program" value={application.programInterest} />
+                              <Metric label="Membership" value={application.membershipPlan} />
+                            </div>
+                            {application.goalStatement ? <p className="mt-4 leading-7 text-ink/74">{application.goalStatement}</p> : null}
+                          </div>
+                          <div className="grid gap-3">
+                            <label className="grid gap-2 text-sm text-ink/74">
+                              Mentor assignment
+                              <input
+                                className="border border-gold-500/24 bg-navy-900 px-4 py-3 text-white outline-none focus:border-gold-400"
+                                value={mentorDrafts[application.id] ?? ""}
+                                onChange={(event) => setMentorDrafts((current) => ({ ...current, [application.id]: event.target.value }))}
+                              />
+                            </label>
+                            <div className="grid gap-2 sm:grid-cols-3">
+                              <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-3 py-3 text-xs font-bold text-navy-950" type="button" onClick={() => reviewApplication(application, "Approved")}>
+                                <FileCheck size={15} /> Approve
+                              </button>
+                              <button className="inline-flex items-center justify-center gap-2 border border-red-300/45 px-3 py-3 text-xs font-semibold text-red-200" type="button" onClick={() => reviewApplication(application, "Rejected")}>
+                                <FileX size={15} /> Reject
+                              </button>
+                              <button className="inline-flex items-center justify-center gap-2 border border-gold-500/35 px-3 py-3 text-xs font-semibold text-gold-300" type="button" onClick={() => reviewApplication(application, "Suspended")}>
+                                Suspend
+                              </button>
+                            </div>
+                            <div className="border border-gold-500/18 bg-navy-900 p-4">
+                              <p className="text-xs uppercase tracking-[.18em] text-gold-300">Email-ready welcome message</p>
+                              <p className="mt-2 text-sm font-semibold text-white">Welcome to Academy for Financial Future.</p>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="terminal-panel overflow-hidden">
+                <div className="border-b border-gold-500/20 p-5">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                    <div>
+                      <h2 className="text-xl font-semibold text-white">Admin Student Management Panel</h2>
+                      <p className="mt-2 text-sm text-ink/68">View students, search records, suspend access, upgrade memberships, review progress, and send direct messages.</p>
+                    </div>
+                    <label className="flex min-w-0 items-center gap-2 border border-gold-500/24 bg-navy-950 px-4 py-3 text-ink xl:w-96">
+                      <Search className="shrink-0 text-gold-300" size={18} />
+                      <input className="min-w-0 flex-1 bg-transparent text-white outline-none" placeholder="Search students..." value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} />
+                    </label>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1180px] border-separate border-spacing-y-1 text-sm">
+                    <thead>
+                      <tr className="bg-navy-800 text-left text-xs uppercase tracking-[.16em] text-gold-300">
+                        <th className="p-4">Student</th>
+                        <th className="p-4">Enrollment</th>
+                        <th className="p-4">Membership</th>
+                        <th className="p-4">Progress</th>
+                        <th className="p-4">Actions</th>
+                        <th className="p-4">Message</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredStudents.map((student) => {
+                        const studentAssignments = assignments.filter((assignment) => assignment.studentId === student.authUserId || assignment.studentId === student.id).length;
+                        const studentExams = exams.filter((exam) => exam.studentId === student.authUserId || exam.studentId === student.id).length;
+                        const studentCertificates = certificates.filter((certificate) => certificate.studentId === student.authUserId || certificate.studentId === student.id).length;
+
+                        return (
+                          <tr key={student.id} className="bg-navy-950 align-top">
+                            <td className="p-4">
+                              <p className="font-semibold text-white">{student.name}</p>
+                              <p className="mt-1 text-xs text-gold-300">{student.studentId}</p>
+                              <p className="mt-1 text-xs text-ink/58">{student.email}</p>
+                            </td>
+                            <td className="p-4 text-ink/76">
+                              <p>{new Date(student.enrollmentDate).toLocaleDateString()}</p>
+                              <p className="mt-1 text-xs text-ink/58">{student.certificationLevel}</p>
+                              <p className="mt-2 inline-flex border border-gold-500/25 px-2 py-1 text-xs text-gold-300">{student.status}</p>
+                            </td>
+                            <td className="p-4">
+                              <div className="grid gap-2">
+                                <select
+                                  className="border border-gold-500/24 bg-navy-900 px-3 py-2 text-ink outline-none"
+                                  value={membershipDrafts[student.id] ?? student.membershipPlan}
+                                  onChange={(event) => setMembershipDrafts((current) => ({ ...current, [student.id]: event.target.value }))}
+                                >
+                                  <option>Free Trial</option>
+                                  <option>Monthly Membership</option>
+                                  <option>Annual Membership</option>
+                                  <option>Premium Mentorship</option>
+                                  <option>Certification Fee</option>
+                                </select>
+                                <p className="text-xs text-ink/58">{student.membershipStatus}</p>
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <div className="grid gap-2 text-xs text-ink/76">
+                                <span>{studentAssignments} assignments</span>
+                                <span>{studentExams} exam attempts</span>
+                                <span>{studentCertificates} certificates</span>
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <div className="grid gap-2">
+                                <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-3 py-2 text-xs font-bold text-navy-950" type="button" onClick={() => upgradeMembership(student)}>
+                                  <CreditCard size={14} /> Upgrade
+                                </button>
+                                <button className="border border-gold-500/35 px-3 py-2 text-xs font-semibold text-gold-300" type="button" onClick={() => updateStudentStatus(student, student.status === "Suspended" ? "Active" : "Suspended")}>
+                                  {student.status === "Suspended" ? "Reactivate" : "Suspend"}
+                                </button>
+                              </div>
+                            </td>
+                            <td className="min-w-[280px] p-4">
+                              <div className="grid gap-2">
+                                <textarea
+                                  className="min-h-20 border border-gold-500/24 bg-navy-900 px-3 py-2 text-ink outline-none"
+                                  placeholder="Send direct message..."
+                                  value={messageDrafts[student.id] ?? ""}
+                                  onChange={(event) => setMessageDrafts((current) => ({ ...current, [student.id]: event.target.value }))}
+                                />
+                                <button className="inline-flex items-center justify-center gap-2 border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300" type="button" onClick={() => sendStudentMessage(student)}>
+                                  <Send size={14} /> Send
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
 
               <section className="terminal-panel p-5">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

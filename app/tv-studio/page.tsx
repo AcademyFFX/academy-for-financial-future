@@ -32,15 +32,31 @@ type Subscription = {
 };
 
 type Channel = {
+  id?: string;
   name: string;
   category: string;
   description: string;
   artwork: string;
+  artworkUrl?: string | null;
   href: string;
   featured: boolean;
+  displayOrder?: number;
 };
 
-const channelDirectory: Channel[] = [
+type TVChannelRow = {
+  id: string | number;
+  channel_name: string;
+  category: string | null;
+  description: string | null;
+  artwork_label: string | null;
+  artwork_url: string | null;
+  href: string | null;
+  is_featured: boolean | null;
+  display_order: number | null;
+  status: string | null;
+};
+
+const fallbackChannelDirectory: Channel[] = [
   {
     name: "AFF TV Studio",
     category: "All",
@@ -75,6 +91,20 @@ const channelDirectory: Channel[] = [
   }
 ];
 
+function mapTVChannel(row: TVChannelRow): Channel {
+  return {
+    id: String(row.id),
+    name: row.channel_name,
+    category: row.category ?? row.channel_name,
+    description: row.description ?? "AFF broadcast channel.",
+    artwork: row.artwork_label ?? row.channel_name.slice(0, 4).toUpperCase(),
+    artworkUrl: row.artwork_url,
+    href: row.href ?? "/tv-studio",
+    featured: row.is_featured ?? false,
+    displayOrder: row.display_order ?? 0
+  };
+}
+
 const showCategories = [
   "All",
   "Live Broadcast",
@@ -104,6 +134,7 @@ export default function TVStudioPage() {
   const [loading, setLoading] = useState(true);
   const [recordedViews, setRecordedViews] = useState<string[]>([]);
   const [viewershipEvents, setViewershipEvents] = useState<Record<string, number>>({});
+  const [channels, setChannels] = useState<Channel[]>(fallbackChannelDirectory);
 
   const liveShows = useMemo(() => broadcasts.filter((show) => show.status === "Live"), [broadcasts]);
   const upcomingShows = useMemo(() => broadcasts.filter((show) => show.status === "Scheduled"), [broadcasts]);
@@ -112,9 +143,9 @@ export default function TVStudioPage() {
     return activeCategory === "All" ? broadcasts : broadcasts.filter((show) => show.category === activeCategory);
   }, [activeCategory, broadcasts]);
   const subscribedChannels = useMemo(() => new Set(subscriptions.map((subscription) => subscription.channel_name)), [subscriptions]);
-  const featuredChannels = useMemo(() => channelDirectory.filter((channel) => channel.featured), []);
+  const featuredChannels = useMemo(() => channels.filter((channel) => channel.featured), [channels]);
   const channelAnalytics = useMemo(() => {
-    return channelDirectory.map((channel) => {
+    return channels.map((channel) => {
       const shows = channel.category === "All" ? broadcasts : broadcasts.filter((show) => show.category === channel.category || show.show_name === channel.name);
       const views = shows.reduce((total, show) => total + (viewershipEvents[show.id] ?? 0), 0);
       const subscribers = subscriptions.filter((subscription) => subscription.channel_name === channel.name || shows.some((show) => show.show_name === subscription.channel_name)).length;
@@ -126,7 +157,7 @@ export default function TVStudioPage() {
         scheduled: shows.filter((show) => show.status === "Scheduled").length
       };
     });
-  }, [broadcasts, subscriptions, viewershipEvents]);
+  }, [broadcasts, channels, subscriptions, viewershipEvents]);
 
   const loadStudio = useCallback(async () => {
     try {
@@ -142,10 +173,11 @@ export default function TVStudioPage() {
 
       setStudentId(user.id);
 
-      const [broadcastsResult, subscriptionsResult, viewershipResult] = await Promise.all([
+      const [broadcastsResult, subscriptionsResult, viewershipResult, channelsResult] = await Promise.all([
         supabase.from("tv_broadcasts").select("*").in("status", ["Live", "Scheduled", "Replay", "Published"]).order("scheduled_at", { ascending: true }),
         supabase.from("tv_subscriptions").select("*").eq("student_id", user.id),
-        supabase.from("tv_viewership_events").select("broadcast_id,event_type")
+        supabase.from("tv_viewership_events").select("broadcast_id,event_type"),
+        supabase.from("tv_channels").select("*").eq("status", "Active").order("display_order", { ascending: true })
       ]);
 
       if (broadcastsResult.error) throw broadcastsResult.error;
@@ -154,6 +186,11 @@ export default function TVStudioPage() {
       const loadedBroadcasts = (broadcastsResult.data ?? []) as Broadcast[];
       setBroadcasts(loadedBroadcasts);
       setSubscriptions((subscriptionsResult.data ?? []) as Subscription[]);
+      if (!channelsResult.error && channelsResult.data && channelsResult.data.length > 0) {
+        setChannels((channelsResult.data as TVChannelRow[]).map(mapTVChannel));
+      } else {
+        setChannels(fallbackChannelDirectory);
+      }
       if (!viewershipResult.error) {
         const counts = ((viewershipResult.data ?? []) as { broadcast_id: number | string | null }[]).reduce<Record<string, number>>((accumulator, event) => {
           if (event.broadcast_id === null || event.broadcast_id === undefined) return accumulator;
@@ -301,7 +338,7 @@ export default function TVStudioPage() {
               <section className="terminal-panel p-5">
                 <h2 className="text-xl font-semibold text-white">Channels</h2>
                 <div className="mt-4 grid gap-2">
-                  {channelDirectory.map((channel) => (
+                  {channels.map((channel) => (
                     <button
                       key={channel.name}
                       className={`border px-3 py-2 text-left text-sm ${activeCategory === channel.category ? "border-gold-500 bg-gold-500 text-navy-950" : "border-gold-500/24 bg-navy-950 text-ink/76"}`}
@@ -312,7 +349,7 @@ export default function TVStudioPage() {
                     </button>
                   ))}
                   <div className="my-2 border-t border-gold-500/18" />
-                  {showCategories.filter((category) => !channelDirectory.some((channel) => channel.category === category)).map((category) => (
+                  {showCategories.filter((category) => !channels.some((channel) => channel.category === category)).map((category) => (
                     <button
                       key={category}
                       className={`border px-3 py-2 text-left text-sm ${activeCategory === category ? "border-gold-500 bg-gold-500 text-navy-950" : "border-gold-500/24 bg-navy-950 text-ink/76"}`}
@@ -420,9 +457,18 @@ function ChannelCard({
   return (
     <article className={`bg-navy-950 p-5 ${active ? "ring-1 ring-gold-400" : ""}`}>
       <div className="flex items-start justify-between gap-3">
-        <div className="grid h-16 w-16 place-items-center border border-gold-500/35 bg-navy-900 text-center text-xs font-black tracking-[.12em] text-gold-300">
-          {channel.artwork}
-        </div>
+        {channel.artworkUrl ? (
+          <div
+            aria-label={`${channel.name} artwork`}
+            className="h-16 w-16 border border-gold-500/35 bg-cover bg-center"
+            role="img"
+            style={{ backgroundImage: `url(${channel.artworkUrl})` }}
+          />
+        ) : (
+          <div className="grid h-16 w-16 place-items-center border border-gold-500/35 bg-navy-900 text-center text-xs font-black tracking-[.12em] text-gold-300">
+            {channel.artwork}
+          </div>
+        )}
         {channel.name === "Eyes on Society TV" ? <Eye className="text-gold-300" size={22} /> : <Tv className="text-gold-300" size={22} />}
       </div>
       <p className="mt-4 text-xs uppercase tracking-[.2em] text-gold-300">{channel.category === "All" ? "Network Home" : channel.category}</p>

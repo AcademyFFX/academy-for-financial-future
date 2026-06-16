@@ -41,6 +41,23 @@ body {
   background: linear-gradient(90deg, transparent, rgba(212, 175, 55, .7), transparent);
 }
 
+.field {
+  border: 1px solid rgba(212, 175, 55, .24);
+  background: #07142d;
+  color: #fff;
+  padding: .75rem 1rem;
+  outline: none;
+  width: 100%;
+}
+
+.field:focus {
+  border-color: rgba(212, 175, 55, .86);
+}
+
+.field::placeholder {
+  color: rgba(247, 243, 235, .46);
+}
+
 .logo-section {
   flex-shrink: 0;
 }

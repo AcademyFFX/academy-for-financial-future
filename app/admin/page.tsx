@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Award, Bot, ClipboardCheck, CreditCard, ExternalLink, FileCheck, FileX, GraduationCap, Megaphone, Save, Search, Send, ShieldCheck, Trash2, Users } from "lucide-react";
+import { Award, Bot, ClipboardCheck, CreditCard, ExternalLink, FileCheck, FileX, GraduationCap, Megaphone, Save, Search, Send, ShieldCheck, TabletSmartphone, Trash2, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
@@ -742,6 +742,15 @@ export default function AdminPage() {
                   <p className="mt-2 text-sm text-ink/68">Open the AI Center to monitor student learning insights, weakness analysis, progress predictions, and admin analytics.</p>
                 </div>
                 <Bot className="text-gold-300" size={24} />
+              </Link>
+
+              <Link href="/mobile-app" className="terminal-panel flex flex-col gap-3 p-5 transition hover:border-gold-400/60 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[.22em] text-gold-300">Mobile Super App Platform</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">Manage mobile wallet, notifications, downloads, and app sessions</h2>
+                  <p className="mt-2 text-sm text-ink/68">Open the mobile platform to send push-style alerts, review devices, monitor sessions, and support offline learning access.</p>
+                </div>
+                <TabletSmartphone className="text-gold-300" size={24} />
               </Link>
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">

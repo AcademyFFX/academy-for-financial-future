@@ -44,6 +44,7 @@ const categories = [
   "Market Outlook Show",
   "Community Awareness TV",
   "Destiny Alignment TV",
+  "Eyes on Society TV",
   "Educational VOD"
 ];
 

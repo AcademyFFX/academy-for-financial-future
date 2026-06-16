@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, CalendarDays, Clapperboard, PlayCircle, Radio, Star, Tv, Video } from "lucide-react";
+import { BarChart3, Bell, CalendarDays, Clapperboard, Eye, PlayCircle, Radio, Star, Tv, Video } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -30,6 +31,50 @@ type Subscription = {
   channel_name: string;
 };
 
+type Channel = {
+  name: string;
+  category: string;
+  description: string;
+  artwork: string;
+  href: string;
+  featured: boolean;
+};
+
+const channelDirectory: Channel[] = [
+  {
+    name: "AFF TV Studio",
+    category: "All",
+    description: "Live streaming, program scheduling, on-demand episodes, masterclasses, hosts, guests, and replay archives.",
+    artwork: "AFF",
+    href: "/tv-studio",
+    featured: true
+  },
+  {
+    name: "Community Awareness TV",
+    category: "Community Awareness TV",
+    description: "Community Awareness, Public Affairs, Leadership Series, and Civic Dialogue programming.",
+    artwork: "CATV",
+    href: "/tv-studio",
+    featured: true
+  },
+  {
+    name: "Destiny Alignment TV",
+    category: "Destiny Alignment TV",
+    description: "Destiny Alignment, Faith & Purpose, and Leadership Development programming.",
+    artwork: "DATV",
+    href: "/tv-studio",
+    featured: true
+  },
+  {
+    name: "Eyes on Society TV",
+    category: "Eyes on Society TV",
+    description: "Exploring the issues, ideas, challenges, and opportunities shaping modern society.",
+    artwork: "EOSTV",
+    href: "/broadcast-network/eyes-on-society",
+    featured: true
+  }
+];
+
 const showCategories = [
   "All",
   "Live Broadcast",
@@ -38,6 +83,7 @@ const showCategories = [
   "Market Outlook Show",
   "Community Awareness TV",
   "Destiny Alignment TV",
+  "Eyes on Society TV",
   "Educational VOD"
 ];
 
@@ -57,6 +103,7 @@ export default function TVStudioPage() {
   const [message, setMessage] = useState("Loading AFF TV Studio...");
   const [loading, setLoading] = useState(true);
   const [recordedViews, setRecordedViews] = useState<string[]>([]);
+  const [viewershipEvents, setViewershipEvents] = useState<Record<string, number>>({});
 
   const liveShows = useMemo(() => broadcasts.filter((show) => show.status === "Live"), [broadcasts]);
   const upcomingShows = useMemo(() => broadcasts.filter((show) => show.status === "Scheduled"), [broadcasts]);
@@ -65,6 +112,21 @@ export default function TVStudioPage() {
     return activeCategory === "All" ? broadcasts : broadcasts.filter((show) => show.category === activeCategory);
   }, [activeCategory, broadcasts]);
   const subscribedChannels = useMemo(() => new Set(subscriptions.map((subscription) => subscription.channel_name)), [subscriptions]);
+  const featuredChannels = useMemo(() => channelDirectory.filter((channel) => channel.featured), []);
+  const channelAnalytics = useMemo(() => {
+    return channelDirectory.map((channel) => {
+      const shows = channel.category === "All" ? broadcasts : broadcasts.filter((show) => show.category === channel.category || show.show_name === channel.name);
+      const views = shows.reduce((total, show) => total + (viewershipEvents[show.id] ?? 0), 0);
+      const subscribers = subscriptions.filter((subscription) => subscription.channel_name === channel.name || shows.some((show) => show.show_name === subscription.channel_name)).length;
+      return {
+        ...channel,
+        broadcasts: shows.length,
+        views,
+        subscribers,
+        scheduled: shows.filter((show) => show.status === "Scheduled").length
+      };
+    });
+  }, [broadcasts, subscriptions, viewershipEvents]);
 
   const loadStudio = useCallback(async () => {
     try {
@@ -80,9 +142,10 @@ export default function TVStudioPage() {
 
       setStudentId(user.id);
 
-      const [broadcastsResult, subscriptionsResult] = await Promise.all([
+      const [broadcastsResult, subscriptionsResult, viewershipResult] = await Promise.all([
         supabase.from("tv_broadcasts").select("*").in("status", ["Live", "Scheduled", "Replay", "Published"]).order("scheduled_at", { ascending: true }),
-        supabase.from("tv_subscriptions").select("*").eq("student_id", user.id)
+        supabase.from("tv_subscriptions").select("*").eq("student_id", user.id),
+        supabase.from("tv_viewership_events").select("broadcast_id,event_type")
       ]);
 
       if (broadcastsResult.error) throw broadcastsResult.error;
@@ -91,6 +154,15 @@ export default function TVStudioPage() {
       const loadedBroadcasts = (broadcastsResult.data ?? []) as Broadcast[];
       setBroadcasts(loadedBroadcasts);
       setSubscriptions((subscriptionsResult.data ?? []) as Subscription[]);
+      if (!viewershipResult.error) {
+        const counts = ((viewershipResult.data ?? []) as { broadcast_id: number | string | null }[]).reduce<Record<string, number>>((accumulator, event) => {
+          if (event.broadcast_id === null || event.broadcast_id === undefined) return accumulator;
+          const key = String(event.broadcast_id);
+          accumulator[key] = (accumulator[key] ?? 0) + 1;
+          return accumulator;
+        }, {});
+        setViewershipEvents(counts);
+      }
       setActiveBroadcast(loadedBroadcasts.find((show) => show.status === "Live") ?? loadedBroadcasts[0] ?? null);
       setMessage("AFF TV Studio ready.");
     } catch (error) {
@@ -150,7 +222,7 @@ export default function TVStudioPage() {
       <PageHeader
         eyebrow="AFF TV Studio"
         title="Media Broadcasting Center for live and on-demand academy programming."
-        text="Watch live broadcasts, masterclasses, student interviews, market outlook shows, Community Awareness TV, Destiny Alignment TV, and educational video-on-demand content."
+        text="Watch live broadcasts, masterclasses, student interviews, market outlook shows, Community Awareness TV, Destiny Alignment TV, Eyes on Society TV, and educational video-on-demand content."
       />
       <Section>
         <SectionInner className="grid gap-6">
@@ -161,6 +233,27 @@ export default function TVStudioPage() {
             <Metric icon={<CalendarDays size={20} />} label="Scheduled" value={String(upcomingShows.length)} />
             <Metric icon={<Clapperboard size={20} />} label="Replays" value={String(replayShows.length)} />
             <Metric icon={<Bell size={20} />} label="Subscriptions" value={String(subscriptions.length)} />
+          </section>
+
+          <section className="terminal-panel overflow-hidden">
+            <div className="border-b border-gold-500/20 p-5">
+              <div className="flex items-center gap-3">
+                <Tv className="text-gold-300" size={22} />
+                <h2 className="text-xl font-semibold text-white">Featured Broadcast Channels</h2>
+              </div>
+            </div>
+            <div className="grid gap-px bg-gold-500/14 md:grid-cols-2 xl:grid-cols-4">
+              {featuredChannels.map((channel) => (
+                <ChannelCard
+                  key={channel.name}
+                  channel={channel}
+                  active={activeCategory === channel.category}
+                  onSelect={() => setActiveCategory(channel.category)}
+                  subscribed={subscribedChannels.has(channel.name)}
+                  onSubscribe={() => toggleSubscription(channel.name)}
+                />
+              ))}
+            </div>
           </section>
 
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -208,7 +301,18 @@ export default function TVStudioPage() {
               <section className="terminal-panel p-5">
                 <h2 className="text-xl font-semibold text-white">Channels</h2>
                 <div className="mt-4 grid gap-2">
-                  {showCategories.map((category) => (
+                  {channelDirectory.map((channel) => (
+                    <button
+                      key={channel.name}
+                      className={`border px-3 py-2 text-left text-sm ${activeCategory === channel.category ? "border-gold-500 bg-gold-500 text-navy-950" : "border-gold-500/24 bg-navy-950 text-ink/76"}`}
+                      type="button"
+                      onClick={() => setActiveCategory(channel.category)}
+                    >
+                      {channel.name}
+                    </button>
+                  ))}
+                  <div className="my-2 border-t border-gold-500/18" />
+                  {showCategories.filter((category) => !channelDirectory.some((channel) => channel.category === category)).map((category) => (
                     <button
                       key={category}
                       className={`border px-3 py-2 text-left text-sm ${activeCategory === category ? "border-gold-500 bg-gold-500 text-navy-950" : "border-gold-500/24 bg-navy-950 text-ink/76"}`}
@@ -238,7 +342,7 @@ export default function TVStudioPage() {
 
           <section className="terminal-panel overflow-hidden">
             <div className="border-b border-gold-500/20 p-5">
-              <h2 className="text-xl font-semibold text-white">Video Library and Replay Archives</h2>
+              <h2 className="text-xl font-semibold text-white">Broadcast Channel Directory</h2>
             </div>
             {loading ? (
               <p className="p-5 text-ink/68">Loading media library...</p>
@@ -271,9 +375,73 @@ export default function TVStudioPage() {
               </div>
             )}
           </section>
+
+          <section className="terminal-panel overflow-hidden">
+            <div className="border-b border-gold-500/20 p-5">
+              <div className="flex items-center gap-3">
+                <BarChart3 className="text-gold-300" size={22} />
+                <h2 className="text-xl font-semibold text-white">Broadcast Analytics Dashboard</h2>
+              </div>
+            </div>
+            <div className="grid gap-px bg-gold-500/14 md:grid-cols-2 xl:grid-cols-4">
+              {channelAnalytics.map((channel) => (
+                <article key={channel.name} className="bg-navy-950 p-5">
+                  <p className="text-xs uppercase tracking-[.18em] text-gold-300">{channel.name}</p>
+                  <p className="mt-3 text-2xl font-semibold text-white">{channel.broadcasts}</p>
+                  <p className="text-sm text-ink/62">broadcast records</p>
+                  <div className="mt-4 grid gap-2 text-sm text-ink/70">
+                    <span>{channel.views} view events</span>
+                    <span>{channel.scheduled} scheduled programs</span>
+                    <span>{channel.subscribers} subscriptions</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
         </SectionInner>
       </Section>
     </>
+  );
+}
+
+function ChannelCard({
+  channel,
+  active,
+  subscribed,
+  onSelect,
+  onSubscribe
+}: {
+  channel: Channel;
+  active: boolean;
+  subscribed: boolean;
+  onSelect: () => void;
+  onSubscribe: () => void;
+}) {
+  return (
+    <article className={`bg-navy-950 p-5 ${active ? "ring-1 ring-gold-400" : ""}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="grid h-16 w-16 place-items-center border border-gold-500/35 bg-navy-900 text-center text-xs font-black tracking-[.12em] text-gold-300">
+          {channel.artwork}
+        </div>
+        {channel.name === "Eyes on Society TV" ? <Eye className="text-gold-300" size={22} /> : <Tv className="text-gold-300" size={22} />}
+      </div>
+      <p className="mt-4 text-xs uppercase tracking-[.2em] text-gold-300">{channel.category === "All" ? "Network Home" : channel.category}</p>
+      <h3 className="mt-2 text-xl font-semibold text-white">{channel.name}</h3>
+      <p className="mt-3 min-h-24 text-sm leading-6 text-ink/68">{channel.description}</p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button className="bg-gold-500 px-3 py-2 text-xs font-bold text-navy-950" type="button" onClick={onSelect}>
+          View Channel
+        </button>
+        <button className="border border-gold-500/45 px-3 py-2 text-xs font-semibold text-gold-300" type="button" onClick={onSubscribe}>
+          {subscribed ? "Subscribed" : "Subscribe"}
+        </button>
+        {channel.href !== "/tv-studio" ? (
+          <Link className="border border-gold-500/30 px-3 py-2 text-xs font-semibold text-gold-300" href={channel.href}>
+            Open Page
+          </Link>
+        ) : null}
+      </div>
+    </article>
   );
 }
 

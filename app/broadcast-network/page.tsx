@@ -217,6 +217,9 @@ export default function BroadcastNetworkPage() {
             <Link href="/tv-studio" className="inline-flex items-center justify-center gap-2 border border-gold-500/45 px-4 py-3 text-sm font-semibold text-gold-300">
               <Tv size={18} /> Open AFF TV Studio
             </Link>
+            <Link href="/broadcast-network/eyes-on-society" className="inline-flex items-center justify-center gap-2 bg-gold-500 px-4 py-3 text-sm font-bold text-navy-950">
+              <Radio size={18} /> Eyes on Society TV
+            </Link>
           </section>
 
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

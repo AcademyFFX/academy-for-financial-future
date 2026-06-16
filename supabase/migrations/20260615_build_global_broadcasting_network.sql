@@ -132,7 +132,8 @@ values
   ('Community Awareness TV', 'Community Awareness, Public Affairs, Leadership Series, and Civic Dialogue programming.', 2),
   ('Destiny Alignment TV', 'Destiny Alignment, Faith & Purpose, and Leadership Development programming.', 3),
   ('Financial Future Network', 'Market Outlook, Forex Masterclass, Economic Intelligence, and Trading Psychology programming.', 4),
-  ('Student Media Center', 'Student projects, broadcasts, reports, interviews, and media publication workflows.', 5)
+  ('Student Media Center', 'Student projects, broadcasts, reports, interviews, and media publication workflows.', 5),
+  ('Eyes on Society TV', 'Exploring the issues, ideas, challenges, and opportunities shaping modern society.', 6)
 on conflict (division_name) do update set description = excluded.description, display_order = excluded.display_order;
 
 insert into public.broadcast_programs (division_id, division_name, program_name, program_type, description)
@@ -154,7 +155,17 @@ join (
     ('Financial Future Network', 'Economic Intelligence', 'Economic Intelligence', 'Central bank, inflation, employment, and macroeconomic analysis.'),
     ('Financial Future Network', 'Trading Psychology', 'Trading Psychology', 'Mindset, discipline, journaling, and professional behavior.'),
     ('Student Media Center', 'Student Broadcast Desk', 'Student Media', 'Student-created broadcasts and interviews.'),
-    ('Student Media Center', 'Student Report Desk', 'Student Media', 'Student media reports and academy projects.')
+    ('Student Media Center', 'Student Report Desk', 'Student Media', 'Student media reports and academy projects.'),
+    ('Eyes on Society TV', 'Education & Literacy', 'Social Issues', 'Exploring education access, literacy, learning equity, and public knowledge.'),
+    ('Eyes on Society TV', 'Economic Awareness', 'Social Issues', 'Economic education, household finance, employment, opportunity, and social mobility.'),
+    ('Eyes on Society TV', 'Leadership & Governance', 'Public Affairs', 'Leadership decisions, governance questions, public trust, and institutional accountability.'),
+    ('Eyes on Society TV', 'Community Development', 'Community Reports', 'Community growth, neighborhood needs, service projects, and local transformation.'),
+    ('Eyes on Society TV', 'Technology & Society', 'Technology and Culture', 'How technology, AI, platforms, and innovation affect modern society.'),
+    ('Eyes on Society TV', 'Media & Culture', 'Media and Culture', 'Culture, media narratives, communication, and public understanding.'),
+    ('Eyes on Society TV', 'Youth Development', 'Youth Development', 'Youth leadership, mentorship, discipline, education, and future readiness.'),
+    ('Eyes on Society TV', 'Financial Literacy', 'Financial Literacy', 'Financial literacy as a civic and social responsibility.'),
+    ('Eyes on Society TV', 'Public Policy Discussions', 'Public Policy', 'Public policy dialogue, issue framing, evidence, and institutional choices.'),
+    ('Eyes on Society TV', 'Social Responsibility', 'Social Responsibility', 'Moral responsibility, service, community stewardship, and social impact.')
 ) as seed(division_name, program_name, program_type, description) on seed.division_name = division.division_name
 on conflict (division_name, program_name) do update set
   program_type = excluded.program_type,
@@ -167,7 +178,13 @@ values
   ('Community Awareness Leadership Forum', 'Video', 'Community Awareness TV', 'Leadership Series', 45, 'Public'),
   ('Destiny Alignment Leadership Development Replay', 'Video', 'Destiny Alignment TV', 'Leadership Development', 50, 'Members'),
   ('Student Interview Archive', 'Interview', 'Student Media Center', 'Student Broadcast Desk', 30, 'Members'),
-  ('AFF Podcast Collection', 'Podcast', 'AFF TV Studio', 'On-Demand Episode Library', 35, 'Public')
+  ('AFF Podcast Collection', 'Podcast', 'AFF TV Studio', 'On-Demand Episode Library', 35, 'Public'),
+  ('Eyes on Society Episode Archive', 'Broadcast Archive', 'Eyes on Society TV', 'Education & Literacy', 45, 'Public'),
+  ('Eyes on Society Video Library', 'Video', 'Eyes on Society TV', 'Community Development', 50, 'Public'),
+  ('Eyes on Society Podcast Versions', 'Podcast', 'Eyes on Society TV', 'Public Policy Discussions', 35, 'Public'),
+  ('Eyes on Society Featured Interviews', 'Interview', 'Eyes on Society TV', 'Leadership & Governance', 40, 'Members'),
+  ('Eyes on Society Documentary Series', 'Video', 'Eyes on Society TV', 'Technology & Society', 60, 'Members'),
+  ('Eyes on Society Downloadable Show Notes', 'Broadcast Archive', 'Eyes on Society TV', 'Media & Culture', 15, 'Public')
 on conflict do nothing;
 
 insert into public.broadcast_ai_media_assets (asset_type, title, content)
@@ -175,7 +192,11 @@ values
   ('Episode Summary', 'Market Outlook Summary Template', 'Summarize major pairs, economic catalysts, liquidity zones, and risk themes in professional AFF language.'),
   ('Show Notes', 'Forex Masterclass Show Notes Template', 'Include lesson objective, key concepts, student action steps, and certification connection.'),
   ('Title Ideas', 'Leadership Series Title Ideas', 'Generate refined titles for civic leadership, financial literacy, and professional development episodes.'),
-  ('Social Media Clips', 'Broadcast Clip Prompt Set', 'Create short clips for market insight, student motivation, civic awareness, and academy announcements.')
+  ('Social Media Clips', 'Broadcast Clip Prompt Set', 'Create short clips for market insight, student motivation, civic awareness, and academy announcements.'),
+  ('Episode Summary', 'Eyes on Society Episode Summary Template', 'Summarize the issue, social context, key voices, public implications, and responsible action steps.'),
+  ('Show Notes', 'Eyes on Society Research Brief Template', 'Prepare show notes with research references, public policy context, community implications, and discussion questions.'),
+  ('Title Ideas', 'Eyes on Society Topic Recommendations', 'Generate issue-focused episode topics across education, economy, governance, culture, youth, and responsibility.'),
+  ('Social Media Clips', 'Eyes on Society Clip Plan', 'Create short clips for issue awareness, viewer questions, expert panel highlights, and community report moments.')
 on conflict do nothing;
 
 insert into public.broadcast_analytics (division_name, program_name, views, watch_time_minutes, subscribers, engagement_score)
@@ -183,7 +204,10 @@ values
   ('Financial Future Network', 'Market Outlook', 1240, 3820, 312, 87.5),
   ('Community Awareness TV', 'Leadership Series', 860, 2140, 205, 82.0),
   ('Destiny Alignment TV', 'Leadership Development', 640, 1880, 178, 79.5),
-  ('Student Media Center', 'Student Broadcast Desk', 420, 960, 96, 74.0)
+  ('Student Media Center', 'Student Broadcast Desk', 420, 960, 96, 74.0),
+  ('Eyes on Society TV', 'Education & Literacy', 980, 2680, 244, 84.5),
+  ('Eyes on Society TV', 'Public Policy Discussions', 720, 1985, 188, 81.0),
+  ('Eyes on Society TV', 'Community Development', 690, 1740, 172, 80.5)
 on conflict do nothing;
 
 notify pgrst, 'reload schema';

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Award, ClipboardCheck, CreditCard, ExternalLink, FileCheck, FileX, GraduationCap, Megaphone, Save, Search, Send, ShieldCheck, Trash2, Users } from "lucide-react";
+import { Award, Bot, ClipboardCheck, CreditCard, ExternalLink, FileCheck, FileX, GraduationCap, Megaphone, Save, Search, Send, ShieldCheck, Trash2, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
@@ -733,6 +733,15 @@ export default function AdminPage() {
                   <p className="mt-2 text-sm text-ink/68">Open the AFF Degree System to award course credits, review graduation readiness, and approve degree completion.</p>
                 </div>
                 <GraduationCap className="text-gold-300" size={24} />
+              </Link>
+
+              <Link href="/ai-center" className="terminal-panel flex flex-col gap-3 p-5 transition hover:border-gold-400/60 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[.22em] text-gold-300">AI Institutional Intelligence</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">Review AI engagement, completion, certification, and attendance intelligence</h2>
+                  <p className="mt-2 text-sm text-ink/68">Open the AI Center to monitor student learning insights, weakness analysis, progress predictions, and admin analytics.</p>
+                </div>
+                <Bot className="text-gold-300" size={24} />
               </Link>
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">

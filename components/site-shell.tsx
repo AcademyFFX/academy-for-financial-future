@@ -52,6 +52,7 @@ const navGroups: NavGroup[] = [
     label: "Trading",
     items: [
       { href: "/trading-floor", label: "Trading Floor" },
+      { href: "/ai-center", label: "AI Center" },
       { href: "/ai-coach", label: "AI Forex Coach" },
       { href: "/voice-coach", label: "Voice Coach" },
       { href: "/chart-analyst", label: "Chart Analyst" },

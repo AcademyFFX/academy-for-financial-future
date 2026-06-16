@@ -9,6 +9,7 @@ import {
   Bot,
   BookOpenCheck,
   BookOpenText,
+  Brain,
   BriefcaseBusiness,
   Building2,
   CalendarDays,
@@ -125,6 +126,7 @@ const dashboardLinks = [
   { href: "/digital-civilization", label: "Digital Civilization", icon: Sprout },
   { href: "/human-flourishing", label: "Human Flourishing", icon: HeartPulse },
   { href: "/messages", label: "Messages", icon: MessageSquare },
+  { href: "/ai-center", label: "AI Institutional Intelligence Center", icon: Brain },
   { href: "/ai-coach", label: "AI Forex Coach", icon: Bot },
   { href: "/voice-coach", label: "AI Voice Coach", icon: Mic },
   { href: "/chart-analyst", label: "AI Chart Analyst", icon: BarChart3 },
@@ -727,7 +729,8 @@ export default function StudentDashboardPage() {
               </Panel>
 
               <Panel title="AI Learning Recommendations" icon={<Lightbulb size={22} />}>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <QuickAction href="/ai-center" icon={<Brain size={18} />} label="AI Center" detail="View insights" />
                   <QuickAction href="/ai-coach" icon={<Bot size={18} />} label="AI Coach" detail="Ask curriculum questions" />
                   <QuickAction href="/voice-coach" icon={<Mic size={18} />} label="Voice Coach" detail="Practice out loud" />
                   <QuickAction href="/chart-analyst" icon={<BarChart3 size={18} />} label="Chart Analyst" detail="Review screenshots" />

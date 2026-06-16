@@ -24,6 +24,8 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/university", label: "University" },
       { href: "/courses", label: "Forex Courses" },
+      { href: "/degrees", label: "Degrees" },
+      { href: "/transcripts", label: "Transcripts" },
       { href: "/research-institute", label: "Research Institute" },
       { href: "/accreditation", label: "Accreditation" },
       { href: "/governance-school", label: "Governance School" },
@@ -42,6 +44,7 @@ const navGroups: NavGroup[] = [
       { href: "/live-classroom", label: "Live Classroom" },
       { href: "/certifications", label: "Certification Center" },
       { href: "/certificates", label: "Certificates" },
+      { href: "/verify-transcript", label: "Verify Transcript" },
       { href: "/messages", label: "Messages" }
     ]
   },

@@ -83,6 +83,8 @@ type DatasetKey =
   | "exams"
   | "certificationAttempts"
   | "degreeProgress"
+  | "studentCredits"
+  | "graduationApprovals"
   | "civicService"
   | "researchSubmissions"
   | "tradeIdeas"
@@ -108,6 +110,8 @@ const dashboardLinks = [
   { href: "/governance-school", label: "AFF Governance School", icon: Scale },
   { href: "/think-tank", label: "AFF Global Think Tank", icon: Globe2 },
   { href: "/university", label: "AFF Global University", icon: GraduationCap },
+  { href: "/degrees", label: "Degree Programs", icon: GraduationCap },
+  { href: "/transcripts", label: "Academic Transcript", icon: BookOpenCheck },
   { href: "/billing", label: "Membership Billing", icon: CreditCard },
   { href: "/marketplace", label: "AFF Marketplace", icon: ShoppingBag },
   { href: "/career-center", label: "Career Center", icon: BriefcaseBusiness },
@@ -153,6 +157,8 @@ const emptyDatasets: Record<DatasetKey, DbRow[]> = {
   exams: [],
   certificationAttempts: [],
   degreeProgress: [],
+  studentCredits: [],
+  graduationApprovals: [],
   civicService: [],
   researchSubmissions: [],
   tradeIdeas: [],
@@ -360,6 +366,8 @@ export default function StudentDashboardPage() {
         exams,
         certificationAttempts,
         degreeProgress,
+        studentCredits,
+        graduationApprovals,
         civicService,
         researchSubmissions,
         tradeIdeas,
@@ -387,6 +395,8 @@ export default function StudentDashboardPage() {
         safeSelect(supabase, "exams", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("submitted_at", { ascending: false })),
         safeSelect(supabase, "certification_exam_attempts", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("submitted_at", { ascending: false })),
         safeSelect(supabase, "student_degree_progress", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("updated_at", { ascending: false })),
+        safeSelect(supabase, "student_credits", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("completed_at", { ascending: false })),
+        safeSelect(supabase, "graduation_approvals", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("created_at", { ascending: false })),
         safeSelect(supabase, "civic_service_hours", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("service_date", { ascending: false })),
         safeSelect(supabase, "research_submissions", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("submitted_at", { ascending: false })),
         safeSelect(supabase, "trade_ideas", (table) => supabase.from(table).select("*").eq("student_id", currentUser.id).order("created_at", { ascending: false })),
@@ -461,6 +471,8 @@ export default function StudentDashboardPage() {
         exams,
         certificationAttempts,
         degreeProgress,
+        studentCredits,
+        graduationApprovals,
         civicService,
         researchSubmissions,
         tradeIdeas,
@@ -496,7 +508,11 @@ export default function StudentDashboardPage() {
     const certificationProgress = issuedCredentials > 0 ? 100 : percent(passingExams, 1);
     const degreeProgress = datasets.degreeProgress.length
       ? Math.round(datasets.degreeProgress.reduce((total, row) => total + numberValue(row, ["completion_percentage"]), 0) / datasets.degreeProgress.length)
-      : 0;
+      : percent(datasets.studentCredits.reduce((total, row) => total + numberValue(row, ["credits_earned", "credits"]), 0), 60);
+    const creditsEarned = datasets.studentCredits
+      .filter((row) => value(row, ["completion_status"]) === "Completed")
+      .reduce((total, row) => total + numberValue(row, ["credits_earned", "credits"]), 0);
+    const graduationReady = creditsEarned >= 60 || datasets.graduationApprovals.some((row) => value(row, ["approval_status"]) === "Approved");
     const civicHours = datasets.civicService.reduce((total, row) => total + numberValue(row, ["hours"]), 0);
     const researchCount = datasets.researchSubmissions.length;
     const tradePerformance = datasets.tradeIdeas.length + datasets.chartReports.length;
@@ -511,6 +527,8 @@ export default function StudentDashboardPage() {
       longestStreak,
       certificationProgress,
       degreeProgress,
+      creditsEarned,
+      graduationReady,
       civicHours,
       researchCount,
       tradePerformance,
@@ -685,6 +703,8 @@ export default function StudentDashboardPage() {
             <section className="grid gap-6 xl:grid-cols-3">
               <ProgressPanel title="Certification Tracker" icon={<ShieldCheck size={20} />} value={metrics.certificationProgress} detail={`${datasets.exams.length + datasets.certificationAttempts.length} exam attempts, ${datasets.certificates.length + datasets.certifications.length + datasets.digitalCertificates.length} credentials`} href="/certifications" />
               <ProgressPanel title="Degree Progress" icon={<GraduationCap size={20} />} value={metrics.degreeProgress} detail={`${datasets.degreeProgress.length} university progress records`} href="/university" />
+              <ProgressPanel title="Credits Earned" icon={<BookOpenCheck size={20} />} value={Math.min(100, Math.round((metrics.creditsEarned / 60) * 100))} detail={`${metrics.creditsEarned} academic credits recorded`} href="/transcripts" />
+              <ProgressPanel title="Graduation Readiness" icon={<GraduationCap size={20} />} value={metrics.graduationReady ? 100 : metrics.degreeProgress} detail={metrics.graduationReady ? "Ready for Academic Office review" : "Continue completing degree requirements"} href="/degrees" />
               <ProgressPanel title="Scholarship Eligibility" icon={<Sparkles size={20} />} value={metrics.scholarshipScore} detail="Calculated from certification, degree, service, and research activity" href="/endowment-fund" />
               <ProgressPanel title="Research Contribution" icon={<BookOpenText size={20} />} value={Math.min(100, metrics.researchCount * 25)} detail={`${metrics.researchCount} research submissions`} href="/research-institute" />
               <ProgressPanel title="Career Placement" icon={<BriefcaseBusiness size={20} />} value={Math.min(100, metrics.careerApplications * 25 + datasets.careerProfiles.length * 30)} detail={`${metrics.careerApplications} applications submitted`} href="/career-center" />

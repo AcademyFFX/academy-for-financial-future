@@ -85,7 +85,8 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/marketplace", label: "Marketplace" },
       { href: "/billing", label: "Billing" },
-      { href: "/publishing-house", label: "Publishing House" }
+      { href: "/publishing-house", label: "Publishing House" },
+      { href: "/broadcast-network", label: "Broadcast Network" }
     ]
   }
 ];

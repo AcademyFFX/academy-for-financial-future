@@ -108,6 +108,7 @@ const dashboardLinks = [
   { href: "/mobile-super-app", label: "AFF Mobile Super App", icon: TabletSmartphone },
   { href: "/alumni-network", label: "AFF Global Alumni Network", icon: Trophy },
   { href: "/publishing-house", label: "AFF Publishing & Media House", icon: BookOpenText },
+  { href: "/broadcast-network", label: "AFF Global Broadcasting Network", icon: Radio },
   { href: "/economic-intelligence", label: "AFF Economic Intelligence", icon: BarChart3 },
   { href: "/investment-bank", label: "AFF Investment Bank Institute", icon: Landmark },
   { href: "/governance-school", label: "AFF Governance School", icon: Scale },
@@ -807,13 +808,13 @@ export default function StudentDashboardPage() {
             </section>
 
             <section className="grid gap-6 xl:grid-cols-2">
-              <Panel title="AFF TV Studio Broadcasts" icon={<Tv size={22} />}>
+              <Panel title="AFF Global Broadcasting Network" icon={<Tv size={22} />}>
                 <div className="grid gap-3">
                   {datasets.tvBroadcasts.length === 0 ? (
                     <p className="text-sm text-ink/68">No live or scheduled AFF TV broadcasts found.</p>
                   ) : (
                     datasets.tvBroadcasts.map((broadcast) => (
-                      <Link key={value(broadcast, ["id", "title"])} href="/tv-studio" className="border border-gold-500/20 bg-navy-950 p-4 transition hover:border-gold-400/60">
+                      <Link key={value(broadcast, ["id", "title"])} href="/broadcast-network" className="border border-gold-500/20 bg-navy-950 p-4 transition hover:border-gold-400/60">
                         <p className="text-xs uppercase tracking-[.18em] text-gold-300">{value(broadcast, ["status"], "Scheduled")}</p>
                         <h3 className="mt-2 font-semibold text-white">{value(broadcast, ["title"], "AFF Broadcast")}</h3>
                         <p className="mt-2 text-sm text-ink/64">{shortDate(value(broadcast, ["scheduled_at", "created_at"]))}</p>

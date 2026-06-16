@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Award, Bot, ClipboardCheck, CreditCard, ExternalLink, FileCheck, FileX, GraduationCap, Megaphone, Save, Search, Send, ShieldCheck, TabletSmartphone, Trash2, Users } from "lucide-react";
+import { Award, Bot, ClipboardCheck, CreditCard, ExternalLink, FileCheck, FileX, GraduationCap, Megaphone, Save, Search, Send, ShieldCheck, TabletSmartphone, Trash2, Tv, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
@@ -751,6 +751,15 @@ export default function AdminPage() {
                   <p className="mt-2 text-sm text-ink/68">Open the mobile platform to send push-style alerts, review devices, monitor sessions, and support offline learning access.</p>
                 </div>
                 <TabletSmartphone className="text-gold-300" size={24} />
+              </Link>
+
+              <Link href="/broadcast-network" className="terminal-panel flex flex-col gap-3 p-5 transition hover:border-gold-400/60 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[.22em] text-gold-300">Global Broadcasting Network</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">Manage media divisions, student submissions, archives, AI show assets, and analytics</h2>
+                  <p className="mt-2 text-sm text-ink/68">Open the AFF Global Broadcasting Network for AFF TV Studio, Community Awareness TV, Destiny Alignment TV, Financial Future Network, and Student Media Center.</p>
+                </div>
+                <Tv className="text-gold-300" size={24} />
               </Link>
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">

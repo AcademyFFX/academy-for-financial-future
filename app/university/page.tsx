@@ -333,6 +333,25 @@ export default function UniversityPage() {
             <Library className="text-gold-300" size={28} />
           </Link>
 
+          <section className="grid gap-6 lg:grid-cols-2">
+            <Link href="/courses/managed/AFF-PSY-201" className="terminal-panel overflow-hidden transition hover:border-gold-400/60">
+              <div className="aspect-[16/7] bg-cover bg-center" style={{ backgroundImage: "url(/course-thumbnails/trading-psychology-emotions-money.png)" }} />
+              <div className="p-5">
+                <p className="text-xs uppercase tracking-[.2em] text-gold-300">Trading Psychology · 10 Modules</p>
+                <h2 className="mt-2 text-xl font-semibold text-white">Trading Forex: The Management of Emotions Around Money</h2>
+                <p className="mt-3 text-sm text-ink/68">Certified Trading Psychology Practitioner (CTPP)</p>
+              </div>
+            </Link>
+            <Link href="/courses/managed/AFF-TMP-301" className="terminal-panel overflow-hidden transition hover:border-gold-400/60">
+              <div className="aspect-[16/7] bg-cover bg-center" style={{ backgroundImage: "url(/course-thumbnails/theology-monetary-policy.png)" }} />
+              <div className="p-5">
+                <p className="text-xs uppercase tracking-[.2em] text-gold-300">School of Economics, Philosophy & Civilization · 10 Modules</p>
+                <h2 className="mt-2 text-xl font-semibold text-white">Theology & Monetary Policy: How Spiritual Principles Shape Economic Realities</h2>
+                <p className="mt-3 text-sm text-ink/68">Certificate in Theology & Monetary Policy</p>
+              </div>
+            </Link>
+          </section>
+
           <section className="terminal-panel p-6">
             <p className="text-xs uppercase tracking-[.22em] text-gold-300">University Homepage</p>
             <h2 className="mt-3 text-3xl font-semibold text-white">Academy for Financial Future Global University</h2>

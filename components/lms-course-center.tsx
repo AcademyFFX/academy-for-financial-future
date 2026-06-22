@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Award, BookOpen, CheckCircle2, Download, FileText, PlayCircle, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProgressBar } from "@/components/progress";
@@ -25,7 +26,7 @@ function questionsOf(row: DbRow): QuizQuestion[] {
   return Array.isArray(questions) ? questions as QuizQuestion[] : [];
 }
 
-export function LmsCourseCenter() {
+export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
   const [userId, setUserId] = useState("");
   const [studentName, setStudentName] = useState("AFF Student");
   const [message, setMessage] = useState("Loading AFF Course Management System...");
@@ -111,9 +112,31 @@ export function LmsCourseCenter() {
       student_id: userId,
       course_id: Number(courseId),
       course_name: value(course, ["course_name"]),
+      certification_name: value(course, ["certification_title"], `${value(course, ["course_name"])} Certificate`),
       student_name: studentName,
       verification_code: `AFF-${token}`
     }, { onConflict: "student_id,course_id" });
+
+    const { data: credit } = await supabase.from("course_credits").select("id,credits").eq("course_code", value(course, ["course_code"])).maybeSingle();
+    if (credit) {
+      const { data: existingCredit } = await supabase.from("student_credits").select("id").eq("student_id", userId).eq("course_credit_id", credit.id).maybeSingle();
+      if (!existingCredit) {
+        await supabase.from("student_credits").insert({ student_id: userId, student_name: studentName, course_credit_id: credit.id, course_title: value(course, ["course_name"]), credits_earned: credit.credits, grade: "Pass", completion_status: "Completed", completed_at: new Date().toISOString().slice(0, 10) });
+        const degreeName = value(course, ["degree_pathway"]);
+        if (degreeName) {
+          const { data: degree } = await supabase.from("academic_degree_programs").select("credits_required,degree_level").eq("degree_name", degreeName).maybeSingle();
+          const { data: degreeProgress } = await supabase.from("student_degree_progress").select("id,credits_completed").eq("student_id", userId).eq("degree_name", degreeName).order("created_at", { ascending: false }).limit(1).maybeSingle();
+          const creditsRequired = Number(degree?.credits_required ?? 0);
+          const creditsCompleted = Number(degreeProgress?.credits_completed ?? 0) + Number(credit.credits ?? 0);
+          const completionPercentage = creditsRequired ? Math.min(100, Math.round((creditsCompleted / creditsRequired) * 100)) : 0;
+          const degreePayload = { student_id: userId, student_name: studentName, degree_name: degreeName, degree_type: degree?.degree_level ?? "Professional Program", college_name: value(course, ["department_name"], "AFF Global University"), credits_completed: creditsCompleted, credits_required: creditsRequired, completion_percentage: completionPercentage, progress_status: completionPercentage >= 100 ? "Completed" : "In Progress", updated_at: new Date().toISOString() };
+          if (degreeProgress?.id) await supabase.from("student_degree_progress").update(degreePayload).eq("id", degreeProgress.id);
+          else await supabase.from("student_degree_progress").insert(degreePayload);
+        }
+      }
+      const { data: existingTranscript } = await supabase.from("university_transcripts").select("id").eq("student_id", userId).eq("course_title", value(course, ["course_name"])).maybeSingle();
+      if (!existingTranscript) await supabase.from("university_transcripts").insert({ student_id: userId, student_name: studentName, program_name: value(course, ["degree_pathway"], "AFF Global University"), course_title: value(course, ["course_name"]), grade: "Pass", credit_hours: credit.credits, transcript_status: "Completed", notes: value(course, ["certification_title"]) });
+    }
   }
 
   async function completeLesson(course: DbRow, lesson: DbRow) {
@@ -156,8 +179,8 @@ export function LmsCourseCenter() {
         <div className="text-sm text-ink/70">{enrollments.length} enrolled · {certificates.length} certificates</div>
       </div>
 
-      {courses.length === 0 ? <p className="terminal-panel p-5 text-ink/68">No published LMS courses found.</p> : null}
-      {courses.map((course) => {
+      {courses.filter((course) => !courseCode || value(course, ["course_code"]) === courseCode).length === 0 ? <p className="terminal-panel p-5 text-ink/68">No published LMS courses found.</p> : null}
+      {courses.filter((course) => !courseCode || value(course, ["course_code"]) === courseCode).map((course) => {
         const courseId = idOf(course);
         const enrolled = enrollmentByCourse.has(courseId);
         const percent = coursePercent(courseId);
@@ -166,16 +189,16 @@ export function LmsCourseCenter() {
         return (
           <article key={courseId} className="terminal-panel overflow-hidden">
             <div className="grid gap-0 lg:grid-cols-[260px_1fr]">
-              <div className="min-h-48 border-b border-gold-500/20 bg-navy-950 bg-cover bg-center lg:border-b-0 lg:border-r" style={value(course, ["thumbnail_url"]) ? { backgroundImage: `url(${value(course, ["thumbnail_url"])})` } : undefined}>
+              <Link href={`/courses/managed/${encodeURIComponent(value(course, ["course_code"]))}`} className="min-h-48 border-b border-gold-500/20 bg-navy-950 bg-cover bg-center lg:border-b-0 lg:border-r" style={value(course, ["thumbnail_url"]) ? { backgroundImage: `url(${value(course, ["thumbnail_url"])})` } : undefined}>
                 {!value(course, ["thumbnail_url"]) ? <div className="grid h-full min-h-48 place-items-center"><BookOpen className="text-gold-300" size={54} /></div> : null}
-              </div>
+              </Link>
               <div className="p-6">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div><p className="text-xs uppercase tracking-[.2em] text-gold-300">{value(course, ["course_code"])} · {value(course, ["credit_hours"], "1")} credits</p><h3 className="mt-2 text-2xl font-semibold text-white">{value(course, ["course_name"])}</h3><p className="mt-3 leading-7 text-ink/70">{value(course, ["description"])}</p></div>
+                  <div><p className="text-xs uppercase tracking-[.2em] text-gold-300">{value(course, ["department_name"], "AFF Global University")} · {value(course, ["course_code"])} · {value(course, ["credit_hours"], "1")} credits</p><Link href={`/courses/managed/${encodeURIComponent(value(course, ["course_code"]))}`}><h3 className="mt-2 text-2xl font-semibold text-white hover:text-gold-300">{value(course, ["course_name"])}</h3></Link><p className="mt-3 leading-7 text-ink/70">{value(course, ["description"])}</p>{value(course, ["certification_title"]) ? <p className="mt-3 text-sm font-semibold text-gold-300">Certification: {value(course, ["certification_title"])}</p> : null}</div>
                   <button className="shrink-0 bg-gold-500 px-4 py-3 text-sm font-bold text-navy-950 disabled:opacity-60" disabled={enrolled} onClick={() => enroll(courseId)}>{enrolled ? "Enrolled" : "Enroll"}</button>
                 </div>
                 <div className="mt-5"><div className="mb-2 flex justify-between text-sm"><span>{percent}% complete</span><span className="text-gold-300">{value(course, ["instructor_name"])}</span></div><ProgressBar value={percent} /></div>
-                {certificate ? <p className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-gold-300"><Award size={17} /> Certificate {value(certificate, ["certificate_number"])}</p> : null}
+                {certificate ? <p className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-gold-300"><Award size={17} /> {value(certificate, ["certification_name"], "Certificate")} · {value(certificate, ["certificate_number"])}</p> : null}
               </div>
             </div>
 

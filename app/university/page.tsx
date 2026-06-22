@@ -324,6 +324,15 @@ export default function UniversityPage() {
             <Metric icon={<Award size={22} />} label="Faculty & Research" value={`${analytics.faculty}/${analytics.researchCenters}`} detail={`${analytics.avgProgress}% average progress`} />
           </section>
 
+          <Link href="/courses" className="terminal-panel flex flex-col gap-4 p-6 transition hover:border-gold-400/60 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[.22em] text-gold-300">AFF Course Management System</p>
+              <h2 className="mt-2 text-2xl font-semibold text-white">Open the managed academic course library</h2>
+              <p className="mt-2 text-sm text-ink/68">Access Supabase-backed courses, modules, video lessons, PDF notes, homework, quizzes, progress tracking, and completion certificates.</p>
+            </div>
+            <Library className="text-gold-300" size={28} />
+          </Link>
+
           <section className="terminal-panel p-6">
             <p className="text-xs uppercase tracking-[.22em] text-gold-300">University Homepage</p>
             <h2 className="mt-3 text-3xl font-semibold text-white">Academy for Financial Future Global University</h2>

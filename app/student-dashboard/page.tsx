@@ -50,6 +50,7 @@ import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { AFFInstitutionalLogo } from "@/components/aff-logo";
 import { createClient } from "@/lib/supabase";
 import { DashboardCourseSummary } from "@/components/dashboard-course-summary";
+import { LmsDashboardSummary } from "@/components/lms-dashboard-summary";
 import { ZoomClassesPanel } from "@/components/zoom-classes-panel";
 
 type DbRow = Record<string, unknown>;
@@ -842,6 +843,7 @@ export default function StudentDashboardPage() {
             </section>
 
             <DashboardCourseSummary />
+            <LmsDashboardSummary />
 
             <section className="terminal-panel p-5">
               <div className="flex items-center gap-3">

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Award, Bot, ClipboardCheck, CreditCard, ExternalLink, FileCheck, FileX, GraduationCap, Megaphone, Save, Search, Send, ShieldCheck, TabletSmartphone, Trash2, Tv, Users } from "lucide-react";
+import { Award, BookOpen, Bot, ClipboardCheck, CreditCard, ExternalLink, FileCheck, FileX, GraduationCap, Megaphone, Save, Search, Send, ShieldCheck, TabletSmartphone, Trash2, Tv, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
@@ -742,6 +742,15 @@ export default function AdminPage() {
                   <p className="mt-2 text-sm text-ink/68">Open the AI Center to monitor student learning insights, weakness analysis, progress predictions, and admin analytics.</p>
                 </div>
                 <Bot className="text-gold-300" size={24} />
+              </Link>
+
+              <Link href="/admin/course-management" className="terminal-panel flex flex-col gap-3 p-5 transition hover:border-gold-400/60 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[.22em] text-gold-300">AFF Course Management System</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">Create courses, modules, lessons, homework, quizzes, and resources</h2>
+                  <p className="mt-2 text-sm text-ink/68">Publish managed learning experiences with progress tracking and course completion certificates.</p>
+                </div>
+                <BookOpen className="text-gold-300" size={24} />
               </Link>
 
               <Link href="/mobile-app" className="terminal-panel flex flex-col gap-3 p-5 transition hover:border-gold-400/60 sm:flex-row sm:items-center sm:justify-between">

@@ -339,9 +339,16 @@ export default function AdminPage() {
         supabase.from("announcements").select("*").order("published_at", { ascending: false })
       ]);
 
-      for (const result of [studentsResult, applicationsResult, assignmentsResult, examsResult, certificatesResult, announcementsResult]) {
-        if (result.error) throw result.error;
-      }
+      const queryFailures = [
+        ["students", studentsResult.error],
+        ["student applications", applicationsResult.error],
+        ["assignments", assignmentsResult.error],
+        ["exams", examsResult.error],
+        ["certificates", certificatesResult.error],
+        ["announcements", announcementsResult.error]
+      ].filter((entry) => entry[1]);
+
+      if (queryFailures.length === 6) throw queryFailures[0][1];
 
       const normalizedStudents = ((studentsResult.data ?? []) as DbRow[]).map(normalizeStudent);
       const normalizedApplications = ((applicationsResult.data ?? []) as DbRow[]).map(normalizeApplication);
@@ -372,7 +379,9 @@ export default function AdminPage() {
       setExams(normalizedExams);
       setCertificates(normalizedCertificates);
       setAnnouncements((announcementsResult.data ?? []) as Announcement[]);
-      setMessage("Admin dashboard ready.");
+      setMessage(queryFailures.length
+        ? `Admin dashboard loaded. Unavailable data: ${queryFailures.map(([name]) => name).join(", ")}.`
+        : "Admin dashboard ready.");
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to load admin dashboard."));
     } finally {

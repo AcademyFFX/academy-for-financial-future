@@ -62,6 +62,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  if (request.nextUrl.pathname.startsWith("/admin") && user.email?.toLowerCase() !== "acafffx@gmail.com") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/student-dashboard";
+    url.searchParams.set("error", "admin_access_required");
+    return NextResponse.redirect(url);
+  }
+
   const requiresEnrollment = enrollmentRestrictedRoutes.some((route) => request.nextUrl.pathname.startsWith(route));
   if (requiresEnrollment && user.email?.toLowerCase() !== "acafffx@gmail.com") {
     const { data, error } = await supabase

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Award, BookOpen, Bot, ClipboardCheck, CreditCard, ExternalLink, FileCheck, FileX, GraduationCap, Megaphone, Save, Search, Send, ShieldCheck, TabletSmartphone, Trash2, Tv, Users } from "lucide-react";
+import { Award, BookOpen, Bot, ClipboardCheck, CreditCard, ExternalLink, FileCheck, FileX, GraduationCap, Megaphone, RadioTower, Save, Search, Send, ShieldCheck, TabletSmartphone, Trash2, Tv, UploadCloud, UserCheck, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
@@ -100,6 +100,13 @@ type Announcement = {
 
 const adminEmail = "acafffx@gmail.com";
 const initialAnnouncement = { id: "", title: "", body: "" };
+const adminDestinations = [
+  { href: "/admin/course-management", label: "Course Management", detail: "Courses, modules, lessons, quizzes", icon: BookOpen },
+  { href: "/admin/course-management/upload-center", label: "Upload Center", detail: "Video, PDF, PowerPoint, assignments", icon: UploadCloud },
+  { href: "/admin/enrollment", label: "Enrollment", detail: "Applications and student status", icon: UserCheck },
+  { href: "/admin/certifications", label: "Certifications", detail: "Exams, grading, and credentials", icon: ShieldCheck },
+  { href: "/admin/live-classroom", label: "Live Classroom", detail: "Classes, attendance, and recordings", icon: RadioTower }
+];
 
 function value(row: DbRow, keys: string[], fallback = "") {
   for (const key of keys) {
@@ -311,7 +318,7 @@ export default function AdminPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        router.replace("/login");
+        router.replace("/login?next=/admin");
         return;
       }
 
@@ -704,10 +711,28 @@ export default function AdminPage() {
         <SectionInner className="grid gap-8">
           <p className="text-sm text-ink/72">{message}</p>
 
-          {!loading && !authorized ? (
+          {loading ? (
+            <div className="terminal-panel p-6 text-ink/76">Verifying administrator access...</div>
+          ) : !authorized ? (
             <div className="terminal-panel p-6 text-ink/76">Admin login only.</div>
           ) : (
             <>
+              <nav aria-label="Admin operations" className="terminal-panel p-5">
+                <div className="mb-4">
+                  <p className="text-xs font-semibold uppercase tracking-[.22em] text-gold-300">Admin Operations</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">Management centers</h2>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  {adminDestinations.map((destination) => (
+                    <Link key={destination.href} href={destination.href} className="border border-gold-500/25 bg-navy-950 p-4 transition hover:border-gold-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-300">
+                      <destination.icon className="text-gold-300" size={21} aria-hidden="true" />
+                      <p className="mt-3 font-semibold text-white">{destination.label}</p>
+                      <p className="mt-1 text-xs leading-5 text-ink/62">{destination.detail}</p>
+                    </Link>
+                  ))}
+                </div>
+              </nav>
+
               <Link href="/executive-command-center" className="terminal-panel flex flex-col gap-3 p-5 transition hover:border-gold-400/60 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-[.22em] text-gold-300">Executive Analytics</p>
@@ -781,7 +806,7 @@ export default function AdminPage() {
                 ))}
               </div>
 
-              <section className="terminal-panel overflow-hidden">
+              <section id="enrollment-review" className="terminal-panel scroll-mt-28 overflow-hidden">
                 <div className="border-b border-gold-500/20 p-5">
                   <h2 className="text-xl font-semibold text-white">Admin Enrollment Review</h2>
                   <p className="mt-2 text-sm text-ink/68">Review new applicants, approve or reject enrollment, assign mentors, suspend access, and send the welcome message.</p>

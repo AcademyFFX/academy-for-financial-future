@@ -62,7 +62,7 @@ export const navItems = [
 ];
 
 export const featureCards = [
-  { icon: GraduationCap, title: "Student Registration", text: "Structured enrollment flows for new cohorts, mentor assignment, and onboarding requirements." },
+  { icon: GraduationCap, title: "Student Registration", text: "Structured enrollment flows for new cohorts, mentor assignment, and onboarding requirements.", href: "/enrollment" },
   { icon: ShieldCheck, title: "Supabase Login", text: "Email and password authentication prepared for Supabase Auth and protected student routes." },
   { icon: TrendingUp, title: "Progress Tracking", text: "Course modules, completion states, quiz scores, and certificate readiness indicators." },
   { icon: Video, title: "Video Lessons", text: "Lecture modules designed for recorded forex strategy lessons and market review sessions." },
@@ -70,7 +70,7 @@ export const featureCards = [
   { icon: ClipboardCheck, title: "Homework Submission", text: "Assignment upload workflows for trade plans, chart markups, and weekly reflections." },
   { icon: BookOpen, title: "Quiz System", text: "Scenario-based quizzes covering risk management, order types, analysis, and trade psychology." },
   { icon: Award, title: "Certificate Generation", text: "Completion certificates with student name, program, date, and administrator signature field." },
-  { icon: LayoutDashboard, title: "Admin Dashboard", text: "Administrative view for Dr. Jean Rene Moricette to manage cohorts, submissions, and results." }
+  { icon: LayoutDashboard, title: "Admin Dashboard", text: "Administrative view for Dr. Jean Rene Moricette to manage cohorts, submissions, and results.", href: "/admin" }
 ];
 
 export const courses = [

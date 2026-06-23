@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase";
@@ -23,7 +24,14 @@ export function AuthPanel({ mode }: { mode: "login" | "register" }) {
           : await supabase.auth.signUp({ email, password, options: { data: { name, division: "Academy for Financial Future" } } });
 
       if (result.error) setMessage(result.error.message);
-      else if (mode === "login") router.push("/student-dashboard");
+      else if (mode === "login") {
+        const requestedPath = new URLSearchParams(window.location.search).get("next");
+        const destination = requestedPath?.startsWith("/") && !requestedPath.startsWith("//")
+          ? requestedPath
+          : email.trim().toLowerCase() === "acafffx@gmail.com" ? "/admin" : "/student-dashboard";
+        router.replace(destination);
+        router.refresh();
+      }
       else setMessage("Registration received. Check email confirmation settings in Supabase.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Authentication is not configured yet.");
@@ -43,7 +51,10 @@ export function AuthPanel({ mode }: { mode: "login" | "register" }) {
         <input className="border border-gold-500/25 bg-navy-950 px-4 py-3 text-white outline-none focus:border-gold-400" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
       </label>
       <label className="grid gap-2 text-sm text-ink/78">
-        Password
+        <span className="flex items-center justify-between gap-4">
+          Password
+          {mode === "login" ? <Link href="/reset-password" className="font-semibold text-gold-300 hover:text-white">Forgot Password?</Link> : null}
+        </span>
         <input className="border border-gold-500/25 bg-navy-950 px-4 py-3 text-white outline-none focus:border-gold-400" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={6} />
       </label>
       <button className="bg-gold-500 px-5 py-3 font-bold text-navy-950" type="submit">

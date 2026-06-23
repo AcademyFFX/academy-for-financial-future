@@ -60,8 +60,8 @@ export default function HomePage() {
                 </>
               );
 
-              return feature.title === "Student Registration" ? (
-                <Link key={feature.title} href="/enrollment" className="terminal-panel block p-6 transition hover:border-gold-400/60">
+              return feature.href ? (
+                <Link key={feature.title} href={feature.href} className="terminal-panel block p-6 transition hover:border-gold-400/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-300">
                   {content}
                 </Link>
               ) : (

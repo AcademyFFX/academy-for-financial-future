@@ -24,7 +24,7 @@ import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
 type QuizQuestion = { prompt: string; options: string[]; correctAnswer: string };
-type AssetType = "Video" | "PDF Notes" | "PowerPoint" | "Assignment" | "Course Thumbnail";
+type AssetType = "Video" | "PDF Notes" | "PowerPoint" | "Assignment" | "Course Thumbnail" | "Module" | "Quiz";
 type UploadStage = "idle" | "uploading" | "success" | "failed";
 type UploadStatus = {
   stage: UploadStage;
@@ -47,7 +47,9 @@ const acceptedUploads: Record<AssetType, { extensions: string[]; mimeTypes: stri
     mimeTypes: ["application/pdf", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
     label: "PDF or PPTX"
   },
-  "Course Thumbnail": { extensions: [".png", ".jpg", ".jpeg", ".webp"], mimeTypes: ["image/png", "image/jpeg", "image/webp"], label: "PNG, JPG, or WebP" }
+  "Course Thumbnail": { extensions: [".png", ".jpg", ".jpeg", ".webp"], mimeTypes: ["image/png", "image/jpeg", "image/webp"], label: "PNG, JPG, or WebP" },
+  Module: { extensions: [], mimeTypes: [], label: "Module metadata" },
+  Quiz: { extensions: [], mimeTypes: [], label: "Quiz metadata" }
 };
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -121,25 +123,23 @@ export function CourseUploadCenter() {
         return;
       }
       setAuthorized(true);
-      const [courseResult, moduleResult, lessonResult, assetResult, enrollmentResult, progressResult, certificateResult, studentResult] = await Promise.all([
-        supabase.from("lms_courses").select("*").order("created_at", { ascending: false }),
-        supabase.from("lms_modules").select("*").order("module_order"),
-        supabase.from("lms_lessons").select("*").order("lesson_order"),
-        supabase.from("lms_course_assets").select("*").order("created_at", { ascending: false }),
-        supabase.from("lms_enrollments").select("*").order("enrolled_at", { ascending: false }),
-        supabase.from("lms_lesson_progress").select("*").order("completed_at", { ascending: false }),
-        supabase.from("lms_course_certificates").select("*").order("created_at", { ascending: false }),
+      const [courseResult, lessonResult, assetResult, enrollmentResult, certificateResult, studentResult] = await Promise.all([
+        supabase.from("courses").select("*").order("created_at", { ascending: false }),
+        supabase.from("lessons").select("*").order("lesson_order", { ascending: true }),
+        supabase.from("course_assets").select("*").order("created_at", { ascending: false }),
+        supabase.from("enrollments").select("*").order("created_at", { ascending: false }),
+        supabase.from("certificates").select("*").order("created_at", { ascending: false }),
         supabase.from("student_profiles").select("auth_user_id,student_id,full_name,email,enrollment_status").order("full_name")
       ]);
-      const error = courseResult.error ?? moduleResult.error ?? lessonResult.error ?? assetResult.error ?? enrollmentResult.error ?? progressResult.error ?? certificateResult.error;
+      const error = courseResult.error ?? lessonResult.error ?? assetResult.error;
       if (error) throw error;
       setCourses((courseResult.data ?? []) as DbRow[]);
-      setModules((moduleResult.data ?? []) as DbRow[]);
+      setModules(((assetResult.data ?? []) as DbRow[]).filter((asset) => value(asset, ["asset_type"]) === "Module"));
       setLessons((lessonResult.data ?? []) as DbRow[]);
       setAssets((assetResult.data ?? []) as DbRow[]);
-      setEnrollments((enrollmentResult.data ?? []) as DbRow[]);
-      setProgressRows((progressResult.data ?? []) as DbRow[]);
-      setCertificates((certificateResult.data ?? []) as DbRow[]);
+      setEnrollments(enrollmentResult.error ? [] : (enrollmentResult.data ?? []) as DbRow[]);
+      setProgressRows([]);
+      setCertificates(certificateResult.error ? [] : (certificateResult.data ?? []) as DbRow[]);
       if (!studentResult.error) setStudents((studentResult.data ?? []) as DbRow[]);
       setMessage("AFF Course Upload Center synchronized.");
       setUploadStatus((current) => current.stage === "idle" ? { stage: "success", title: "Upload Center ready", detail: "Courses, modules, lessons, and recent assets loaded from Supabase." } : current);
@@ -152,9 +152,9 @@ export function CourseUploadCenter() {
 
   useEffect(() => { loadCenter(); }, [loadCenter]);
 
-  const selectedModules = useMemo(() => modules.filter((module) => !target.courseId || value(module, ["course_id"]) === target.courseId), [modules, target.courseId]);
-  const selectedLessons = useMemo(() => lessons.filter((lesson) => (!target.courseId || value(lesson, ["course_id"]) === target.courseId) && (!target.moduleId || value(lesson, ["module_id"]) === target.moduleId)), [lessons, target.courseId, target.moduleId]);
-  const averageProgress = enrollments.length ? Math.round(enrollments.reduce((total, enrollment) => total + Number(value(enrollment, ["progress_percentage"], "0")), 0) / enrollments.length) : 0;
+  const selectedModules = useMemo(() => modules.filter((courseModule) => !target.courseId || value(courseModule, ["course_id"]) === target.courseId), [modules, target.courseId]);
+  const selectedLessons = useMemo(() => lessons.filter((lesson) => !target.courseId || value(lesson, ["course_id"]) === target.courseId), [lessons, target.courseId]);
+  const averageProgress = enrollments.length ? Math.round(enrollments.reduce((total, enrollment) => total + Number(value(enrollment, ["progress", "progress_percentage"], "0")), 0) / enrollments.length) : 0;
 
   async function uploadAsset(file: File, assetType: AssetType) {
     if (!target.courseId) {
@@ -190,10 +190,11 @@ export function CourseUploadCenter() {
       const publicUrl = publicData.publicUrl;
       const { data: signedData, error: signedError } = await supabase.storage.from("aff-course-assets").createSignedUrl(path, 60 * 60 * 24 * 365);
       if (signedError) throw signedError;
-      setUploadStatus({ stage: "uploading", title: `Saving ${file.name}`, detail: "Writing file metadata to lms_course_assets." });
-      const { data: insertedAsset, error: assetError } = await supabase.from("lms_course_assets").insert({
+      setUploadStatus({ stage: "uploading", title: `Saving ${file.name}`, detail: "Writing file metadata to course_assets." });
+      const { data: insertedAsset, error: assetError } = await supabase.from("course_assets").insert({
         course_id: Number(target.courseId),
         module_id: target.moduleId ? Number(target.moduleId) : null,
+        module_title: value(selectedModules.find((courseModule) => value(courseModule, ["module_id"]) === target.moduleId) ?? {}, ["module_title", "asset_title"]),
         lesson_id: target.lessonId ? Number(target.lessonId) : null,
         asset_title: file.name,
         asset_type: assetType,
@@ -213,19 +214,15 @@ export function CourseUploadCenter() {
       if (insertedAsset) setAssets((current) => [insertedAsset as DbRow, ...current.filter((asset) => value(asset, ["id"]) !== value(insertedAsset as DbRow, ["id"]))]);
 
       if (assetType === "Video") {
-        const { error } = await supabase.from("lms_lessons").update({ video_url: publicUrl, updated_at: new Date().toISOString() }).eq("id", Number(target.lessonId));
+        const { error } = await supabase.from("lessons").update({ video_url: publicUrl, updated_at: new Date().toISOString() }).eq("id", Number(target.lessonId));
         if (error) throw error;
       }
       if (assetType === "PDF Notes") {
-        const { error } = await supabase.from("lms_lessons").update({ pdf_notes_url: publicUrl, updated_at: new Date().toISOString() }).eq("id", Number(target.lessonId));
+        const { error } = await supabase.from("lessons").update({ pdf_notes_url: publicUrl, updated_at: new Date().toISOString() }).eq("id", Number(target.lessonId));
         if (error) throw error;
       }
       if (assetType === "Course Thumbnail") {
-        const { error } = await supabase.from("lms_courses").update({ thumbnail_url: publicUrl, updated_at: new Date().toISOString() }).eq("id", Number(target.courseId));
-        if (error) throw error;
-      }
-      if (assetType === "Assignment") {
-        const { error } = await supabase.from("lms_homework_assignments").insert({ course_id: Number(target.courseId), module_id: target.moduleId ? Number(target.moduleId) : null, lesson_id: target.lessonId ? Number(target.lessonId) : null, assignment_title: file.name.replace(/\.[^.]+$/, ""), instructions: "Download the assignment file and complete the instructor requirements.", assignment_file_url: publicUrl, due_days: 7, status: "Published" });
+        const { error } = await supabase.from("courses").update({ thumbnail_url: publicUrl, updated_at: new Date().toISOString() }).eq("id", Number(target.courseId));
         if (error) throw error;
       }
 
@@ -245,7 +242,23 @@ export function CourseUploadCenter() {
   async function createModule(event: FormEvent) {
     event.preventDefault();
     const supabase = createClient();
-    const { error } = await supabase.from("lms_modules").insert({ course_id: Number(moduleForm.courseId), module_title: moduleForm.title, module_description: moduleForm.description, module_order: Number(moduleForm.order) });
+    const storagePath = `modules/${moduleForm.courseId}/${moduleForm.order}-${safeName(moduleForm.title)}`;
+    const { error } = await supabase.from("course_assets").upsert({
+      course_id: Number(moduleForm.courseId),
+      module_id: Number(moduleForm.order),
+      module_title: moduleForm.title,
+      asset_title: moduleForm.title,
+      asset_type: "Module",
+      file_name: moduleForm.title,
+      file_type: "Module",
+      storage_path: storagePath,
+      public_url: "#",
+      mime_type: "application/json",
+      file_size: 0,
+      asset_status: "Published",
+      uploaded_by: adminEmail,
+      uploaded_by_email: adminEmail
+    }, { onConflict: "storage_path" });
     setMessage(error ? error.message : "Module created.");
     if (!error) { setModuleForm({ courseId: "", title: "", description: "", order: "1" }); await loadCenter(); }
   }
@@ -261,7 +274,24 @@ export function CourseUploadCenter() {
     event.preventDefault();
     if (!questions.length) { setMessage("Add at least one quiz question."); return; }
     const supabase = createClient();
-    const { error } = await supabase.from("lms_quizzes").insert({ course_id: Number(quizForm.courseId), module_id: quizForm.moduleId ? Number(quizForm.moduleId) : null, lesson_id: quizForm.lessonId ? Number(quizForm.lessonId) : null, quiz_title: quizForm.title, questions, passing_score: Number(quizForm.passingScore), status: "Published" });
+    const storagePath = `quizzes/${quizForm.courseId}/${Date.now()}-${safeName(quizForm.title)}`;
+    const { error } = await supabase.from("course_assets").insert({
+      course_id: Number(quizForm.courseId),
+      module_id: quizForm.moduleId ? Number(quizForm.moduleId) : null,
+      lesson_id: quizForm.lessonId ? Number(quizForm.lessonId) : null,
+      asset_title: quizForm.title,
+      asset_type: "Quiz",
+      file_name: `${quizForm.title}.json`,
+      file_type: "Quiz",
+      storage_path: storagePath,
+      public_url: "#",
+      signed_url: JSON.stringify({ questions, passingScore: Number(quizForm.passingScore) }),
+      mime_type: "application/json",
+      file_size: JSON.stringify(questions).length,
+      asset_status: "Published",
+      uploaded_by: adminEmail,
+      uploaded_by_email: adminEmail
+    });
     setMessage(error ? error.message : "Quiz published.");
     if (!error) { setQuizForm({ courseId: "", moduleId: "", lessonId: "", title: "", passingScore: "80" }); setQuestions([]); }
   }
@@ -273,16 +303,15 @@ export function CourseUploadCenter() {
     if (!student || !course) return;
     const token = `${Date.now()}-${Math.random().toString(36).slice(2, 9).toUpperCase()}`;
     const supabase = createClient();
-    const { error } = await supabase.from("lms_course_certificates").upsert({
-      certificate_number: `AFF-LMS-${new Date().getFullYear()}-${token.slice(-8)}`,
+    const { error } = await supabase.from("certificates").insert({
+      certificate_number: `AFF-${new Date().getFullYear()}-${token.slice(-8)}`,
       student_id: certificateForm.studentId,
-      course_id: Number(certificateForm.courseId),
-      course_name: value(course, ["course_name"]),
-      certification_name: certificateForm.certificationName || value(course, ["certification_title"], `${value(course, ["course_name"])} Certificate`),
+      course_name: value(course, ["course_name", "title"]),
       student_name: value(student, ["full_name"], value(student, ["email"])),
+      score: 100,
       verification_code: `AFF-${token}`,
-      completion_date: new Date().toISOString().slice(0, 10)
-    }, { onConflict: "student_id,course_id" });
+      issue_date: new Date().toISOString().slice(0, 10)
+    });
     setMessage(error ? error.message : "Certificate assigned to student.");
     if (!error) { setCertificateForm({ studentId: "", courseId: "", certificationName: "" }); await loadCenter(); }
   }
@@ -317,8 +346,8 @@ export function CourseUploadCenter() {
       <section className="terminal-panel p-5">
         <div className="flex items-center gap-3"><UploadCloud className="text-gold-300" size={22} /><h2 className="text-xl font-semibold text-white">Upload Target</h2></div>
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
-          <Select value={target.courseId} onChange={(courseId) => setTarget({ courseId, moduleId: "", lessonId: "" })} label="Select course" rows={courses} rowLabel={["course_code", "course_name"]} />
-          <Select value={target.moduleId} onChange={(moduleId) => setTarget((current) => ({ ...current, moduleId, lessonId: "" }))} label="Optional module" rows={selectedModules} rowLabel={["module_title"]} />
+          <Select value={target.courseId} onChange={(courseId) => setTarget({ courseId, moduleId: "", lessonId: "" })} label="Select course" rows={courses} rowLabel={["course_name", "title"]} />
+          <Select value={target.moduleId} onChange={(moduleId) => setTarget((current) => ({ ...current, moduleId, lessonId: "" }))} label="Optional module" rows={selectedModules} valueKey="module_id" rowLabel={["module_title", "asset_title"]} />
           <Select value={target.lessonId} onChange={(lessonId) => setTarget((current) => ({ ...current, lessonId }))} label="Optional lesson" rows={selectedLessons} rowLabel={["lesson_title"]} />
         </div>
       </section>
@@ -334,7 +363,7 @@ export function CourseUploadCenter() {
       <section className="grid gap-6 xl:grid-cols-2">
         <form className="terminal-panel grid gap-3 p-5" onSubmit={createModule}>
           <div className="flex items-center gap-3"><Layers3 className="text-gold-300" size={22} /><h2 className="text-xl font-semibold text-white">Module Builder</h2></div>
-          <Select value={moduleForm.courseId} onChange={(courseId) => setModuleForm((current) => ({ ...current, courseId }))} label="Select course" rows={courses} rowLabel={["course_code", "course_name"]} required />
+          <Select value={moduleForm.courseId} onChange={(courseId) => setModuleForm((current) => ({ ...current, courseId }))} label="Select course" rows={courses} rowLabel={["course_name", "title"]} required />
           <input className="field" placeholder="Module title" value={moduleForm.title} onChange={(event) => setModuleForm((current) => ({ ...current, title: event.target.value }))} required />
           <textarea className="field min-h-24" placeholder="Module description" value={moduleForm.description} onChange={(event) => setModuleForm((current) => ({ ...current, description: event.target.value }))} />
           <input className="field" type="number" min="1" value={moduleForm.order} onChange={(event) => setModuleForm((current) => ({ ...current, order: event.target.value }))} />
@@ -343,8 +372,8 @@ export function CourseUploadCenter() {
 
         <form className="terminal-panel grid gap-3 p-5" onSubmit={createQuiz}>
           <div className="flex items-center gap-3"><CheckCircle2 className="text-gold-300" size={22} /><h2 className="text-xl font-semibold text-white">Quiz Builder</h2></div>
-          <Select value={quizForm.courseId} onChange={(courseId) => setQuizForm((current) => ({ ...current, courseId }))} label="Select course" rows={courses} rowLabel={["course_code", "course_name"]} required />
-          <Select value={quizForm.moduleId} onChange={(moduleId) => setQuizForm((current) => ({ ...current, moduleId }))} label="Optional module" rows={modules.filter((module) => !quizForm.courseId || value(module, ["course_id"]) === quizForm.courseId)} rowLabel={["module_title"]} />
+          <Select value={quizForm.courseId} onChange={(courseId) => setQuizForm((current) => ({ ...current, courseId }))} label="Select course" rows={courses} rowLabel={["course_name", "title"]} required />
+          <Select value={quizForm.moduleId} onChange={(moduleId) => setQuizForm((current) => ({ ...current, moduleId }))} label="Optional module" rows={modules.filter((courseModule) => !quizForm.courseId || value(courseModule, ["course_id"]) === quizForm.courseId)} valueKey="module_id" rowLabel={["module_title", "asset_title"]} />
           <Select value={quizForm.lessonId} onChange={(lessonId) => setQuizForm((current) => ({ ...current, lessonId }))} label="Optional lesson" rows={lessons.filter((lesson) => !quizForm.courseId || value(lesson, ["course_id"]) === quizForm.courseId)} rowLabel={["lesson_title"]} />
           <input className="field" placeholder="Quiz title" value={quizForm.title} onChange={(event) => setQuizForm((current) => ({ ...current, title: event.target.value }))} required />
           <div className="border border-gold-500/20 bg-navy-950 p-4">
@@ -363,7 +392,7 @@ export function CourseUploadCenter() {
         <form className="terminal-panel grid h-fit gap-3 p-5" onSubmit={assignCertificate}>
           <div className="flex items-center gap-3"><GraduationCap className="text-gold-300" size={22} /><h2 className="text-xl font-semibold text-white">Certificate Assignment</h2></div>
           <Select value={certificateForm.studentId} onChange={(studentId) => setCertificateForm((current) => ({ ...current, studentId }))} label="Select student" rows={students} valueKey="auth_user_id" rowLabel={["student_id", "full_name", "email"]} required />
-          <Select value={certificateForm.courseId} onChange={(courseId) => { const course = courses.find((item) => value(item, ["id"]) === courseId); setCertificateForm((current) => ({ ...current, courseId, certificationName: value(course ?? {}, ["certification_title"]) })); }} label="Select course" rows={courses} rowLabel={["course_code", "course_name"]} required />
+          <Select value={certificateForm.courseId} onChange={(courseId) => { const course = courses.find((item) => value(item, ["id"]) === courseId); setCertificateForm((current) => ({ ...current, courseId, certificationName: `${value(course ?? {}, ["course_name", "title"])} Certificate` })); }} label="Select course" rows={courses} rowLabel={["course_name", "title"]} required />
           <input className="field" placeholder="Certificate title" value={certificateForm.certificationName} onChange={(event) => setCertificateForm((current) => ({ ...current, certificationName: event.target.value }))} />
           <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-4 py-3 font-bold text-navy-950" type="submit"><Award size={17} /> Assign Certificate</button>
         </form>
@@ -371,11 +400,11 @@ export function CourseUploadCenter() {
         <section className="terminal-panel overflow-hidden">
           <div className="border-b border-gold-500/20 p-5"><h2 className="text-xl font-semibold text-white">Instructor Progress Dashboard</h2></div>
           <div className="grid gap-px bg-gold-500/14">
-            {enrollments.length === 0 ? <p className="bg-navy-950 p-5 text-sm text-ink/68">No LMS enrollments found.</p> : enrollments.slice(0, 20).map((enrollment) => {
+            {enrollments.length === 0 ? <p className="bg-navy-950 p-5 text-sm text-ink/68">No course enrollments found.</p> : enrollments.slice(0, 20).map((enrollment) => {
               const student = students.find((item) => value(item, ["auth_user_id"]) === value(enrollment, ["student_id"]));
               const course = courses.find((item) => value(item, ["id"]) === value(enrollment, ["course_id"]));
-              const percentage = Number(value(enrollment, ["progress_percentage"], "0"));
-              return <article key={value(enrollment, ["id"])} className="bg-navy-950 p-5"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold text-white">{value(student ?? {}, ["full_name"], value(enrollment, ["student_id"]))}</p><p className="mt-1 text-sm text-ink/60">{value(course ?? {}, ["course_name"], "Managed Course")} · {progressRows.filter((row) => value(row, ["student_id"]) === value(enrollment, ["student_id"]) && value(row, ["course_id"]) === value(enrollment, ["course_id"])).length} lessons completed</p></div><span className="text-sm text-gold-300">{percentage}%</span></div><div className="mt-3"><ProgressBar value={percentage} /></div></article>;
+              const percentage = Number(value(enrollment, ["progress", "progress_percentage"], "0"));
+              return <article key={value(enrollment, ["id"])} className="bg-navy-950 p-5"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold text-white">{value(student ?? {}, ["full_name"], value(enrollment, ["student_id"]))}</p><p className="mt-1 text-sm text-ink/60">{value(course ?? {}, ["course_name", "title"], "Managed Course")} · {progressRows.filter((row) => value(row, ["student_id"]) === value(enrollment, ["student_id"]) && value(row, ["course_id"]) === value(enrollment, ["course_id"])).length} lessons completed</p></div><span className="text-sm text-gold-300">{percentage}%</span></div><div className="mt-3"><ProgressBar value={percentage} /></div></article>;
             })}
           </div>
         </section>
@@ -393,7 +422,7 @@ export function CourseUploadCenter() {
                 <p className="text-xs uppercase tracking-[.18em] text-gold-300">{value(asset, ["asset_type"])} · {value(asset, ["file_type"], value(asset, ["mime_type"], "File"))}</p>
                 <h3 className="mt-2 font-semibold text-white">{value(asset, ["asset_title"])}</h3>
                 <p className="mt-2 text-sm leading-6 text-ink/60">{Math.max(1, Math.round(Number(value(asset, ["file_size"], "0")) / 1024))} KB · {value(asset, ["asset_status"])}</p>
-                <p className="mt-2 text-sm leading-6 text-ink/62">{value(course ?? {}, ["course_name"], "Course")} {courseModule ? `· ${value(courseModule, ["module_title"])}` : ""} {lesson ? `· ${value(lesson, ["lesson_title"])}` : ""}</p>
+                <p className="mt-2 text-sm leading-6 text-ink/62">{value(course ?? {}, ["course_name", "title"], "Course")} {courseModule ? `· ${value(courseModule, ["module_title"])}` : ""} {lesson ? `· ${value(lesson, ["lesson_title", "title"])}` : ""}</p>
                 <a className="mt-4 inline-flex text-sm font-semibold text-gold-300 hover:text-cream" href={value(asset, ["public_url", "signed_url"])} target="_blank" rel="noreferrer">Open uploaded file</a>
               </article>
             );

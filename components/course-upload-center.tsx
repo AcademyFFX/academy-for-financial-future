@@ -25,8 +25,30 @@ import { createClient } from "@/lib/supabase";
 type DbRow = Record<string, unknown>;
 type QuizQuestion = { prompt: string; options: string[]; correctAnswer: string };
 type AssetType = "Video" | "PDF Notes" | "PowerPoint" | "Assignment" | "Course Thumbnail";
+type UploadStage = "idle" | "uploading" | "success" | "failed";
+type UploadStatus = {
+  stage: UploadStage;
+  title: string;
+  detail: string;
+};
 
 const adminEmail = "acafffx@gmail.com";
+
+const acceptedUploads: Record<AssetType, { extensions: string[]; mimeTypes: string[]; label: string }> = {
+  Video: { extensions: [".mp4", ".mov"], mimeTypes: ["video/mp4", "video/quicktime"], label: "MP4 or MOV video" },
+  "PDF Notes": { extensions: [".pdf"], mimeTypes: ["application/pdf"], label: "PDF" },
+  PowerPoint: {
+    extensions: [".pptx"],
+    mimeTypes: ["application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+    label: "PPTX"
+  },
+  Assignment: {
+    extensions: [".pdf", ".pptx"],
+    mimeTypes: ["application/pdf", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+    label: "PDF or PPTX"
+  },
+  "Course Thumbnail": { extensions: [".png", ".jpg", ".jpeg", ".webp"], mimeTypes: ["image/png", "image/jpeg", "image/webp"], label: "PNG, JPG, or WebP" }
+};
 
 function value(row: DbRow, keys: string[], fallback = "") {
   for (const key of keys) {
@@ -46,10 +68,33 @@ function errorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function fileExtension(name: string) {
+  const index = name.lastIndexOf(".");
+  return index >= 0 ? name.slice(index).toLowerCase() : "";
+}
+
+function fileType(file: File) {
+  return file.type || fileExtension(file.name).replace(".", "").toUpperCase() || "Unknown";
+}
+
+function isAcceptedFile(file: File, assetType: AssetType) {
+  const accepted = acceptedUploads[assetType];
+  const extension = fileExtension(file.name);
+  return accepted.mimeTypes.includes(file.type) || accepted.extensions.includes(extension);
+}
+
+function statusClasses(stage: UploadStage) {
+  if (stage === "success") return "border-emerald-400/40 bg-emerald-500/10 text-emerald-100";
+  if (stage === "failed") return "border-red-400/45 bg-red-500/10 text-red-100";
+  if (stage === "uploading") return "border-gold-300/45 bg-gold-500/10 text-gold-100";
+  return "border-gold-500/20 bg-navy-950 text-ink/72";
+}
+
 export function CourseUploadCenter() {
   const [authorized, setAuthorized] = useState(false);
   const [message, setMessage] = useState("Loading AFF Course Upload Center...");
   const [uploading, setUploading] = useState<AssetType | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>({ stage: "idle", title: "Ready", detail: "Select a course, module, and lesson before uploading course assets." });
   const [courses, setCourses] = useState<DbRow[]>([]);
   const [modules, setModules] = useState<DbRow[]>([]);
   const [lessons, setLessons] = useState<DbRow[]>([]);
@@ -72,6 +117,7 @@ export function CourseUploadCenter() {
       if (user?.email?.toLowerCase() !== adminEmail) {
         setAuthorized(false);
         setMessage("Administrator access required for the Course Upload Center.");
+        setUploadStatus({ stage: "failed", title: "Admin access required", detail: "Sign in with acafffx@gmail.com to upload course assets." });
         return;
       }
       setAuthorized(true);
@@ -96,8 +142,11 @@ export function CourseUploadCenter() {
       setCertificates((certificateResult.data ?? []) as DbRow[]);
       if (!studentResult.error) setStudents((studentResult.data ?? []) as DbRow[]);
       setMessage("AFF Course Upload Center synchronized.");
+      setUploadStatus((current) => current.stage === "idle" ? { stage: "success", title: "Upload Center ready", detail: "Courses, modules, lessons, and recent assets loaded from Supabase." } : current);
     } catch (error) {
-      setMessage(errorMessage(error, "Run the Course Upload Center migration to enable Supabase Storage."));
+      const detail = errorMessage(error, "Run the Course Upload Center migration to enable Supabase Storage.");
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Upload Center failed to load", detail });
     }
   }, []);
 
@@ -108,32 +157,60 @@ export function CourseUploadCenter() {
   const averageProgress = enrollments.length ? Math.round(enrollments.reduce((total, enrollment) => total + Number(value(enrollment, ["progress_percentage"], "0")), 0) / enrollments.length) : 0;
 
   async function uploadAsset(file: File, assetType: AssetType) {
-    if (!target.courseId) { setMessage("Select a course before uploading."); return; }
-    if (["Video", "PDF Notes"].includes(assetType) && !target.lessonId) { setMessage(`Select a lesson before uploading ${assetType.toLowerCase()}.`); return; }
+    if (!target.courseId) {
+      const detail = "Select a course before uploading.";
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Upload target missing", detail });
+      return;
+    }
+    if (["Video", "PDF Notes"].includes(assetType) && !target.lessonId) {
+      const detail = `Select a lesson before uploading ${assetType.toLowerCase()}.`;
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Lesson target required", detail });
+      return;
+    }
+    if (!isAcceptedFile(file, assetType)) {
+      const detail = `${assetType} accepts ${acceptedUploads[assetType].label}. ${file.name} is ${file.type || fileExtension(file.name) || "an unknown file type"}.`;
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Unsupported file type", detail });
+      return;
+    }
     setUploading(assetType);
     setMessage(`Uploading ${file.name}...`);
+    setUploadStatus({ stage: "uploading", title: `Uploading ${file.name}`, detail: "Saving file to Supabase Storage bucket aff-course-assets." });
     try {
       const supabase = createClient();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (user?.email?.toLowerCase() !== adminEmail) throw new Error("Administrator access required for uploads.");
       const path = `${target.courseId}/${assetType.toLowerCase().replace(/\s+/g, "-")}/${Date.now()}-${safeName(file.name)}`;
       const { error: uploadError } = await supabase.storage.from("aff-course-assets").upload(path, file, { contentType: file.type || undefined, upsert: false });
       if (uploadError) throw uploadError;
       const { data: publicData } = supabase.storage.from("aff-course-assets").getPublicUrl(path);
       const publicUrl = publicData.publicUrl;
-      const { error: assetError } = await supabase.from("lms_course_assets").insert({
+      const { data: signedData, error: signedError } = await supabase.storage.from("aff-course-assets").createSignedUrl(path, 60 * 60 * 24 * 365);
+      if (signedError) throw signedError;
+      setUploadStatus({ stage: "uploading", title: `Saving ${file.name}`, detail: "Writing file metadata to lms_course_assets." });
+      const { data: insertedAsset, error: assetError } = await supabase.from("lms_course_assets").insert({
         course_id: Number(target.courseId),
         module_id: target.moduleId ? Number(target.moduleId) : null,
         lesson_id: target.lessonId ? Number(target.lessonId) : null,
         asset_title: file.name,
         asset_type: assetType,
         file_name: file.name,
+        file_type: fileType(file),
         storage_path: path,
         public_url: publicUrl,
+        signed_url: signedData.signedUrl,
         mime_type: file.type || null,
         file_size: file.size,
-        uploaded_by: adminEmail,
+        uploaded_by: user.email ?? adminEmail,
+        uploaded_by_email: user.email ?? adminEmail,
+        uploaded_by_user_id: user.id,
         asset_status: "Published"
-      });
+      }).select("*").single();
       if (assetError) throw assetError;
+      if (insertedAsset) setAssets((current) => [insertedAsset as DbRow, ...current.filter((asset) => value(asset, ["id"]) !== value(insertedAsset as DbRow, ["id"]))]);
 
       if (assetType === "Video") {
         const { error } = await supabase.from("lms_lessons").update({ video_url: publicUrl, updated_at: new Date().toISOString() }).eq("id", Number(target.lessonId));
@@ -152,10 +229,14 @@ export function CourseUploadCenter() {
         if (error) throw error;
       }
 
-      setMessage(`${assetType} uploaded and connected to the LMS.`);
+      const detail = `${assetType} uploaded to aff-course-assets and connected to the selected ${target.lessonId ? "lesson" : target.moduleId ? "module" : "course"}.`;
+      setMessage(detail);
+      setUploadStatus({ stage: "success", title: "Upload successful", detail });
       await loadCenter();
     } catch (error) {
-      setMessage(errorMessage(error, `Unable to upload ${assetType.toLowerCase()}.`));
+      const detail = errorMessage(error, `Unable to upload ${assetType.toLowerCase()}.`);
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Upload failed", detail });
     } finally {
       setUploading(null);
     }
@@ -215,6 +296,17 @@ export function CourseUploadCenter() {
         <div className="text-sm text-ink/68">Bucket: <span className="text-gold-300">aff-course-assets</span></div>
       </section>
 
+      <section className={`border p-4 ${statusClasses(uploadStatus.stage)}`} role="status" aria-live="polite">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[.18em]">{uploadStatus.stage === "uploading" ? "Uploading" : uploadStatus.stage === "success" ? "Success" : uploadStatus.stage === "failed" ? "Failed" : "Status"}</p>
+            <h3 className="mt-1 font-semibold text-white">{uploadStatus.title}</h3>
+            <p className="mt-1 text-sm leading-6 text-current/78">{uploadStatus.detail}</p>
+          </div>
+          {uploading ? <span className="shrink-0 text-sm font-semibold text-gold-200">Processing {uploading}</span> : null}
+        </div>
+      </section>
+
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Metric icon={<BookOpen size={20} />} label="Courses" value={String(courses.length)} />
         <Metric icon={<Users size={20} />} label="Enrollments" value={String(enrollments.length)} />
@@ -232,10 +324,10 @@ export function CourseUploadCenter() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <UploadDropzone title="Video Upload" text="MP4, WebM, or MOV up to 500 MB" accept="video/mp4,video/webm,video/quicktime" icon={<Video size={26} />} busy={uploading === "Video"} onFile={(file) => uploadAsset(file, "Video")} />
+        <UploadDropzone title="Video Upload" text="MP4 or MOV up to 500 MB" accept="video/mp4,video/quicktime,.mp4,.mov" icon={<Video size={26} />} busy={uploading === "Video"} onFile={(file) => uploadAsset(file, "Video")} />
         <UploadDropzone title="PDF Notes" text="Course notes and reading materials" accept="application/pdf" icon={<FileText size={26} />} busy={uploading === "PDF Notes"} onFile={(file) => uploadAsset(file, "PDF Notes")} />
-        <UploadDropzone title="PowerPoint Upload" text="PPT and PPTX presentations" accept=".ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation" icon={<Presentation size={26} />} busy={uploading === "PowerPoint"} onFile={(file) => uploadAsset(file, "PowerPoint")} />
-        <UploadDropzone title="Assignment Upload" text="PDF, DOC, DOCX, PPT, or PPTX" accept=".pdf,.doc,.docx,.ppt,.pptx" icon={<FileArchive size={26} />} busy={uploading === "Assignment"} onFile={(file) => uploadAsset(file, "Assignment")} />
+        <UploadDropzone title="PowerPoint Upload" text="PPTX instructor presentations" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" icon={<Presentation size={26} />} busy={uploading === "PowerPoint"} onFile={(file) => uploadAsset(file, "PowerPoint")} />
+        <UploadDropzone title="Assignment Upload" text="PDF or PPTX homework files" accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation" icon={<FileArchive size={26} />} busy={uploading === "Assignment"} onFile={(file) => uploadAsset(file, "Assignment")} />
         <UploadDropzone title="Course Thumbnail" text="PNG, JPG, or WebP artwork" accept="image/png,image/jpeg,image/webp" icon={<ImageIcon size={26} />} busy={uploading === "Course Thumbnail"} onFile={(file) => uploadAsset(file, "Course Thumbnail")} />
       </section>
 
@@ -292,7 +384,20 @@ export function CourseUploadCenter() {
       <section className="terminal-panel overflow-hidden">
         <div className="border-b border-gold-500/20 p-5"><h2 className="text-xl font-semibold text-white">Recent Course Assets</h2></div>
         <div className="grid gap-px bg-gold-500/14 md:grid-cols-2 xl:grid-cols-3">
-          {assets.slice(0, 12).map((asset) => <article key={value(asset, ["id"])} className="bg-navy-950 p-5"><p className="text-xs uppercase tracking-[.18em] text-gold-300">{value(asset, ["asset_type"])}</p><h3 className="mt-2 font-semibold text-white">{value(asset, ["asset_title"])}</h3><p className="mt-2 text-sm text-ink/60">{Math.max(1, Math.round(Number(value(asset, ["file_size"], "0")) / 1024))} KB · {value(asset, ["asset_status"])}</p></article>)}
+          {assets.length === 0 ? <p className="bg-navy-950 p-5 text-sm text-ink/68 md:col-span-2 xl:col-span-3">No uploaded course assets found yet.</p> : assets.slice(0, 12).map((asset) => {
+            const course = courses.find((item) => value(item, ["id"]) === value(asset, ["course_id"]));
+            const courseModule = modules.find((item) => value(item, ["id"]) === value(asset, ["module_id"]));
+            const lesson = lessons.find((item) => value(item, ["id"]) === value(asset, ["lesson_id"]));
+            return (
+              <article key={value(asset, ["id"])} className="bg-navy-950 p-5">
+                <p className="text-xs uppercase tracking-[.18em] text-gold-300">{value(asset, ["asset_type"])} · {value(asset, ["file_type"], value(asset, ["mime_type"], "File"))}</p>
+                <h3 className="mt-2 font-semibold text-white">{value(asset, ["asset_title"])}</h3>
+                <p className="mt-2 text-sm leading-6 text-ink/60">{Math.max(1, Math.round(Number(value(asset, ["file_size"], "0")) / 1024))} KB · {value(asset, ["asset_status"])}</p>
+                <p className="mt-2 text-sm leading-6 text-ink/62">{value(course ?? {}, ["course_name"], "Course")} {courseModule ? `· ${value(courseModule, ["module_title"])}` : ""} {lesson ? `· ${value(lesson, ["lesson_title"])}` : ""}</p>
+                <a className="mt-4 inline-flex text-sm font-semibold text-gold-300 hover:text-cream" href={value(asset, ["public_url", "signed_url"])} target="_blank" rel="noreferrer">Open uploaded file</a>
+              </article>
+            );
+          })}
         </div>
       </section>
     </section>

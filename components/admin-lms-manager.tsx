@@ -36,6 +36,14 @@ type SavedQuizQuestion = {
   points: number;
   status: string;
 };
+type PublishedQuizSummary = {
+  key: string;
+  courseId: string;
+  lessonId: string;
+  quizTitle: string;
+  questionCount: number;
+  points: number;
+};
 
 const adminEmail = "acafffx@gmail.com";
 
@@ -210,6 +218,25 @@ export function AdminLmsManager() {
     .filter((question) => !quizForm.lessonId || question.lessonId === quizForm.lessonId)
     .filter((question) => !quizForm.title || question.quizTitle.toLowerCase() === quizForm.title.toLowerCase())
     .sort((a, b) => a.id.localeCompare(b.id)), [courseAssets, quizForm.courseId, quizForm.lessonId, quizForm.title]);
+  const publishedQuizzes = useMemo<PublishedQuizSummary[]>(() => {
+    const summaries = new Map<string, PublishedQuizSummary>();
+    for (const question of courseAssets.filter((asset) => value(asset, ["asset_type"]) === "Quiz" && value(asset, ["asset_status"], "Published") === "Published")) {
+      const payload = parseQuizPayload(question);
+      if (!payload?.prompt) continue;
+      const quizTitle = payload.quizTitle;
+      const courseId = value(question, ["course_id"]);
+      const lessonId = value(question, ["lesson_id"]);
+      const key = `${courseId}::${lessonId}::${quizTitle}`;
+      const current = summaries.get(key) ?? { key, courseId, lessonId, quizTitle, questionCount: 0, points: 0 };
+      current.questionCount += 1;
+      current.points += payload.points || 1;
+      summaries.set(key, current);
+    }
+    return Array.from(summaries.values()).sort((a, b) => a.quizTitle.localeCompare(b.quizTitle));
+  }, [courseAssets]);
+  const matchingQuizQuestions = useMemo(() => savedQuestions.filter((question) => !quizForm.title || question.quizTitle.toLowerCase() === quizForm.title.toLowerCase()), [quizForm.title, savedQuestions]);
+  const hasMatchingQuizQuestions = matchingQuizQuestions.length > 0;
+  const selectedQuizPublished = hasMatchingQuizQuestions && matchingQuizQuestions.every((question) => question.status === "Published");
 
   async function createCourse(event: FormEvent) {
     event.preventDefault();
@@ -342,7 +369,7 @@ export function AdminLmsManager() {
       signed_url: JSON.stringify({ quizTitle: quizForm.title.trim(), question: questionData }),
       mime_type: "application/json",
       file_size: JSON.stringify(questionData).length,
-      asset_status: "Published"
+      asset_status: "Draft"
     } satisfies CourseAssetInput;
 
     const supabase = createClient();
@@ -358,7 +385,7 @@ export function AdminLmsManager() {
           signed_url: payload.signed_url,
           mime_type: payload.mime_type,
           file_size: payload.file_size,
-          asset_status: payload.asset_status,
+          asset_status: "Draft",
           updated_at: new Date().toISOString()
         }).eq("id", editingQuestionId)
       : await insertCourseAsset(payload);
@@ -389,13 +416,23 @@ export function AdminLmsManager() {
       setMessage("Select a course and enter a quiz title before publishing.");
       return;
     }
+    const questionsToPublish = matchingQuizQuestions.filter((question) => question.status !== "Published");
+    if (!matchingQuizQuestions.length) {
+      setMessage("Save at least one quiz question before publishing.");
+      return;
+    }
+    if (!questionsToPublish.length) {
+      setMessage("This quiz is already published.");
+      return;
+    }
     const supabase = createClient();
     let query = supabase
       .from("course_assets")
       .update({ asset_status: "Published", updated_at: new Date().toISOString() })
       .eq("course_id", Number(quizForm.courseId))
       .eq("asset_type", "Quiz")
-      .eq("asset_title", quizForm.title.trim());
+      .eq("asset_title", quizForm.title.trim())
+      .neq("asset_status", "Published");
     if (quizForm.lessonId) query = query.eq("lesson_id", Number(quizForm.lessonId));
     const { error } = await query;
     setMessage(error ? error.message : "Quiz published.");
@@ -488,8 +525,9 @@ export function AdminLmsManager() {
           <div className="grid gap-3 sm:grid-cols-3">
             <button className="border border-gold-500/45 px-4 py-3 text-sm font-bold text-gold-300" type="button" onClick={() => saveQuizQuestion(true)}>Save and Add Another</button>
             <button className="border border-gold-500/45 px-4 py-3 text-sm font-bold text-gold-300" type="button" onClick={() => setShowQuizPreview((current) => !current)}>Preview Quiz</button>
-            <button className="border border-gold-500/45 px-4 py-3 text-sm font-bold text-gold-300" type="button" onClick={publishQuiz}>Publish Quiz</button>
+            <button className="border border-gold-500/45 px-4 py-3 text-sm font-bold text-gold-300 disabled:cursor-not-allowed disabled:opacity-45" type="button" onClick={publishQuiz} disabled={selectedQuizPublished}>{selectedQuizPublished ? "Published" : "Publish Quiz"}</button>
           </div>
+          {selectedQuizPublished ? <p className="inline-flex w-fit border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[.16em] text-emerald-200">Published</p> : null}
           {showQuizPreview ? <div className="border border-gold-500/20 bg-navy-950 p-4">
             <p className="text-xs uppercase tracking-[.18em] text-gold-300">Preview Quiz</p>
             <h3 className="mt-2 font-semibold text-white">{quizForm.title || "Untitled Quiz"}</h3>
@@ -513,10 +551,11 @@ export function AdminLmsManager() {
             <article key={question.id} className="border border-gold-500/18 bg-navy-950 p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-xs uppercase tracking-[.18em] text-gold-300">Question {index + 1} · {question.points} point{question.points === 1 ? "" : "s"}</p>
+                  <p className="text-xs uppercase tracking-[.18em] text-gold-300">Question {index + 1} · {question.points} point{question.points === 1 ? "" : "s"} · {question.status}</p>
                   <h3 className="mt-2 font-semibold text-white">{question.prompt}</h3>
                   <p className="mt-2 text-sm text-ink/68">Options: {question.options.join(", ")}</p>
                   <p className="mt-1 text-sm text-gold-300">Correct answer: {question.correctAnswer}</p>
+                  {question.status === "Published" ? <p className="mt-3 inline-flex border border-emerald-400/40 bg-emerald-500/10 px-2 py-1 text-xs font-semibold uppercase tracking-[.14em] text-emerald-200">Published</p> : <p className="mt-3 inline-flex border border-gold-500/30 bg-gold-500/10 px-2 py-1 text-xs font-semibold uppercase tracking-[.14em] text-gold-200">Draft</p>}
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <button className="border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300" type="button" onClick={() => editQuestion(question)}>Edit</button>
@@ -525,6 +564,30 @@ export function AdminLmsManager() {
               </div>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="terminal-panel p-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[.18em] text-gold-300">Published Quiz Library</p>
+            <h2 className="mt-2 text-xl font-semibold text-white">Published Quizzes</h2>
+          </div>
+          <p className="text-sm font-semibold text-emerald-200">{publishedQuizzes.length} published</p>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {publishedQuizzes.length === 0 ? <p className="text-sm text-ink/68 md:col-span-2">No published quizzes yet. Save questions, then publish the quiz.</p> : publishedQuizzes.map((quiz) => {
+            const course = courses.find((item) => value(item, ["id"]) === quiz.courseId);
+            const lesson = lessons.find((item) => value(item, ["id"]) === quiz.lessonId);
+            return (
+              <article key={quiz.key} className="border border-emerald-400/20 bg-navy-950 p-4">
+                <p className="text-xs uppercase tracking-[.18em] text-emerald-200">Published</p>
+                <h3 className="mt-2 font-semibold text-white">{quiz.quizTitle}</h3>
+                <p className="mt-2 text-sm text-ink/68">{value(course, ["course_name", "title"], "Course")} {lesson ? `· ${value(lesson, ["lesson_title", "title"])}` : ""}</p>
+                <p className="mt-1 text-sm text-gold-300">{quiz.questionCount} question{quiz.questionCount === 1 ? "" : "s"} · {quiz.points} point{quiz.points === 1 ? "" : "s"}</p>
+              </article>
+            );
+          })}
         </div>
       </section>
 

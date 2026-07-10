@@ -24,6 +24,18 @@ type CourseAssetInput = {
   uploaded_by?: string;
   uploaded_by_email?: string;
 };
+type SavedQuizQuestion = {
+  id: string;
+  courseId: string;
+  moduleId: string;
+  lessonId: string;
+  quizTitle: string;
+  prompt: string;
+  options: string[];
+  correctAnswer: string;
+  points: number;
+  status: string;
+};
 
 const adminEmail = "acafffx@gmail.com";
 
@@ -48,6 +60,24 @@ function errorMessage(error: unknown, fallback: string) {
 
 function isMissingUrlColumn(error: unknown) {
   return errorMessage(error, "").toLowerCase().includes("'url' column");
+}
+
+function parseQuizPayload(row: DbRow) {
+  const raw = value(row, ["signed_url"]);
+  if (!raw || raw === "#") return null;
+  try {
+    const parsed = JSON.parse(raw) as { quizTitle?: string; prompt?: string; options?: string[]; correctAnswer?: string; points?: number; question?: { prompt?: string; options?: string[]; correctAnswer?: string; points?: number } };
+    const question = parsed.question ?? parsed;
+    return {
+      quizTitle: parsed.quizTitle || value(row, ["asset_title"]),
+      prompt: question.prompt ?? "",
+      options: Array.isArray(question.options) ? question.options.map(String) : [],
+      correctAnswer: question.correctAnswer ?? "",
+      points: Number(question.points ?? parsed.points ?? 1)
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function insertCourseAsset(asset: CourseAssetInput) {
@@ -83,11 +113,14 @@ export function AdminLmsManager() {
   const [courses, setCourses] = useState<DbRow[]>([]);
   const [modules, setModules] = useState<DbRow[]>([]);
   const [lessons, setLessons] = useState<DbRow[]>([]);
+  const [courseAssets, setCourseAssets] = useState<DbRow[]>([]);
   const [courseForm, setCourseForm] = useState({ name: "", description: "", thumbnailUrl: "", duration: "" });
   const [moduleForm, setModuleForm] = useState({ courseId: "", title: "", description: "", order: "1" });
   const [lessonForm, setLessonForm] = useState({ courseId: "", lessonId: "", title: "", description: "", videoUrl: "", pdfUrl: "", order: "1" });
   const [homeworkForm, setHomeworkForm] = useState({ courseId: "", moduleId: "", lessonId: "", title: "", instructions: "", fileUrl: "", dueDays: "7" });
-  const [quizForm, setQuizForm] = useState({ courseId: "", moduleId: "", lessonId: "", title: "", prompt: "", options: "", correctAnswer: "", passingScore: "80" });
+  const [quizForm, setQuizForm] = useState({ courseId: "", moduleId: "", lessonId: "", title: "", prompt: "", options: "", correctAnswer: "", points: "1" });
+  const [editingQuestionId, setEditingQuestionId] = useState("");
+  const [showQuizPreview, setShowQuizPreview] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -112,6 +145,7 @@ export function AdminLmsManager() {
       const courseAssets = (assetResult.data ?? []) as DbRow[];
       setCourses((courseResult.data ?? []) as DbRow[]);
       setLessons((lessonResult.data ?? []) as DbRow[]);
+      setCourseAssets(courseAssets);
       setModules(courseAssets.filter((asset) => value(asset, ["asset_type"]) === "Module"));
       setMessage("AFF course administration ready.");
     } catch (error) {
@@ -127,13 +161,15 @@ export function AdminLmsManager() {
     </option>
   )), [courses]);
 
-  const moduleOptions = useMemo(() => modules
-    .filter((moduleRow) => !lessonForm.courseId || value(moduleRow, ["course_id"]) === lessonForm.courseId)
-    .map((moduleRow) => (
-      <option key={value(moduleRow, ["id"])} value={value(moduleRow, ["module_id", "id"])}>
-        {value(moduleRow, ["module_title", "asset_title"])}
-      </option>
-    )), [lessonForm.courseId, modules]);
+  function moduleOptionsFor(courseId: string) {
+    return modules
+      .filter((moduleRow) => !courseId || value(moduleRow, ["course_id"]) === courseId)
+      .map((moduleRow) => (
+        <option key={value(moduleRow, ["id"])} value={value(moduleRow, ["module_id", "id"])}>
+          {value(moduleRow, ["module_title", "asset_title"])}
+        </option>
+      ));
+  }
 
   const lessonOptions = useMemo(() => lessons
     .filter((lesson) => !homeworkForm.courseId || value(lesson, ["course_id"]) === homeworkForm.courseId)
@@ -150,6 +186,30 @@ export function AdminLmsManager() {
         {value(lesson, ["lesson_title", "title"])}
       </option>
     )), [quizForm.courseId, lessons]);
+
+  const savedQuestions = useMemo<SavedQuizQuestion[]>(() => courseAssets
+    .filter((asset) => value(asset, ["asset_type"]) === "Quiz")
+    .map((asset) => {
+      const payload = parseQuizPayload(asset);
+      if (!payload) return null;
+      return {
+        id: value(asset, ["id"]),
+        courseId: value(asset, ["course_id"]),
+        moduleId: value(asset, ["module_id"]),
+        lessonId: value(asset, ["lesson_id"]),
+        quizTitle: payload.quizTitle,
+        prompt: payload.prompt,
+        options: payload.options,
+        correctAnswer: payload.correctAnswer,
+        points: payload.points || 1,
+        status: value(asset, ["asset_status"], "Published")
+      };
+    })
+    .filter((question): question is SavedQuizQuestion => Boolean(question))
+    .filter((question) => !quizForm.courseId || question.courseId === quizForm.courseId)
+    .filter((question) => !quizForm.lessonId || question.lessonId === quizForm.lessonId)
+    .filter((question) => !quizForm.title || question.quizTitle.toLowerCase() === quizForm.title.toLowerCase())
+    .sort((a, b) => a.id.localeCompare(b.id)), [courseAssets, quizForm.courseId, quizForm.lessonId, quizForm.title]);
 
   async function createCourse(event: FormEvent) {
     event.preventDefault();
@@ -241,35 +301,127 @@ export function AdminLmsManager() {
     }
   }
 
-  async function createQuiz(event: FormEvent) {
-    event.preventDefault();
+  function validateQuizQuestion() {
     const options = quizForm.options.split(",").map((item) => item.trim()).filter(Boolean);
+    if (!quizForm.courseId) return { error: "Select a course before saving a quiz question.", options };
+    if (!quizForm.title.trim()) return { error: "Quiz title is required.", options };
+    if (!quizForm.prompt.trim()) return { error: "Question cannot be blank.", options };
+    if (options.length < 2) return { error: "Enter at least two answer options separated by commas.", options };
+    if (!quizForm.correctAnswer.trim()) return { error: "Correct answer cannot be blank.", options };
+    if (!options.includes(quizForm.correctAnswer.trim())) return { error: "Correct answer must exactly match one of the listed options.", options };
+    if (Number(quizForm.points) <= 0) return { error: "Point value must be at least 1.", options };
+    if (!editingQuestionId && savedQuestions.length >= 20) return { error: "This quiz already has 20 questions.", options };
+    return { error: "", options };
+  }
+
+  async function saveQuizQuestion(addAnother = false) {
+    const validation = validateQuizQuestion();
+    if (validation.error) {
+      setMessage(validation.error);
+      return;
+    }
     const moduleTitle = value(modules.find((moduleRow) => value(moduleRow, ["module_id", "id"]) === quizForm.moduleId), ["module_title", "asset_title"]);
-    const quizData = {
-      questions: [{ prompt: quizForm.prompt, options, correctAnswer: quizForm.correctAnswer }],
-      passingScore: Number(quizForm.passingScore)
+    const questionData = {
+      quizTitle: quizForm.title.trim(),
+      prompt: quizForm.prompt.trim(),
+      options: validation.options,
+      correctAnswer: quizForm.correctAnswer.trim(),
+      points: Number(quizForm.points || 1)
     };
-    const { error } = await insertCourseAsset({
+    const payload = {
       course_id: Number(quizForm.courseId),
       module_id: quizForm.moduleId ? Number(quizForm.moduleId) : null,
       module_title: moduleTitle || null,
       lesson_id: quizForm.lessonId ? Number(quizForm.lessonId) : null,
-      asset_title: quizForm.title,
+      asset_title: quizForm.title.trim(),
       asset_type: "Quiz",
-      file_name: `${quizForm.title}.json`,
+      file_name: `${quizForm.title.trim()}.json`,
       file_type: "Quiz",
-      storage_path: `quizzes/${quizForm.courseId}/${Date.now()}-${safeName(quizForm.title)}`,
+      storage_path: editingQuestionId ? value(courseAssets.find((asset) => value(asset, ["id"]) === editingQuestionId), ["storage_path"]) : `quizzes/${quizForm.courseId}/${quizForm.lessonId || "course"}/${safeName(quizForm.title)}/${Date.now()}-${safeName(quizForm.prompt).slice(0, 52)}`,
       url: "#",
-      signed_url: JSON.stringify(quizData),
+      signed_url: JSON.stringify({ quizTitle: quizForm.title.trim(), question: questionData }),
       mime_type: "application/json",
-      file_size: JSON.stringify(quizData).length,
+      file_size: JSON.stringify(questionData).length,
       asset_status: "Published"
-    });
-    setMessage(error ? error.message : "Quiz published.");
+    } satisfies CourseAssetInput;
+
+    const supabase = createClient();
+    const result = editingQuestionId
+      ? await supabase.from("course_assets").update({
+          course_id: payload.course_id,
+          module_id: payload.module_id,
+          module_title: payload.module_title,
+          lesson_id: payload.lesson_id,
+          asset_title: payload.asset_title,
+          file_name: payload.file_name,
+          file_type: payload.file_type,
+          signed_url: payload.signed_url,
+          mime_type: payload.mime_type,
+          file_size: payload.file_size,
+          asset_status: payload.asset_status,
+          updated_at: new Date().toISOString()
+        }).eq("id", editingQuestionId)
+      : await insertCourseAsset(payload);
+
+    const error = result.error;
+    setMessage(error ? error.message : "Question saved successfully.");
     if (!error) {
-      setQuizForm({ courseId: "", moduleId: "", lessonId: "", title: "", prompt: "", options: "", correctAnswer: "", passingScore: "80" });
+      setEditingQuestionId("");
+      setQuizForm((current) => ({
+        ...current,
+        prompt: "",
+        options: "",
+        correctAnswer: "",
+        points: "1",
+        ...(addAnother ? {} : { title: current.title })
+      }));
       await load();
     }
+  }
+
+  async function createQuiz(event: FormEvent) {
+    event.preventDefault();
+    await saveQuizQuestion(false);
+  }
+
+  async function publishQuiz() {
+    if (!quizForm.courseId || !quizForm.title.trim()) {
+      setMessage("Select a course and enter a quiz title before publishing.");
+      return;
+    }
+    const supabase = createClient();
+    let query = supabase
+      .from("course_assets")
+      .update({ asset_status: "Published", updated_at: new Date().toISOString() })
+      .eq("course_id", Number(quizForm.courseId))
+      .eq("asset_type", "Quiz")
+      .eq("asset_title", quizForm.title.trim());
+    if (quizForm.lessonId) query = query.eq("lesson_id", Number(quizForm.lessonId));
+    const { error } = await query;
+    setMessage(error ? error.message : "Quiz published.");
+    if (!error) await load();
+  }
+
+  async function deleteQuestion(questionId: string) {
+    const supabase = createClient();
+    const { error } = await supabase.from("course_assets").delete().eq("id", questionId);
+    setMessage(error ? error.message : "Question deleted.");
+    if (!error) await load();
+  }
+
+  function editQuestion(question: SavedQuizQuestion) {
+    setEditingQuestionId(question.id);
+    setQuizForm({
+      courseId: question.courseId,
+      moduleId: question.moduleId,
+      lessonId: question.lessonId,
+      title: question.quizTitle,
+      prompt: question.prompt,
+      options: question.options.join(","),
+      correctAnswer: question.correctAnswer,
+      points: String(question.points || 1)
+    });
+    setMessage("Editing saved question.");
   }
 
   if (!authorized) return <div className="terminal-panel p-6 text-ink/72">{message}</div>;
@@ -315,7 +467,7 @@ export function AdminLmsManager() {
 
         <FormPanel title="Upload Homework" icon={<FilePlus2 size={21} />} onSubmit={createHomework}>
           <Select label="Select course" value={homeworkForm.courseId} onChange={(next) => setHomeworkForm({ ...homeworkForm, courseId: next, lessonId: "" })}>{courseOptions}</Select>
-          <Select label="Optional module" value={homeworkForm.moduleId} onChange={(next) => setHomeworkForm({ ...homeworkForm, moduleId: next })}>{moduleOptions}</Select>
+          <Select label="Optional module" value={homeworkForm.moduleId} onChange={(next) => setHomeworkForm({ ...homeworkForm, moduleId: next })}>{moduleOptionsFor(homeworkForm.courseId)}</Select>
           <Select label="Optional lesson" value={homeworkForm.lessonId} onChange={(next) => setHomeworkForm({ ...homeworkForm, lessonId: next })}>{lessonOptions}</Select>
           <input className="field" placeholder="Assignment title" value={homeworkForm.title} onChange={(event) => setHomeworkForm({ ...homeworkForm, title: event.target.value })} required />
           <textarea className="field min-h-24" placeholder="Instructions" value={homeworkForm.instructions} onChange={(event) => setHomeworkForm({ ...homeworkForm, instructions: event.target.value })} />
@@ -323,17 +475,58 @@ export function AdminLmsManager() {
           <input className="field" type="number" min="1" value={homeworkForm.dueDays} onChange={(event) => setHomeworkForm({ ...homeworkForm, dueDays: event.target.value })} />
         </FormPanel>
 
-        <FormPanel title="Create Quiz" icon={<ClipboardCheck size={21} />} onSubmit={createQuiz}>
+        <FormPanel title="Create Quiz" icon={<ClipboardCheck size={21} />} onSubmit={createQuiz} submitLabel={editingQuestionId ? "Update Question" : "Save Question"}>
           <Select label="Select course" value={quizForm.courseId} onChange={(next) => setQuizForm({ ...quizForm, courseId: next, lessonId: "" })}>{courseOptions}</Select>
-          <Select label="Optional module" value={quizForm.moduleId} onChange={(next) => setQuizForm({ ...quizForm, moduleId: next })}>{moduleOptions}</Select>
+          <Select label="Optional module" value={quizForm.moduleId} onChange={(next) => setQuizForm({ ...quizForm, moduleId: next })}>{moduleOptionsFor(quizForm.courseId)}</Select>
           <Select label="Optional lesson" value={quizForm.lessonId} onChange={(next) => setQuizForm({ ...quizForm, lessonId: next })}>{quizLessonOptions}</Select>
           <input className="field" placeholder="Quiz title" value={quizForm.title} onChange={(event) => setQuizForm({ ...quizForm, title: event.target.value })} required />
           <input className="field" placeholder="Question" value={quizForm.prompt} onChange={(event) => setQuizForm({ ...quizForm, prompt: event.target.value })} required />
           <input className="field" placeholder="Options separated by commas" value={quizForm.options} onChange={(event) => setQuizForm({ ...quizForm, options: event.target.value })} required />
           <input className="field" placeholder="Correct answer" value={quizForm.correctAnswer} onChange={(event) => setQuizForm({ ...quizForm, correctAnswer: event.target.value })} required />
-          <input className="field" type="number" min="0" max="100" value={quizForm.passingScore} onChange={(event) => setQuizForm({ ...quizForm, passingScore: event.target.value })} />
+          <input className="field" type="number" min="1" placeholder="Point value" value={quizForm.points} onChange={(event) => setQuizForm({ ...quizForm, points: event.target.value })} />
+          <p className="text-sm font-semibold text-gold-300">Questions created: {savedQuestions.length} of 20</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <button className="border border-gold-500/45 px-4 py-3 text-sm font-bold text-gold-300" type="button" onClick={() => saveQuizQuestion(true)}>Save and Add Another</button>
+            <button className="border border-gold-500/45 px-4 py-3 text-sm font-bold text-gold-300" type="button" onClick={() => setShowQuizPreview((current) => !current)}>Preview Quiz</button>
+            <button className="border border-gold-500/45 px-4 py-3 text-sm font-bold text-gold-300" type="button" onClick={publishQuiz}>Publish Quiz</button>
+          </div>
+          {showQuizPreview ? <div className="border border-gold-500/20 bg-navy-950 p-4">
+            <p className="text-xs uppercase tracking-[.18em] text-gold-300">Preview Quiz</p>
+            <h3 className="mt-2 font-semibold text-white">{quizForm.title || "Untitled Quiz"}</h3>
+            <div className="mt-3 grid gap-3">
+              {savedQuestions.length ? savedQuestions.map((question, index) => <article key={question.id} className="border border-gold-500/15 p-3 text-sm text-ink/72"><p className="font-semibold text-white">{index + 1}. {question.prompt}</p><p className="mt-2">Options: {question.options.join(", ")}</p><p className="mt-1 text-gold-300">Correct: {question.correctAnswer} · {question.points} point{question.points === 1 ? "" : "s"}</p></article>) : <p className="text-sm text-ink/65">No saved questions match this quiz yet.</p>}
+            </div>
+          </div> : null}
         </FormPanel>
       </div>
+
+      <section className="terminal-panel p-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[.18em] text-gold-300">Quiz Question Bank</p>
+            <h2 className="mt-2 text-xl font-semibold text-white">Saved Questions</h2>
+          </div>
+          <p className="text-sm font-semibold text-gold-300">Questions created: {savedQuestions.length} of 20</p>
+        </div>
+        <div className="mt-4 grid gap-3">
+          {savedQuestions.length === 0 ? <p className="text-sm text-ink/68">No saved questions match the selected course, lesson, and quiz title.</p> : savedQuestions.map((question, index) => (
+            <article key={question.id} className="border border-gold-500/18 bg-navy-950 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[.18em] text-gold-300">Question {index + 1} · {question.points} point{question.points === 1 ? "" : "s"}</p>
+                  <h3 className="mt-2 font-semibold text-white">{question.prompt}</h3>
+                  <p className="mt-2 text-sm text-ink/68">Options: {question.options.join(", ")}</p>
+                  <p className="mt-1 text-sm text-gold-300">Correct answer: {question.correctAnswer}</p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button className="border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300" type="button" onClick={() => editQuestion(question)}>Edit</button>
+                  <button className="border border-red-400/40 px-3 py-2 text-xs font-semibold text-red-200" type="button" onClick={() => deleteQuestion(question.id)}>Delete</button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section className="terminal-panel p-5">
         <h2 className="text-xl font-semibold text-white">Managed Curriculum</h2>
@@ -353,7 +546,7 @@ export function AdminLmsManager() {
   );
 }
 
-function FormPanel({ title, icon, onSubmit, children }: { title: string; icon: ReactNode; onSubmit: (event: FormEvent) => void; children: ReactNode }) {
+function FormPanel({ title, icon, onSubmit, children, submitLabel = "Save" }: { title: string; icon: ReactNode; onSubmit: (event: FormEvent) => void; children: ReactNode; submitLabel?: string }) {
   return (
     <form className="terminal-panel grid gap-3 p-5" onSubmit={onSubmit}>
       <div className="mb-2 flex items-center gap-3 text-gold-300">
@@ -362,7 +555,7 @@ function FormPanel({ title, icon, onSubmit, children }: { title: string; icon: R
       </div>
       {children}
       <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-4 py-3 font-bold text-navy-950" type="submit">
-        <Save size={17} /> Save
+        <Save size={17} /> {submitLabel}
       </button>
     </form>
   );

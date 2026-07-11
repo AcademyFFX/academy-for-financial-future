@@ -98,6 +98,11 @@ type Announcement = {
   published_at: string;
 };
 
+type ApprovalState = {
+  loading: boolean;
+  message: string;
+};
+
 const adminEmail = "acafffx@gmail.com";
 const initialAnnouncement = { id: "", title: "", body: "" };
 const studentStatuses = ["Pending Review", "Active", "Suspended", "Graduated"] as const;
@@ -158,10 +163,14 @@ export default function AdminPage() {
   const [messageDrafts, setMessageDrafts] = useState<Record<string, string>>({});
   const [applications, setApplications] = useState<StudentApplication[]>([]);
   const [mentorDrafts, setMentorDrafts] = useState<Record<string, string>>({});
+  const [approvalStates, setApprovalStates] = useState<Record<string, ApprovalState>>({});
 
   const studentMap = useMemo(() => {
     return new Map(students.map((student) => [student.id, student]));
   }, [students]);
+
+  const pendingApplications = useMemo(() => applications.filter((application) => application.applicationStatus === "Pending Review"), [applications]);
+  const approvedApplications = useMemo(() => applications.filter((application) => ["Approved", "Active"].includes(application.applicationStatus)), [applications]);
 
   const filteredStudents = useMemo(() => {
     const term = studentSearch.trim().toLowerCase();
@@ -176,7 +185,7 @@ export default function AdminPage() {
 
   const cards = [
     { label: "Total Students", value: students.length, icon: Users },
-    { label: "Pending Applicants", value: applications.filter((application) => application.applicationStatus === "Pending Review").length, icon: ClipboardCheck },
+    { label: "Pending Applicants", value: pendingApplications.length, icon: ClipboardCheck },
     { label: "Total Assignments Submitted", value: assignments.length, icon: ClipboardCheck },
     { label: "Total Exam Attempts", value: exams.length, icon: ShieldCheck },
     { label: "Total Certificates Issued", value: certificates.length, icon: Award }
@@ -245,8 +254,27 @@ export default function AdminPage() {
     };
   }
 
-  function findStudentByApplication(application: StudentApplication) {
-    return students.find((student) => student.authUserId === application.authUserId || student.email.toLowerCase() === application.email.toLowerCase());
+  async function updateMatchingStudentStatus(supabase: ReturnType<typeof createClient>, application: StudentApplication, status: string) {
+    const payload = { status };
+    if (application.authUserId) {
+      const result = await supabase.from("students").update(payload).eq("auth_user_id", application.authUserId).select("*");
+      if (result.error || (result.data ?? []).length > 0) return { data: (result.data ?? []) as DbRow[], error: result.error };
+    }
+
+    if (application.email) {
+      const result = await supabase.from("students").update(payload).eq("email", application.email).select("*");
+      if (result.error || (result.data ?? []).length > 0) return { data: (result.data ?? []) as DbRow[], error: result.error };
+    }
+
+    if (application.studentId && application.studentId !== "Pending") {
+      const result = await supabase.from("students").update(payload).eq("student_id", application.studentId).select("*");
+      if (result.error && result.error.message.toLowerCase().includes("student_id")) {
+        return { data: [] as DbRow[], error: null };
+      }
+      return { data: (result.data ?? []) as DbRow[], error: result.error };
+    }
+
+    return { data: [] as DbRow[], error: null };
   }
 
   function normalizeAssignment(row: DbRow): Assignment {
@@ -537,28 +565,58 @@ export default function AdminPage() {
 
   async function reviewApplication(application: StudentApplication, nextStatus: "Approved" | "Rejected" | "Suspended") {
     setMessage(`Saving ${nextStatus.toLowerCase()} review for ${application.fullName}...`);
+    setApprovalStates((current) => ({
+      ...current,
+      [application.id]: { loading: nextStatus === "Approved", message: nextStatus === "Approved" ? "Approving..." : `Saving ${nextStatus.toLowerCase()}...` }
+    }));
 
     try {
       const supabase = createClient();
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+      const authenticatedAdminEmail = user?.email ?? "";
+      if (authenticatedAdminEmail.toLowerCase() !== adminEmail) {
+        throw new Error("Admin approval requires the authenticated AFF administrator session.");
+      }
+
       const reviewedAt = new Date().toISOString();
-      const student = findStudentByApplication(application);
       const welcomeBody = "Welcome to Academy for Financial Future.";
       const mentorName = mentorDrafts[application.id]?.trim() || "Dr. Jean Rene Moricette";
       const unifiedStatus = applicationToStudentStatus(nextStatus);
+      console.info("AFF enrollment approval selected application", {
+        applicationId: application.id,
+        auth_user_id: application.authUserId,
+        email: application.email
+      });
 
-      const [applicationResult, studentResult, profileResult, membershipResult, historyResult] = await Promise.all([
-        supabase.from("student_applications").update({
+      const applicationResult = await supabase.from("student_applications").update({
           application_status: nextStatus,
-          reviewed_by: adminEmail,
+          reviewed_by: authenticatedAdminEmail,
           reviewed_at: reviewedAt,
           review_notes: nextStatus === "Approved" ? welcomeBody : `Application marked ${nextStatus}.`,
           updated_at: reviewedAt
-        }).eq("id", application.id).select("*").single(),
-        student
-          ? supabase.from("students").update({
-              status: unifiedStatus
-            }).eq("id", student.id).select("*").single()
-          : Promise.resolve({ data: null, error: null }),
+        }).eq("id", application.id).select("*").single();
+      console.info("AFF enrollment approval student_applications update", {
+        applicationId: application.id,
+        error: applicationResult.error,
+        data: applicationResult.data
+      });
+      if (applicationResult.error) throw applicationResult.error;
+
+      const studentResult = await updateMatchingStudentStatus(supabase, application, unifiedStatus);
+      console.info("AFF enrollment approval students update", {
+        applicationId: application.id,
+        auth_user_id: application.authUserId,
+        email: application.email,
+        result: studentResult
+      });
+      if (studentResult.error) throw studentResult.error;
+      if (!studentResult.data.length) {
+        throw new Error("No matching student record was updated.");
+      }
+
+      const [profileResult, membershipResult, historyResult] = await Promise.all([
         application.authUserId
           ? supabase.from("student_profiles").upsert({
               auth_user_id: application.authUserId,
@@ -569,7 +627,6 @@ export default function AdminPage() {
               country: application.country,
               program_interest: application.programInterest,
               membership_level: application.membershipPlan,
-              certification_status: unifiedStatus,
               enrollment_status: unifiedStatus,
               updated_at: reviewedAt
             }, { onConflict: "auth_user_id" }).select("*").single()
@@ -589,7 +646,7 @@ export default function AdminPage() {
           student_id: application.studentId,
           previous_status: application.applicationStatus,
           new_status: unifiedStatus,
-          changed_by: adminEmail,
+          changed_by: authenticatedAdminEmail,
           note: nextStatus === "Approved" ? welcomeBody : `Application review: ${nextStatus}.`
         })
       ]);
@@ -604,15 +661,15 @@ export default function AdminPage() {
             auth_user_id: application.authUserId,
             student_id: application.studentId,
             mentor_name: mentorName,
-            mentor_email: adminEmail,
-            assigned_by: adminEmail
+            mentor_email: authenticatedAdminEmail,
+            assigned_by: authenticatedAdminEmail
           }),
           supabase.from("student_messages").insert({
             recipient_id: application.authUserId,
             recipient_name: application.fullName,
             recipient_email: application.email,
             sender_name: "Dr. Jean Rene Moricette",
-            sender_email: adminEmail,
+            sender_email: authenticatedAdminEmail,
             category: "Direct Message",
             priority: "Important",
             title: "Welcome to Academy for Financial Future",
@@ -623,12 +680,23 @@ export default function AdminPage() {
       }
 
       setApplications((current) => current.map((item) => (item.id === application.id ? normalizeApplication(applicationResult.data as DbRow) : item)));
-      if (studentResult.data) {
-        setStudents((current) => current.map((item) => (item.id === student?.id ? normalizeStudent(studentResult.data as DbRow) : item)));
-      }
-      setMessage(nextStatus === "Approved" ? welcomeBody : `Application ${nextStatus.toLowerCase()}.`);
+      setStudents((current) => {
+        const updated = studentResult.data.map((row) => normalizeStudent(row));
+        return current.map((item) => updated.find((student) => student.id === item.id) ?? item);
+      });
+      setApprovalStates((current) => ({
+        ...current,
+        [application.id]: { loading: false, message: nextStatus === "Approved" ? "Approved successfully" : `Application ${nextStatus.toLowerCase()}.` }
+      }));
+      setMessage(nextStatus === "Approved" ? "Approved successfully" : `Application ${nextStatus.toLowerCase()}.`);
+      await loadAdminData();
     } catch (error) {
-      setMessage(getErrorMessage(error, "Unable to review application."));
+      const failureMessage = getErrorMessage(error, "Unable to review application.");
+      setApprovalStates((current) => ({
+        ...current,
+        [application.id]: { loading: false, message: `Approval failed: ${failureMessage}` }
+      }));
+      setMessage(nextStatus === "Approved" ? `Approval failed: ${failureMessage}` : failureMessage);
     }
   }
 
@@ -817,11 +885,15 @@ export default function AdminPage() {
                   <h2 className="text-xl font-semibold text-white">Admin Enrollment Review</h2>
                   <p className="mt-2 text-sm text-ink/68">Review new applicants, approve or reject enrollment, assign mentors, suspend access, and send the welcome message.</p>
                 </div>
-                {applications.length === 0 ? (
-                  <p className="p-5 text-ink/68">No enrollment applications found.</p>
+                {pendingApplications.length === 0 ? (
+                  <p className="p-5 text-ink/68">No pending enrollment applications found.</p>
                 ) : (
                   <div className="grid gap-px bg-gold-500/16">
-                    {applications.map((application) => (
+                    {pendingApplications.map((application) => {
+                      const approvalState = approvalStates[application.id];
+                      const approving = Boolean(approvalState?.loading);
+
+                      return (
                       <article key={application.id} className="bg-navy-950 p-5">
                         <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
                           <div>
@@ -845,21 +917,51 @@ export default function AdminPage() {
                               />
                             </label>
                             <div className="grid gap-2 sm:grid-cols-3">
-                              <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-3 py-3 text-xs font-bold text-navy-950" type="button" onClick={() => reviewApplication(application, "Approved")}>
-                                <FileCheck size={15} /> Approve
+                              <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-3 py-3 text-xs font-bold text-navy-950 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={() => reviewApplication(application, "Approved")} disabled={approving}>
+                                <FileCheck size={15} /> {approving ? "Approving..." : "Approve"}
                               </button>
-                              <button className="inline-flex items-center justify-center gap-2 border border-red-300/45 px-3 py-3 text-xs font-semibold text-red-200" type="button" onClick={() => reviewApplication(application, "Rejected")}>
+                              <button className="inline-flex items-center justify-center gap-2 border border-red-300/45 px-3 py-3 text-xs font-semibold text-red-200 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={() => reviewApplication(application, "Rejected")} disabled={approving}>
                                 <FileX size={15} /> Reject
                               </button>
-                              <button className="inline-flex items-center justify-center gap-2 border border-gold-500/35 px-3 py-3 text-xs font-semibold text-gold-300" type="button" onClick={() => reviewApplication(application, "Suspended")}>
+                              <button className="inline-flex items-center justify-center gap-2 border border-gold-500/35 px-3 py-3 text-xs font-semibold text-gold-300 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={() => reviewApplication(application, "Suspended")} disabled={approving}>
                                 Suspend
                               </button>
                             </div>
+                            {approvalState?.message ? (
+                              <p className={`border px-3 py-2 text-sm ${approvalState.message.startsWith("Approval failed") ? "border-red-300/40 text-red-200" : "border-gold-500/25 text-gold-300"}`}>
+                                {approvalState.message}
+                              </p>
+                            ) : null}
                             <div className="border border-gold-500/18 bg-navy-900 p-4">
                               <p className="text-xs uppercase tracking-[.18em] text-gold-300">Email-ready welcome message</p>
                               <p className="mt-2 text-sm font-semibold text-white">Welcome to Academy for Financial Future.</p>
                             </div>
                           </div>
+                        </div>
+                      </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              <section className="terminal-panel scroll-mt-28 overflow-hidden">
+                <div className="border-b border-gold-500/20 p-5">
+                  <h2 className="text-xl font-semibold text-white">Approved / Active Students</h2>
+                  <p className="mt-2 text-sm text-ink/68">Recently approved applicants are moved here after their enrollment account becomes active.</p>
+                </div>
+                {approvedApplications.length === 0 ? (
+                  <p className="p-5 text-ink/68">No approved enrollment applications found.</p>
+                ) : (
+                  <div className="grid gap-px bg-gold-500/16 md:grid-cols-2">
+                    {approvedApplications.map((application) => (
+                      <article key={application.id} className="bg-navy-950 p-5">
+                        <p className="text-xs uppercase tracking-[.2em] text-gold-300">{application.applicationStatus}</p>
+                        <h3 className="mt-2 text-lg font-semibold text-white">{application.fullName}</h3>
+                        <p className="mt-2 text-sm text-ink/64">{application.email}</p>
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          <Metric label="Student ID" value={application.studentId} />
+                          <Metric label="Program" value={application.programInterest} />
                         </div>
                       </article>
                     ))}

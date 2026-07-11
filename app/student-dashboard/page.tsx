@@ -61,6 +61,7 @@ type StudentProfile = {
   fullName: string;
   email: string;
   enrollmentDate: string;
+  membershipPlan: string;
   certificationLevel: string;
   status: string;
 };
@@ -317,51 +318,37 @@ export default function StudentDashboardPage() {
       const authName = resolveAuthFullName(currentUser);
       const authEmail = currentUser.email ?? "";
 
-      const [profileRow, membershipRow] = await Promise.all([
+      const profileRow = await (
         authEmail
           ? safeMaybeSingle(supabase, "students", (table) =>
               supabase
                 .from(table)
-                .select("id, auth_user_id, full_name, email, enrollment_date, certification_level, status, created_at")
+                .select("id, student_id, auth_user_id, full_name, email, enrollment_date, status, membership_plan, certification_level, created_at")
                 .or(`auth_user_id.eq.${currentUser.id},email.eq.${authEmail}`)
                 .order("created_at", { ascending: false })
                 .limit(1)
                 .maybeSingle()
             )
-          : Promise.resolve(null),
-        safeMaybeSingle(supabase, "student_memberships", (table) =>
-          supabase
-            .from(table)
-            .select("membership_plan, membership_status, account_status")
-            .eq("student_id", currentUser.id)
-            .maybeSingle()
-        )
-      ]);
+          : Promise.resolve(null)
+      );
 
       const resolvedProfile: StudentProfile = {
         id: value(profileRow ?? {}, ["id"], currentUser.id),
-        studentId: value(profileRow ?? {}, ["auth_user_id"], currentUser.id),
+        studentId: value(profileRow ?? {}, ["student_id"], value(profileRow ?? {}, ["id"], "Not assigned")),
         fullName: value(profileRow ?? {}, ["full_name", "name"], authName || authEmail || "Not recorded"),
         email: value(profileRow ?? {}, ["email"], authEmail || "Not recorded"),
         enrollmentDate: value(profileRow ?? {}, ["enrollment_date", "created_at"], ""),
+        membershipPlan: value(profileRow ?? {}, ["membership_plan"], "Not enrolled"),
         certificationLevel: value(profileRow ?? {}, ["certification_level"], "Not recorded"),
         status: normalizeEnrollmentStatus(value(profileRow ?? {}, ["status"], "Pending Review"))
       };
 
       setStudentProfile(resolvedProfile);
-      setMembershipProfile(
-        membershipRow
-          ? {
-              membershipPlan: value(membershipRow, ["membership_plan"], "Not selected"),
-              membershipStatus: value(membershipRow, ["membership_status"], value(profileRow ?? {}, ["membership_status"], "Not enrolled")),
-              accountStatus: value(membershipRow, ["account_status"], "Not recorded")
-            }
-          : {
-              membershipPlan: "Not selected",
-              membershipStatus: "Not enrolled",
-              accountStatus: "Not recorded"
-            }
-      );
+      setMembershipProfile({
+        membershipPlan: resolvedProfile.membershipPlan,
+        membershipStatus: resolvedProfile.status,
+        accountStatus: resolvedProfile.status
+      });
 
       const [
         missions,
@@ -513,6 +500,22 @@ export default function StudentDashboardPage() {
     loadExperience();
   }, [loadExperience]);
 
+  useEffect(() => {
+    function refreshOnFocus() {
+      if (document.visibilityState === "visible") {
+        loadExperience();
+      }
+    }
+
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnFocus);
+
+    return () => {
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnFocus);
+    };
+  }, [loadExperience]);
+
   const metrics = useMemo(() => {
     const completedMissions = datasets.missions.filter((row) => value(row, ["mission_status"]).toLowerCase() === "completed").length;
     const currentStreak = datasets.streaks.length ? numberValue(datasets.streaks[0], ["current_streak"]) : 0;
@@ -555,9 +558,8 @@ export default function StudentDashboardPage() {
 
   const unifiedStudentStatus = studentProfile?.status && studentProfile.status !== "Not recorded" ? studentProfile.status : "Pending Review";
 
-  const membershipLevel = membershipProfile?.membershipPlan && membershipProfile.membershipPlan !== "Not selected"
-    ? membershipProfile.membershipPlan
-    : membershipProfile?.membershipStatus ?? "Not enrolled";
+  const membershipLevel = studentProfile?.membershipPlan || membershipProfile?.membershipPlan || "Not enrolled";
+  const certificationStatus = datasets.certificates.length > 0 || datasets.certifications.length > 0 || datasets.digitalCertificates.length > 0 ? "Certified" : "Not Started";
 
   async function completeMission(mission: DbRow) {
     if (!user) return;
@@ -641,7 +643,7 @@ export default function StudentDashboardPage() {
                 <ProfileLine icon={<CalendarDays size={18} />} label="Enrollment Date" value={shortDate(studentProfile?.enrollmentDate ?? "")} />
                 <ProfileLine icon={<BadgeCheck size={18} />} label="Enrollment Status" value={unifiedStudentStatus} />
                 <ProfileLine icon={<CreditCard size={18} />} label="Membership Level" value={membershipLevel} />
-                <ProfileLine icon={<ShieldCheck size={18} />} label="Certification Status" value={unifiedStudentStatus} />
+                <ProfileLine icon={<ShieldCheck size={18} />} label="Certification Status" value={certificationStatus} />
                 <Link href="/messages" className="flex items-center justify-between border border-gold-500/25 px-4 py-3 text-sm font-semibold text-gold-300">
                   <span>Unread Messages</span>
                   <span>{unreadCount}</span>

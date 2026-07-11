@@ -255,7 +255,12 @@ export default function AdminPage() {
   }
 
   async function updateMatchingStudentStatus(supabase: ReturnType<typeof createClient>, application: StudentApplication, status: string) {
-    const payload = { status };
+    const payload = {
+      status,
+      student_id: application.studentId && application.studentId !== "Pending" ? application.studentId : undefined,
+      membership_plan: application.membershipPlan || undefined,
+      certification_level: application.programInterest || undefined
+    };
     if (application.authUserId) {
       const result = await supabase.from("students").update(payload).eq("auth_user_id", application.authUserId).select("*");
       if (result.error || (result.data ?? []).length > 0) return { data: (result.data ?? []) as DbRow[], error: result.error };

@@ -115,11 +115,13 @@ export function StudentRegistrationForm() {
 
       const studentPayload = {
         auth_user_id: authUserId,
+        student_id: studentId,
         full_name: fullName,
         email,
         phone: form.phone.trim(),
         country: form.country.trim(),
         enrollment_date: enrollmentDate,
+        membership_plan: form.membership_plan,
         certification_level: "Academy for Financial Future",
         status: "Pending Review",
         created_at: authCreatedAt

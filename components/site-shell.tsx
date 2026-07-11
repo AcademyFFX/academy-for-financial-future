@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, Menu, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 import { AFFStandardLogo } from "@/components/aff-logo";
 import { createClient } from "@/lib/supabase";
 
@@ -17,6 +18,18 @@ type NavGroup = {
   label: string;
   items: NavLink[];
 };
+
+const adminEmail = "acafffx@gmail.com";
+const studentAuthLinks: NavLink[] = [
+  { href: "/student-dashboard", label: "Dashboard" },
+  { href: "/courses", label: "My Courses" },
+  { href: "/student-profile", label: "Profile" }
+];
+const adminAuthLinks: NavLink[] = [
+  { href: "/admin", label: "Admin Dashboard" },
+  { href: "/student-directory", label: "Student Directory" },
+  { href: "/admin/course-management", label: "Course Manager" }
+];
 
 const navGroups: NavGroup[] = [
   {
@@ -92,11 +105,17 @@ const navGroups: NavGroup[] = [
 ];
 
 export function SiteShell({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [welcomeName, setWelcomeName] = useState("");
   const headerRef = useRef<HTMLElement | null>(null);
+  const isAdmin = authUser?.email?.toLowerCase() === adminEmail;
+  const authenticatedLinks = isAdmin ? adminAuthLinks : studentAuthLinks;
+  const displayName = welcomeName || resolveUserName(authUser);
 
   useEffect(() => {
     setMobileOpen(false);
@@ -104,19 +123,60 @@ export function SiteShell({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
+    const supabase = createClient();
+    let mounted = true;
+
+    async function applyUser(user: User | null) {
+      if (!mounted) return;
+      setAuthUser(user);
+      setUnreadCount(0);
+      if (!user) {
+        setWelcomeName("");
+        return;
+      }
+
+      const fallbackName = resolveUserName(user);
+      setWelcomeName(fallbackName);
+
+      try {
+        const email = user.email ?? "";
+        const { data, error } = await supabase
+          .from("students")
+          .select("full_name")
+          .or(`auth_user_id.eq.${user.id},email.eq.${email}`)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!error && data?.full_name && mounted) {
+          setWelcomeName(String(data.full_name));
+        }
+      } catch {
+        setWelcomeName(fallbackName);
+      }
+    }
+
+    supabase.auth.getSession().then(({ data }) => applyUser(data.session?.user ?? null));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      applyUser(session?.user ?? null);
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
     async function loadUnreadCount() {
       try {
         const supabase = createClient();
-        const {
-          data: { user }
-        } = await supabase.auth.getUser();
-
-        if (!user) return;
+        if (!authUser) return;
 
         const { count, error } = await supabase
           .from("student_messages")
           .select("id", { count: "exact", head: true })
-          .eq("recipient_id", user.id)
+          .eq("recipient_id", authUser.id)
           .is("read_at", null)
           .is("deleted_at", null);
 
@@ -127,7 +187,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
     }
 
     loadUnreadCount();
-  }, [pathname]);
+  }, [authUser, pathname]);
 
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent | PointerEvent) {
@@ -150,6 +210,18 @@ export function SiteShell({ children }: { children: ReactNode }) {
       document.removeEventListener("keydown", handleEscape);
     };
   }, []);
+
+  async function logout() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    setAuthUser(null);
+    setWelcomeName("");
+    setUnreadCount(0);
+    setOpenMenu(null);
+    setMobileOpen(false);
+    router.push("/");
+    router.refresh();
+  }
 
   return (
     <div className="min-h-screen bg-navy-950">
@@ -178,14 +250,14 @@ export function SiteShell({ children }: { children: ReactNode }) {
             ))}
           </nav>
 
-          <div className="hidden shrink-0 items-center gap-2 border-l border-gold-500/20 pl-3 lg:flex">
-            <Link href="/login" className="border border-gold-500/45 px-3 py-2 text-xs font-semibold text-gold-300 transition hover:border-gold-300 hover:text-white">
-              Login
-            </Link>
-            <Link href="/enrollment" className="bg-gold-500 px-3 py-2 text-xs font-bold text-navy-950 transition hover:bg-gold-300">
-              Enroll
-            </Link>
-          </div>
+          <AuthNavigation
+            user={authUser}
+            displayName={displayName}
+            links={authenticatedLinks}
+            pathname={pathname}
+            onLogout={logout}
+            desktop
+          />
 
           <button
             type="button"
@@ -217,14 +289,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
                   onNavigate={() => setMobileOpen(false)}
                 />
               ))}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <Link href="/login" onClick={() => setMobileOpen(false)} className="border border-gold-500/40 px-3 py-3 text-center text-sm font-semibold text-gold-300">
-                  Login
-                </Link>
-                <Link href="/enrollment" onClick={() => setMobileOpen(false)} className="bg-gold-500 px-3 py-3 text-center text-sm font-bold text-navy-950">
-                  Enroll
-                </Link>
-              </div>
+              <AuthNavigation user={authUser} displayName={displayName} links={authenticatedLinks} pathname={pathname} onLogout={logout} onNavigate={() => setMobileOpen(false)} />
             </div>
           </div>
         ) : null}
@@ -239,6 +304,79 @@ export function SiteShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+function resolveUserName(user: User | null) {
+  if (!user) return "";
+  const metadata = user.user_metadata ?? {};
+  if (typeof metadata.full_name === "string" && metadata.full_name.trim()) return metadata.full_name.trim();
+  if (typeof metadata.name === "string" && metadata.name.trim()) return metadata.name.trim();
+  const firstName = typeof metadata.first_name === "string" ? metadata.first_name.trim() : "";
+  const lastName = typeof metadata.last_name === "string" ? metadata.last_name.trim() : "";
+  const fullName = `${firstName} ${lastName}`.trim();
+  return fullName || user.email?.split("@")[0] || "Student";
+}
+
+function AuthNavigation({
+  user,
+  displayName,
+  links,
+  pathname,
+  onLogout,
+  onNavigate,
+  desktop = false
+}: {
+  user: User | null;
+  displayName: string;
+  links: NavLink[];
+  pathname: string;
+  onLogout: () => void;
+  onNavigate?: () => void;
+  desktop?: boolean;
+}) {
+  if (!user) {
+    return (
+      <div className={desktop ? "hidden shrink-0 items-center gap-2 border-l border-gold-500/20 pl-3 lg:flex" : "grid grid-cols-2 gap-2 pt-1"}>
+        <Link href="/login" onClick={onNavigate} className={desktop ? "border border-gold-500/45 px-3 py-2 text-xs font-semibold text-gold-300 transition hover:border-gold-300 hover:text-white" : "border border-gold-500/40 px-3 py-3 text-center text-sm font-semibold text-gold-300"}>
+          Login
+        </Link>
+        <Link href="/enrollment" onClick={onNavigate} className={desktop ? "bg-gold-500 px-3 py-2 text-xs font-bold text-navy-950 transition hover:bg-gold-300" : "bg-gold-500 px-3 py-3 text-center text-sm font-bold text-navy-950"}>
+          Enroll
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className={desktop ? "hidden max-w-[410px] shrink-0 items-center gap-2 border-l border-gold-500/20 pl-3 lg:flex" : "grid gap-2 border-t border-gold-500/14 pt-3"}>
+      <p className={desktop ? "max-w-36 truncate text-right text-xs font-semibold text-gold-300" : "px-3 text-sm font-semibold text-gold-300"}>
+        Welcome, {displayName}
+      </p>
+      <div className={desktop ? "flex items-center gap-2" : "grid gap-2"}>
+        {links.map((link) => (
+          <Link
+            key={link.href}
+            href={link.href}
+            onClick={onNavigate}
+            className={
+              desktop
+                ? `border px-3 py-2 text-xs font-semibold transition ${pathname === link.href ? "border-gold-300 text-white" : "border-gold-500/35 text-gold-300 hover:border-gold-300 hover:text-white"}`
+                : `border border-gold-500/24 px-3 py-3 text-sm font-semibold ${pathname === link.href ? "text-gold-300" : "text-white"}`
+            }
+          >
+            {link.label}
+          </Link>
+        ))}
+        <button
+          type="button"
+          onClick={onLogout}
+          className={desktop ? "bg-gold-500 px-3 py-2 text-xs font-bold text-navy-950 transition hover:bg-gold-300" : "bg-gold-500 px-3 py-3 text-sm font-bold text-navy-950"}
+        >
+          Logout
+        </button>
+      </div>
     </div>
   );
 }

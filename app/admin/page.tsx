@@ -482,9 +482,7 @@ export default function AdminPage() {
       const { data, error } = await supabase
         .from("students")
         .update({
-          status: nextStatus,
-          membership_status: nextStatus === "Suspended" ? "Suspended" : student.membershipStatus === "Suspended" ? "Active" : student.membershipStatus,
-          updated_at: new Date().toISOString()
+          status: nextStatus
         })
         .eq("id", student.id)
         .select("*")
@@ -544,9 +542,7 @@ export default function AdminPage() {
         }).eq("id", application.id).select("*").single(),
         student
           ? supabase.from("students").update({
-              status: nextStatus === "Approved" ? "Active" : nextStatus,
-              membership_status: nextStatus === "Approved" ? "Active" : nextStatus,
-              updated_at: reviewedAt
+              status: nextStatus === "Approved" ? "Active" : nextStatus
             }).eq("id", student.id).select("*").single()
           : Promise.resolve({ data: null, error: null }),
         application.authUserId
@@ -628,19 +624,6 @@ export default function AdminPage() {
 
     try {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("students")
-        .update({
-          membership_plan: nextPlan,
-          membership_status: nextPlan === "Free Trial" ? "Free Trial" : "Active",
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", student.id)
-        .select("*")
-        .single();
-
-      if (error) throw error;
-
       if (student.authUserId) {
         await supabase.from("student_memberships").upsert({
           student_id: student.authUserId,
@@ -652,7 +635,7 @@ export default function AdminPage() {
         }, { onConflict: "student_id" });
       }
 
-      setStudents((current) => current.map((item) => (item.id === student.id ? normalizeStudent(data as DbRow) : item)));
+      setStudents((current) => current.map((item) => (item.id === student.id ? { ...item, membershipPlan: nextPlan, membershipStatus: nextPlan === "Free Trial" ? "Free Trial" : "Active" } : item)));
       setMessage("Membership updated.");
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to update membership."));

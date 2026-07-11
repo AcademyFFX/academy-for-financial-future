@@ -99,7 +99,7 @@ export function StudentEnrollmentForm() {
       const authUserId = signupData.user.id;
       const selectedPlan = billingPlans.find((plan) => plan.name === form.membership_plan);
 
-      const studentPayload = {
+      const applicationPayload = {
         auth_user_id: authUserId,
         student_id: studentId,
         first_name: form.first_name.trim(),
@@ -109,31 +109,49 @@ export function StudentEnrollmentForm() {
         phone: form.phone.trim(),
         country: form.country.trim(),
         program_interest: form.program_interest,
-        goal_statement: form.goal_statement.trim(),
-        enrollment_date: enrollmentDate,
         membership_plan: form.membership_plan,
-        membership_status: "Pending Review",
+        goal_statement: form.goal_statement.trim(),
+        application_status: "Pending Review"
+      };
+      const { error: applicationError } = await supabase.from("student_applications").insert(applicationPayload);
+      if (applicationError) throw applicationError;
+
+      const studentPayload = {
+        auth_user_id: authUserId,
+        full_name: fullName,
+        email,
+        phone: form.phone.trim(),
+        country: form.country.trim(),
+        enrollment_date: enrollmentDate,
         certification_level: form.program_interest,
-        status: "Pending Review"
+        status: "Pending Review",
+        created_at: new Date().toISOString()
       };
 
-      const [studentResult, applicationResult, profileResult, membershipResult, historyResult] = await Promise.all([
-        supabase.from("students").insert(studentPayload).select("*").single(),
-        supabase.from("student_applications").insert({
-          auth_user_id: authUserId,
-          student_id: studentId,
-          first_name: form.first_name.trim(),
-          last_name: form.last_name.trim(),
-          full_name: fullName,
-          email,
-          phone: form.phone.trim(),
-          country: form.country.trim(),
-          program_interest: form.program_interest,
-          membership_plan: form.membership_plan,
-          goal_statement: form.goal_statement.trim(),
-          application_status: "Pending Review"
-        }),
-        supabase.from("student_profiles").insert({
+      const { data: existingStudent, error: existingStudentError } = await supabase
+        .from("students")
+        .select("id")
+        .or(`auth_user_id.eq.${authUserId},email.eq.${email}`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingStudentError) {
+        setMessage(`Application saved, but student profile sync failed: ${existingStudentError.message}`);
+        return;
+      }
+
+      const studentSyncResult = existingStudent?.id
+        ? await supabase.from("students").update(studentPayload).eq("id", existingStudent.id)
+        : await supabase.from("students").insert(studentPayload);
+
+      if (studentSyncResult.error) {
+        setMessage(`Application saved, but student profile sync failed: ${studentSyncResult.error.message}`);
+        return;
+      }
+
+      const [profileResult, membershipResult, historyResult] = await Promise.all([
+        supabase.from("student_profiles").upsert({
           auth_user_id: authUserId,
           student_id: studentId,
           full_name: fullName,
@@ -143,8 +161,9 @@ export function StudentEnrollmentForm() {
           program_interest: form.program_interest,
           membership_level: form.membership_plan,
           certification_status: "Pending Review",
-          enrollment_status: "Pending Review"
-        }),
+          enrollment_status: "Pending Review",
+          updated_at: new Date().toISOString()
+        }, { onConflict: "auth_user_id" }),
         supabase.from("student_memberships").upsert({
           student_id: authUserId,
           student_email: email,
@@ -163,7 +182,7 @@ export function StudentEnrollmentForm() {
         })
       ]);
 
-      for (const result of [studentResult, applicationResult, profileResult, membershipResult, historyResult]) {
+      for (const result of [profileResult, membershipResult, historyResult]) {
         if (result.error) throw result.error;
       }
 

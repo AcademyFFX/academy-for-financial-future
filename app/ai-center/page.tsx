@@ -119,7 +119,7 @@ export default function AICenterPage() {
       setUserEmail(user.email ?? "");
       const admin = user.email?.toLowerCase() === adminEmail;
       const profile = await safeSelect(supabase, "students", (table) =>
-        supabase.from(table).select("full_name, student_id, email").eq("email", user.email ?? "").order("created_at", { ascending: false }).limit(1)
+        supabase.from(table).select("full_name, auth_user_id, email").or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`).order("created_at", { ascending: false }).limit(1)
       );
       setStudentName(value(profile[0] ?? {}, ["full_name"], user.user_metadata?.full_name ?? user.email ?? "Student"));
 

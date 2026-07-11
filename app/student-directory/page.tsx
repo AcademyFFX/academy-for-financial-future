@@ -31,7 +31,7 @@ function normalizeStudent(row: DbRow): DirectoryStudent {
   return {
     id: value(row, ["id"], crypto.randomUUID()),
     fullName: value(row, ["full_name"], "AFF Student"),
-    studentId: value(row, ["student_id"], "Pending"),
+    studentId: value(row, ["auth_user_id"], "Pending"),
     certificationLevel: value(row, ["certification_level"], "Academy for Financial Future"),
     membershipStatus: value(row, ["membership_status"], "Active"),
     membershipPlan: value(row, ["membership_plan"], "Free Trial"),
@@ -71,7 +71,7 @@ export default function StudentDirectoryPage() {
 
       const { data, error } = await supabase
         .from("students")
-        .select("id, full_name, student_id, certification_level, membership_status, membership_plan, profile_photo_url, status")
+        .select("id, auth_user_id, full_name, certification_level, status")
         .eq("status", "Active")
         .order("full_name", { ascending: true });
 

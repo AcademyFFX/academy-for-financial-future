@@ -136,16 +136,19 @@ export default function StudentProfilePage() {
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage.from("student-profile-photos").getPublicUrl(path);
-      const { error: updateError } = await supabase
-        .from("students")
-        .update({ profile_photo_url: data.publicUrl, updated_at: new Date().toISOString() })
-        .eq("id", profile.id);
-      if (updateError) throw updateError;
-
       await supabase
         .from("student_profiles")
-        .update({ profile_photo_url: data.publicUrl, updated_at: new Date().toISOString() })
-        .eq("auth_user_id", profile.authUserId);
+        .upsert({
+          auth_user_id: profile.authUserId,
+          student_id: profile.studentId,
+          full_name: profile.fullName,
+          email: profile.email,
+          membership_level: profile.membershipLevel,
+          certification_status: profile.certificationStatus,
+          enrollment_status: profile.status,
+          profile_photo_url: data.publicUrl,
+          updated_at: new Date().toISOString()
+        }, { onConflict: "auth_user_id" });
 
       setProfile({ ...profile, profilePhotoUrl: data.publicUrl });
       setPhotoFile(null);

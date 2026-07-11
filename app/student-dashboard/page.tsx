@@ -317,8 +317,8 @@ export default function StudentDashboardPage() {
           ? safeMaybeSingle(supabase, "students", (table) =>
               supabase
                 .from(table)
-                .select("id, student_id, full_name, email, enrollment_date, certification_level, status, membership_plan, membership_status, created_at")
-                .eq("email", authEmail)
+                .select("id, auth_user_id, full_name, email, enrollment_date, certification_level, status, created_at")
+                .or(`auth_user_id.eq.${currentUser.id},email.eq.${authEmail}`)
                 .order("created_at", { ascending: false })
                 .limit(1)
                 .maybeSingle()
@@ -335,7 +335,7 @@ export default function StudentDashboardPage() {
 
       const resolvedProfile: StudentProfile = {
         id: value(profileRow ?? {}, ["id"], currentUser.id),
-        studentId: value(profileRow ?? {}, ["student_id"], currentUser.id),
+        studentId: value(profileRow ?? {}, ["auth_user_id"], currentUser.id),
         fullName: value(profileRow ?? {}, ["full_name", "name"], authName || authEmail || "Not recorded"),
         email: value(profileRow ?? {}, ["email"], authEmail || "Not recorded"),
         enrollmentDate: value(profileRow ?? {}, ["enrollment_date", "created_at"], ""),
@@ -352,8 +352,8 @@ export default function StudentDashboardPage() {
               accountStatus: value(membershipRow, ["account_status"], "Not recorded")
             }
           : {
-              membershipPlan: value(profileRow ?? {}, ["membership_plan"], "Not selected"),
-              membershipStatus: value(profileRow ?? {}, ["membership_status"], "Not enrolled"),
+              membershipPlan: "Not selected",
+              membershipStatus: "Not enrolled",
               accountStatus: "Not recorded"
             }
       );

@@ -16,6 +16,12 @@ const initialForm = {
   confirm_password: ""
 };
 
+function generateStudentId() {
+  const year = new Date().getFullYear();
+  const suffix = Math.floor(Date.now() % 100000).toString().padStart(5, "0");
+  return `AFF-${year}-${suffix}`;
+}
+
 export function StudentRegistrationForm() {
   const router = useRouter();
   const [form, setForm] = useState(initialForm);
@@ -49,6 +55,9 @@ export function StudentRegistrationForm() {
       const supabase = createClient();
       const fullName = `${form.first_name.trim()} ${form.last_name.trim()}`.trim();
       const email = form.email.trim().toLowerCase();
+      const authCreatedAt = new Date().toISOString();
+      const enrollmentDate = authCreatedAt.slice(0, 10);
+      const studentId = generateStudentId();
 
       const { data: signupData, error: signupError } = await supabase.auth.signUp({
         email,
@@ -80,37 +89,76 @@ export function StudentRegistrationForm() {
         return;
       }
 
-      const { error: studentError } = await supabase.from("students").insert({
-        auth_user_id: signupData.user?.id ?? null,
+      const authUserId = signupData.user?.id ?? null;
+      if (!authUserId) {
+        setMessage("Account was created, but Supabase did not return a user id. Please log in to continue.");
+        router.push("/login");
+        return;
+      }
+
+      const { error: applicationError } = await supabase.from("student_applications").insert({
+        auth_user_id: authUserId,
+        student_id: studentId,
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
         full_name: fullName,
         email,
         phone: form.phone.trim(),
         country: form.country.trim(),
-        enrollment_date: new Date().toISOString().slice(0, 10),
+        program_interest: "Academy for Financial Future",
         membership_plan: form.membership_plan,
-        membership_status: form.membership_plan === "Free Trial" ? "Free Trial" : "Pending",
-        certification_level: "Academy for Financial Future",
-        status: "Active"
+        goal_statement: "",
+        application_status: "Pending Review"
       });
 
-      if (studentError) throw studentError;
+      if (applicationError) throw applicationError;
 
-      if (signupData.user?.id) {
-        const selectedPlan = billingPlans.find((plan) => plan.name === form.membership_plan);
-        const { error: membershipError } = await supabase.from("student_memberships").upsert({
-          student_id: signupData.user.id,
-          student_email: email,
-          membership_plan: form.membership_plan,
-          membership_status: selectedPlan?.membershipStatus ?? form.membership_plan,
-          account_status: selectedPlan?.accountStatus ?? "Pending",
-          trial_ends_at: form.membership_plan === "Free Trial" ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null,
-          updated_at: new Date().toISOString()
-        }, { onConflict: "student_id" });
+      const studentPayload = {
+        auth_user_id: authUserId,
+        full_name: fullName,
+        email,
+        phone: form.phone.trim(),
+        country: form.country.trim(),
+        enrollment_date: enrollmentDate,
+        certification_level: "Academy for Financial Future",
+        status: "Pending Review",
+        created_at: authCreatedAt
+      };
 
-        if (membershipError) throw membershipError;
+      const { data: existingStudent, error: existingStudentError } = await supabase
+        .from("students")
+        .select("id")
+        .or(`auth_user_id.eq.${authUserId},email.eq.${email}`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingStudentError) {
+        setMessage(`Application saved, but student profile sync failed: ${existingStudentError.message}`);
+        return;
       }
+
+      const studentSyncResult = existingStudent?.id
+        ? await supabase.from("students").update(studentPayload).eq("id", existingStudent.id)
+        : await supabase.from("students").insert(studentPayload);
+
+      if (studentSyncResult.error) {
+        setMessage(`Application saved, but student profile sync failed: ${studentSyncResult.error.message}`);
+        return;
+      }
+
+      const selectedPlan = billingPlans.find((plan) => plan.name === form.membership_plan);
+      const { error: membershipError } = await supabase.from("student_memberships").upsert({
+        student_id: authUserId,
+        student_email: email,
+        membership_plan: form.membership_plan,
+        membership_status: selectedPlan?.membershipStatus ?? form.membership_plan,
+        account_status: selectedPlan?.accountStatus ?? "Pending",
+        trial_ends_at: form.membership_plan === "Free Trial" ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "student_id" });
+
+      if (membershipError) throw membershipError;
 
       setMessage("Registration successful. Redirecting to login...");
       router.push("/login");

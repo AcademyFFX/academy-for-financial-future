@@ -10,6 +10,8 @@ import { courseCatalog } from "@/lib/course-catalog";
 import { createCertificatePdfBlob } from "@/lib/certificate-pdf";
 import { createClient } from "@/lib/supabase";
 
+type DbRow = Record<string, unknown>;
+
 type Certificate = {
   id: string;
   certificate_number: string;
@@ -43,6 +45,7 @@ export default function CertificatesPage() {
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [eligibility, setEligibility] = useState<Eligibility | null>(null);
   const [studentName, setStudentName] = useState("Student");
+  const [affStudentId, setAffStudentId] = useState("Student ID pending");
   const [loading, setLoading] = useState(true);
   const [issuing, setIssuing] = useState(false);
   const [message, setMessage] = useState("Certification unlocks after required lessons, quiz, and approved assignments are complete.");
@@ -101,12 +104,25 @@ export default function CertificatesPage() {
         return;
       }
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", user.id)
-        .maybeSingle();
+      const [studentResult, applicationResult] = await Promise.all([
+        supabase
+          .from("students")
+          .select("student_id, auth_user_id, full_name, email")
+          .or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("student_applications")
+          .select("student_id, auth_user_id, email")
+          .or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      ]);
 
+      const profile = (studentResult.data ?? {}) as DbRow;
+      const application = (applicationResult.data ?? {}) as DbRow;
       const resolvedName =
         typeof profile?.full_name === "string" && profile.full_name.trim().length > 0
           ? profile.full_name
@@ -117,6 +133,7 @@ export default function CertificatesPage() {
               : user.email ?? "Student";
 
       setStudentName(resolvedName);
+      setAffStudentId(String(application.student_id ?? profile.student_id ?? "Student ID pending"));
 
       const [certificatesResult, progressResult, examsResult, assignmentsResult] = await Promise.all([
         supabase
@@ -271,6 +288,7 @@ export default function CertificatesPage() {
               <div>
                 <p className="text-xs uppercase tracking-[.24em] text-gold-300">Certification Readiness</p>
                 <h2 className="mt-2 text-2xl font-semibold text-white">{certificationCourse.title}</h2>
+                <p className="mt-2 text-xs uppercase tracking-[.18em] text-gold-300">{studentName} · {affStudentId}</p>
                 <p className="mt-3 text-sm text-ink/70">{message}</p>
               </div>
               <button

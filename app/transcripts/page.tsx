@@ -111,8 +111,9 @@ export default function TranscriptsPage() {
         return;
       }
 
-      const [studentResult, creditResult, certResult, digitalCertResult, examResult, certAttemptResult, attendanceResult, degreeResult, transcriptResult] = await Promise.all([
-        supabase.from("students").select("*").eq("email", user.email ?? "").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      const [studentResult, applicationResult, creditResult, certResult, digitalCertResult, examResult, certAttemptResult, attendanceResult, degreeResult, transcriptResult] = await Promise.all([
+        supabase.from("students").select("*").or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("student_applications").select("student_id, auth_user_id, email").or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`).order("created_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("student_credits").select("*").eq("student_id", user.id).order("completed_at", { ascending: false }),
         supabase.from("certificates").select("*").eq("student_id", user.id),
         supabase.from("digital_certificates").select("*").eq("student_id", user.id),
@@ -124,9 +125,10 @@ export default function TranscriptsPage() {
       ]);
 
       const student = (studentResult.data ?? {}) as DbRow;
+      const application = (applicationResult.data ?? {}) as DbRow;
       setProfile({
         name: value(student, ["full_name", "name"], user.user_metadata?.full_name ?? user.email ?? "Student"),
-        studentId: value(student, ["student_id"], user.id),
+        studentId: value(application, ["student_id"], value(student, ["student_id"], "Student ID pending")),
         email: value(student, ["email"], user.email ?? ""),
         enrollmentDate: value(student, ["enrollment_date", "created_at"], "")
       });

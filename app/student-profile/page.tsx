@@ -75,12 +75,13 @@ export default function StudentProfilePage() {
       }
 
       const email = user.email ?? "";
-      const [studentResult, profileResult, membershipResult, certificatesResult, certificationsResult, progressResult, journalResult, lessonsResult, attendanceResult, assignmentsResult] = await Promise.all([
+      const [studentResult, applicationResult, profileResult, certificatesResult, certificationsResult, enrollmentResult, progressResult, journalResult, lessonsResult, attendanceResult, assignmentsResult] = await Promise.all([
         supabase.from("students").select("*").or(`auth_user_id.eq.${user.id},email.eq.${email}`).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("student_applications").select("*").or(`auth_user_id.eq.${user.id},email.eq.${email}`).order("created_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("student_profiles").select("*").eq("auth_user_id", user.id).maybeSingle(),
-        supabase.from("student_memberships").select("*").eq("student_id", user.id).maybeSingle(),
         supabase.from("certificates").select("id").eq("student_id", user.id),
         supabase.from("certifications").select("id").eq("student_id", user.id),
+        supabase.from("enrollments").select("*").eq("student_id", user.id).order("enrolled_at", { ascending: false }).limit(1),
         supabase.from("lesson_progress").select("id").eq("student_id", user.id),
         supabase.from("trading_journal").select("id").eq("student_id", user.id),
         supabase.from("lessons").select("id"),
@@ -91,26 +92,28 @@ export default function StudentProfilePage() {
       if (studentResult.error) throw studentResult.error;
 
       const row = (studentResult.data ?? {}) as DbRow;
+      const applicationRow = (applicationResult.data ?? {}) as DbRow;
       const profileRow = (profileResult.data ?? {}) as DbRow;
-      const membership = (membershipResult.data ?? {}) as DbRow;
+      const enrollmentRow = ((enrollmentResult.data ?? []) as DbRow[])[0] ?? {};
       const enrollmentStatus = normalizeEnrollmentStatus(value(row, ["status"], "Pending Review"));
+      const earnedCredentialCount = (certificatesResult.data ?? []).length + (certificationsResult.data ?? []).length;
       const loadedProfile: StudentProfile = {
         id: value(row, ["id"]),
         authUserId: value(row, ["auth_user_id"], user.id),
-        studentId: value(profileRow, ["student_id"], value(row, ["auth_user_id"], user.id)),
-        fullName: value(profileRow, ["full_name"], value(row, ["full_name"], user.user_metadata?.full_name as string | undefined ?? email)),
+        studentId: value(applicationRow, ["student_id"], value(row, ["student_id"], value(profileRow, ["student_id"], "Not assigned"))),
+        fullName: value(row, ["full_name"], value(applicationRow, ["full_name"], value(profileRow, ["full_name"], user.user_metadata?.full_name as string | undefined ?? email))),
         email: value(profileRow, ["email"], value(row, ["email"], email)),
-        membershipLevel: value(membership, ["membership_plan"], value(profileRow, ["membership_level"], value(row, ["membership_plan"], "Free Trial"))),
+        membershipLevel: value(applicationRow, ["membership_plan"], value(row, ["membership_plan"], value(profileRow, ["membership_level"], "Not enrolled"))),
         membershipStatus: enrollmentStatus,
-        enrollmentDate: value(row, ["enrollment_date", "created_at"]),
-        certificationLevel: value(row, ["certification_level"], value(profileRow, ["program_interest"], "Academy for Financial Future")),
-        certificationStatus: enrollmentStatus,
+        enrollmentDate: value(row, ["enrollment_date"], value(enrollmentRow, ["enrolled_at"], value(row, ["created_at"]))),
+        certificationLevel: value(applicationRow, ["program_interest"], value(row, ["certification_level"], value(profileRow, ["program_interest"], "Academy for Financial Future"))),
+        certificationStatus: earnedCredentialCount > 0 ? "Certified" : "Not Started",
         status: enrollmentStatus,
         profilePhotoUrl: value(profileRow, ["profile_photo_url"], value(row, ["profile_photo_url"]))
       };
 
       setProfile(loadedProfile);
-      setCertificationsEarned((certificatesResult.data ?? []).length + (certificationsResult.data ?? []).length);
+      setCertificationsEarned(earnedCredentialCount);
       setCourseProgress(percent((progressResult.data ?? []).length, Math.max((lessonsResult.data ?? []).length, 1)));
       setJournalEntries((journalResult.data ?? []).length);
       setAttendanceHistory((attendanceResult.data ?? []) as DbRow[]);
@@ -201,7 +204,7 @@ export default function StudentProfilePage() {
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <ProfileMetric icon={<CreditCard size={20} />} label="Membership Level" value={profile?.membershipLevel ?? "Pending"} />
               <ProfileMetric icon={<ShieldCheck size={20} />} label="Enrollment Status" value={profile?.status ?? "Pending Review"} />
-              <ProfileMetric icon={<ShieldCheck size={20} />} label="Certification Status" value={profile?.certificationStatus ?? "Pending Review"} />
+              <ProfileMetric icon={<ShieldCheck size={20} />} label="Certification Status" value={profile?.certificationStatus ?? "Not Started"} />
               <ProfileMetric icon={<Award size={20} />} label="Certifications Earned" value={String(certificationsEarned)} />
               <ProfileMetric icon={<BookOpenCheck size={20} />} label="Course Progress" value={`${courseProgress}%`} />
               <ProfileMetric icon={<ChartCandlestick size={20} />} label="Trading Journal Entries" value={String(journalEntries)} />
@@ -216,8 +219,8 @@ export default function StudentProfilePage() {
                 <ProfileLine label="Full Name" value={profile?.fullName ?? "Pending"} />
                 <ProfileLine label="Student ID" value={profile?.studentId ?? "Pending"} />
                 <ProfileLine label="Enrollment Date" value={shortDate(profile?.enrollmentDate ?? "")} />
-                <ProfileLine label="Certification Level" value={profile?.certificationLevel ?? "Academy for Financial Future"} />
-                <ProfileLine label="Certification Status" value={profile?.certificationStatus ?? "Pending Review"} />
+                <ProfileLine label="Program" value={profile?.certificationLevel ?? "Academy for Financial Future"} />
+                <ProfileLine label="Certification Status" value={profile?.certificationStatus ?? "Not Started"} />
                 <ProfileLine label="Account Status" value={profile?.status ?? "Pending Review"} />
                 <ProfileLine label="Enrollment Status" value={profile?.status ?? "Pending Review"} />
               </div>

@@ -318,7 +318,7 @@ export default function StudentDashboardPage() {
       const authName = resolveAuthFullName(currentUser);
       const authEmail = currentUser.email ?? "";
 
-      const profileRow = await (
+      const [profileRow, applicationRow, enrollmentRows] = await Promise.all([
         authEmail
           ? safeMaybeSingle(supabase, "students", (table) =>
               supabase
@@ -329,17 +329,37 @@ export default function StudentDashboardPage() {
                 .limit(1)
                 .maybeSingle()
             )
-          : Promise.resolve(null)
-      );
+          : Promise.resolve(null),
+        authEmail
+          ? safeMaybeSingle(supabase, "student_applications", (table) =>
+              supabase
+                .from(table)
+                .select("student_id, auth_user_id, full_name, email, membership_plan, program_interest, application_status, reviewed_at, created_at")
+                .or(`auth_user_id.eq.${currentUser.id},email.eq.${authEmail}`)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle()
+            )
+          : Promise.resolve(null),
+        safeSelect(supabase, "enrollments", (table) =>
+          supabase
+            .from(table)
+            .select("course_name, enrolled_at, enrollment_status, progress_percentage")
+            .eq("student_id", currentUser.id)
+            .order("enrolled_at", { ascending: false })
+        )
+      ]);
+
+      const latestEnrollment = enrollmentRows[0] ?? {};
 
       const resolvedProfile: StudentProfile = {
         id: value(profileRow ?? {}, ["id"], currentUser.id),
-        studentId: value(profileRow ?? {}, ["student_id"], value(profileRow ?? {}, ["id"], "Not assigned")),
-        fullName: value(profileRow ?? {}, ["full_name", "name"], authName || authEmail || "Not recorded"),
+        studentId: value(applicationRow ?? {}, ["student_id"], value(profileRow ?? {}, ["student_id"], "Not assigned")),
+        fullName: value(profileRow ?? {}, ["full_name", "name"], value(applicationRow ?? {}, ["full_name"], authName || authEmail || "Not recorded")),
         email: value(profileRow ?? {}, ["email"], authEmail || "Not recorded"),
-        enrollmentDate: value(profileRow ?? {}, ["enrollment_date", "created_at"], ""),
-        membershipPlan: value(profileRow ?? {}, ["membership_plan"], "Not enrolled"),
-        certificationLevel: value(profileRow ?? {}, ["certification_level"], "Not recorded"),
+        enrollmentDate: value(profileRow ?? {}, ["enrollment_date"], value(latestEnrollment, ["enrolled_at"], value(profileRow ?? {}, ["created_at"], ""))),
+        membershipPlan: value(applicationRow ?? {}, ["membership_plan"], value(profileRow ?? {}, ["membership_plan"], "Not enrolled")),
+        certificationLevel: value(applicationRow ?? {}, ["program_interest"], value(profileRow ?? {}, ["certification_level"], value(latestEnrollment, ["course_name"], "Not recorded"))),
         status: normalizeEnrollmentStatus(value(profileRow ?? {}, ["status"], "Pending Review"))
       };
 
@@ -638,10 +658,11 @@ export default function StudentDashboardPage() {
             ) : (
               <div className="mt-6 grid gap-4">
                 <ProfileLine icon={<User size={18} />} label="Full Name" value={studentProfile?.fullName ?? studentName} />
-                <ProfileLine icon={<BadgeCheck size={18} />} label="Student ID" value={studentProfile?.studentId ?? user?.id ?? "Not recorded"} />
+                <ProfileLine icon={<BadgeCheck size={18} />} label="Student ID" value={studentProfile?.studentId ?? "Not assigned"} />
                 <ProfileLine icon={<Mail size={18} />} label="Email" value={studentProfile?.email ?? user?.email ?? "Not recorded"} />
                 <ProfileLine icon={<CalendarDays size={18} />} label="Enrollment Date" value={shortDate(studentProfile?.enrollmentDate ?? "")} />
                 <ProfileLine icon={<BadgeCheck size={18} />} label="Enrollment Status" value={unifiedStudentStatus} />
+                <ProfileLine icon={<BookOpenCheck size={18} />} label="Program" value={studentProfile?.certificationLevel ?? "Not recorded"} />
                 <ProfileLine icon={<CreditCard size={18} />} label="Membership Level" value={membershipLevel} />
                 <ProfileLine icon={<ShieldCheck size={18} />} label="Certification Status" value={certificationStatus} />
                 <Link href="/messages" className="flex items-center justify-between border border-gold-500/25 px-4 py-3 text-sm font-semibold text-gold-300">

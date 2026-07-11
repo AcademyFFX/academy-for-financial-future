@@ -228,7 +228,7 @@ export default function AdminPage() {
     return {
       id: value(row, ["id", "student_id"]),
       authUserId: value(row, ["auth_user_id"]),
-      studentId: value(row, ["student_id"], value(row, ["auth_user_id"], value(row, ["id"], "Pending"))),
+      studentId: value(row, ["student_id"], "Pending"),
       name: value(row, ["name", "full_name", "student_name"], "Student"),
       email: value(row, ["email", "student_email"], "Not recorded"),
       enrollmentDate: normalizeDate(value(row, ["enrollment_date", "created_at", "date_enrolled"])),
@@ -260,6 +260,7 @@ export default function AdminPage() {
   async function updateMatchingStudentStatus(supabase: ReturnType<typeof createClient>, application: StudentApplication, status: string) {
     const payload = {
       status,
+      enrollment_date: new Date().toISOString().slice(0, 10),
       student_id: application.studentId && application.studentId !== "Pending" ? application.studentId : undefined,
       membership_plan: application.membershipPlan || undefined,
       certification_level: application.programInterest || undefined
@@ -275,6 +276,54 @@ export default function AdminPage() {
     }
 
     return { data: [] as DbRow[], error: null };
+  }
+
+  async function upsertProgramEnrollment(supabase: ReturnType<typeof createClient>, application: StudentApplication) {
+    if (!application.authUserId) {
+      return { data: null as DbRow | null, error: new Error("Cannot create enrollment because auth_user_id is missing.") };
+    }
+
+    const now = new Date().toISOString();
+    const courseName = application.programInterest || "Academy for Financial Future";
+    const existingResult = await supabase
+      .from("enrollments")
+      .select("*")
+      .eq("student_id", application.authUserId)
+      .eq("course_name", courseName)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingResult.error) {
+      return { data: null as DbRow | null, error: existingResult.error };
+    }
+
+    const payload = {
+      student_id: application.authUserId,
+      course_id: null,
+      course_name: courseName,
+      enrolled_at: now,
+      enrollment_status: "Active",
+      progress_percentage: 0,
+      updated_at: now
+    };
+
+    if (existingResult.data) {
+      const updateResult = await supabase
+        .from("enrollments")
+        .update(payload)
+        .eq("id", value(existingResult.data as DbRow, ["id"]))
+        .select("*")
+        .single();
+      return { data: (updateResult.data ?? null) as DbRow | null, error: updateResult.error };
+    }
+
+    const insertResult = await supabase
+      .from("enrollments")
+      .insert(payload)
+      .select("*")
+      .single();
+
+    return { data: (insertResult.data ?? null) as DbRow | null, error: insertResult.error };
   }
 
   function studentIsActiveForApplication(application: StudentApplication, studentRows: Student[]) {
@@ -624,6 +673,19 @@ export default function AdminPage() {
         throw new Error("Application approved, but no matching student account was activated.");
       }
 
+      if (nextStatus === "Approved") {
+        const enrollmentResult = await upsertProgramEnrollment(supabase, application);
+        console.info("AFF enrollment approval enrollments upsert", {
+          applicationId: application.id,
+          auth_user_id: application.authUserId,
+          email: application.email,
+          result: enrollmentResult
+        });
+        if (enrollmentResult.error) {
+          throw new Error(`Student activated, but enrollment record could not be created: ${enrollmentResult.error.message}`);
+        }
+      }
+
       const [profileResult, membershipResult, historyResult] = await Promise.all([
         application.authUserId
           ? supabase.from("student_profiles").upsert({
@@ -694,9 +756,9 @@ export default function AdminPage() {
       });
       setApprovalStates((current) => ({
         ...current,
-        [application.id]: { loading: false, message: nextStatus === "Approved" ? "Approved successfully" : `Application ${nextStatus.toLowerCase()}.` }
+        [application.id]: { loading: false, message: nextStatus === "Approved" ? "Student approved and enrolled successfully" : `Application ${nextStatus.toLowerCase()}.` }
       }));
-      setMessage(nextStatus === "Approved" ? "Approved successfully" : `Application ${nextStatus.toLowerCase()}.`);
+      setMessage(nextStatus === "Approved" ? "Student approved and enrolled successfully" : `Application ${nextStatus.toLowerCase()}.`);
       await loadAdminData();
     } catch (error) {
       const failureMessage = getErrorMessage(error, "Unable to review application.");

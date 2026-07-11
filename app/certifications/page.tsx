@@ -247,17 +247,27 @@ export default function CertificationsPage() {
       }
 
       setUserEmail(user.email ?? "");
-      const profileResult = await supabase
-        .from("students")
-        .select("auth_user_id, full_name, email")
-        .or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const [profileResult, applicationResult] = await Promise.all([
+        supabase
+          .from("students")
+          .select("student_id, auth_user_id, full_name, email")
+          .or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("student_applications")
+          .select("student_id, auth_user_id, email")
+          .or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      ]);
 
       const profile = (profileResult.data ?? {}) as DbRow;
+      const application = (applicationResult.data ?? {}) as DbRow;
       const resolvedName = value(profile, ["full_name"], user.user_metadata?.full_name ?? user.email ?? "Student");
-      const resolvedStudentId = value(profile, ["auth_user_id"], user.id);
+      const resolvedStudentId = value(application, ["student_id"], value(profile, ["student_id"], "Student ID pending"));
       setStudentName(resolvedName);
       setAffStudentId(resolvedStudentId);
 

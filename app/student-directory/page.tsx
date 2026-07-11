@@ -18,6 +18,8 @@ type DirectoryStudent = {
   enrollmentStatus: string;
   membershipPlan: string;
   profilePhotoUrl: string;
+  authUserId: string;
+  email: string;
 };
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -32,15 +34,17 @@ function normalizeEnrollmentStatus(status: string) {
   return enrollmentStatuses.includes(status as (typeof enrollmentStatuses)[number]) ? status : "Pending Review";
 }
 
-function normalizeStudent(row: DbRow): DirectoryStudent {
+function normalizeStudent(row: DbRow, application?: DbRow): DirectoryStudent {
   return {
     id: value(row, ["id"], crypto.randomUUID()),
     fullName: value(row, ["full_name"], "AFF Student"),
-    studentId: value(row, ["auth_user_id"], "Pending"),
-    certificationLevel: value(row, ["certification_level"], "Academy for Financial Future"),
+    studentId: value(application ?? {}, ["student_id"], value(row, ["student_id"], "Pending")),
+    certificationLevel: value(application ?? {}, ["program_interest"], value(row, ["certification_level"], "Academy for Financial Future")),
     enrollmentStatus: normalizeEnrollmentStatus(value(row, ["status"], "Pending Review")),
-    membershipPlan: value(row, ["membership_plan"], "Free Trial"),
-    profilePhotoUrl: value(row, ["profile_photo_url"])
+    membershipPlan: value(application ?? {}, ["membership_plan"], value(row, ["membership_plan"], "Free Trial")),
+    profilePhotoUrl: value(row, ["profile_photo_url"]),
+    authUserId: value(row, ["auth_user_id"]),
+    email: value(row, ["email"])
   };
 }
 
@@ -74,14 +78,29 @@ export default function StudentDirectoryPage() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("students")
-        .select("id, auth_user_id, full_name, certification_level, status")
-        .eq("status", "Active")
-        .order("full_name", { ascending: true });
+      const [studentsResult, applicationsResult] = await Promise.all([
+        supabase
+          .from("students")
+          .select("id, student_id, auth_user_id, full_name, email, certification_level, membership_plan, status, profile_photo_url")
+          .eq("status", "Active")
+          .order("full_name", { ascending: true }),
+        supabase
+          .from("student_applications")
+          .select("auth_user_id, student_id, full_name, email, program_interest, membership_plan, application_status")
+      ]);
 
-      if (error) throw error;
-      setStudents(((data ?? []) as DbRow[]).map(normalizeStudent));
+      if (studentsResult.error) throw studentsResult.error;
+      const applications = (applicationsResult.data ?? []) as DbRow[];
+      setStudents(((studentsResult.data ?? []) as DbRow[]).map((student) => {
+        const authUserId = value(student, ["auth_user_id"]);
+        const email = value(student, ["email"]).toLowerCase();
+        const application = applications.find((item) => {
+          const appAuthId = value(item, ["auth_user_id"]);
+          const appEmail = value(item, ["email"]).toLowerCase();
+          return (authUserId && appAuthId === authUserId) || (email && appEmail === email);
+        });
+        return normalizeStudent(student, application);
+      }));
       setMessage("Active student directory loaded.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to load student directory.");

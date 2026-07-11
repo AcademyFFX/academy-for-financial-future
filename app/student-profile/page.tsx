@@ -75,13 +75,12 @@ export default function StudentProfilePage() {
       }
 
       const email = user.email ?? "";
-      const [studentResult, applicationResult, profileResult, certificatesResult, certificationsResult, enrollmentResult, progressResult, journalResult, lessonsResult, attendanceResult, assignmentsResult] = await Promise.all([
+      const [studentResult, applicationResult, profileResult, certificatesResult, certificationsResult, progressResult, journalResult, lessonsResult, attendanceResult, assignmentsResult] = await Promise.all([
         supabase.from("students").select("*").or(`auth_user_id.eq.${user.id},email.eq.${email}`).order("created_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("student_applications").select("*").or(`auth_user_id.eq.${user.id},email.eq.${email}`).order("created_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("student_profiles").select("*").eq("auth_user_id", user.id).maybeSingle(),
         supabase.from("certificates").select("id").eq("student_id", user.id),
         supabase.from("certifications").select("id").eq("student_id", user.id),
-        supabase.from("enrollments").select("*").eq("student_id", user.id).order("enrolled_at", { ascending: false }).limit(1),
         supabase.from("lesson_progress").select("id").eq("student_id", user.id),
         supabase.from("trading_journal").select("id").eq("student_id", user.id),
         supabase.from("lessons").select("id"),
@@ -94,6 +93,10 @@ export default function StudentProfilePage() {
       const row = (studentResult.data ?? {}) as DbRow;
       const applicationRow = (applicationResult.data ?? {}) as DbRow;
       const profileRow = (profileResult.data ?? {}) as DbRow;
+      const internalStudentId = value(row, ["id"]);
+      const enrollmentResult = internalStudentId
+        ? await supabase.from("enrollments").select("*").eq("student_id", internalStudentId).order("enrolled_at", { ascending: false }).limit(1)
+        : { data: [], error: null };
       const enrollmentRow = ((enrollmentResult.data ?? []) as DbRow[])[0] ?? {};
       const enrollmentStatus = normalizeEnrollmentStatus(value(row, ["status"], "Pending Review"));
       const earnedCredentialCount = (certificatesResult.data ?? []).length + (certificationsResult.data ?? []).length;

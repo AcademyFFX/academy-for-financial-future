@@ -278,9 +278,10 @@ export default function AdminPage() {
     return { data: [] as DbRow[], error: null };
   }
 
-  async function upsertProgramEnrollment(supabase: ReturnType<typeof createClient>, application: StudentApplication) {
-    if (!application.authUserId) {
-      return { data: null as DbRow | null, error: new Error("Cannot create enrollment because auth_user_id is missing.") };
+  async function upsertProgramEnrollment(supabase: ReturnType<typeof createClient>, application: StudentApplication, studentRow: DbRow) {
+    const internalStudentId = value(studentRow, ["id"]);
+    if (!internalStudentId) {
+      return { data: null as DbRow | null, error: new Error("Cannot create enrollment because the matching public.students.id is missing.") };
     }
 
     const now = new Date().toISOString();
@@ -288,7 +289,7 @@ export default function AdminPage() {
     const existingResult = await supabase
       .from("enrollments")
       .select("*")
-      .eq("student_id", application.authUserId)
+      .eq("student_id", internalStudentId)
       .eq("course_name", courseName)
       .limit(1)
       .maybeSingle();
@@ -298,7 +299,7 @@ export default function AdminPage() {
     }
 
     const payload = {
-      student_id: application.authUserId,
+      student_id: Number(internalStudentId),
       course_id: null,
       course_name: courseName,
       enrolled_at: now,
@@ -674,10 +675,11 @@ export default function AdminPage() {
       }
 
       if (nextStatus === "Approved") {
-        const enrollmentResult = await upsertProgramEnrollment(supabase, application);
+        const enrollmentResult = await upsertProgramEnrollment(supabase, application, studentResult.data[0]);
         console.info("AFF enrollment approval enrollments upsert", {
           applicationId: application.id,
           auth_user_id: application.authUserId,
+          student_id: value(studentResult.data[0], ["id"]),
           email: application.email,
           result: enrollmentResult
         });

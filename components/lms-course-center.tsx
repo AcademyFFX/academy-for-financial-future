@@ -69,6 +69,7 @@ function quizRowsFromAssets(assets: DbRow[]) {
 
 export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
   const [userId, setUserId] = useState("");
+  const [studentDbId, setStudentDbId] = useState("");
   const [studentName, setStudentName] = useState("AFF Student");
   const [message, setMessage] = useState("Loading AFF Course Management System...");
   const [courses, setCourses] = useState<DbRow[]>([]);
@@ -92,11 +93,21 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
       }
       setUserId(user.id);
       setStudentName(user.user_metadata?.full_name ?? user.email ?? "AFF Student");
+      const { data: studentRecord } = await supabase
+        .from("students")
+        .select("id, full_name")
+        .or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const internalStudentId = studentRecord?.id ? String(studentRecord.id) : "";
+      setStudentDbId(internalStudentId);
+      if (studentRecord?.full_name) setStudentName(String(studentRecord.full_name));
       const [courseResult, lessonResult, assetResult, enrollmentResult, progressResult, attemptResult, certificateResult] = await Promise.all([
         supabase.from("courses").select("*").order("created_at"),
         supabase.from("lessons").select("*").order("lesson_order"),
         supabase.from("course_assets").select("*").eq("asset_status", "Published").order("created_at"),
-        supabase.from("enrollments").select("*").eq("student_id", user.id),
+        internalStudentId ? supabase.from("enrollments").select("*").eq("student_id", internalStudentId) : Promise.resolve({ data: [], error: null }),
         supabase.from("lesson_progress").select("*").eq("student_id", user.id),
         supabase.from("exams").select("*").eq("student_id", user.id),
         supabase.from("certificates").select("*").eq("student_id", user.id)
@@ -131,10 +142,10 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
   }
 
   async function enroll(courseId: string) {
-    if (!userId) return;
+    if (!userId || !studentDbId) return;
     const supabase = createClient();
     const course = courses.find((item) => idOf(item) === courseId);
-    const { error } = await supabase.from("enrollments").insert({ student_id: userId, course_id: Number(courseId), course_name: value(course, ["course_name", "title"]), enrollment_status: "Active" });
+    const { error } = await supabase.from("enrollments").insert({ student_id: Number(studentDbId), course_id: Number(courseId), course_name: value(course, ["course_name", "title"]), enrollment_status: "Active" });
     setMessage(error ? error.message : "Course enrollment active.");
     if (!error) await loadLms();
   }
@@ -190,7 +201,9 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
     const nextCompleted = new Set([...Array.from(completedLessonIds), lessonId]);
     const courseLessons = lessons.filter((item) => value(item, ["course_id"]) === courseId);
     const percent = courseLessons.length ? Math.round((courseLessons.filter((item) => nextCompleted.has(idOf(item))).length / courseLessons.length) * 100) : 0;
-    await supabase.from("enrollments").update({ progress_percentage: percent, completed_at: percent === 100 ? new Date().toISOString() : null }).eq("student_id", userId).eq("course_id", Number(courseId));
+    if (studentDbId) {
+      await supabase.from("enrollments").update({ progress_percentage: percent, completed_at: percent === 100 ? new Date().toISOString() : null }).eq("student_id", Number(studentDbId)).eq("course_id", Number(courseId));
+    }
     if (percent === 100) await issueCertificate(course);
     setMessage(percent === 100 ? "Course lessons complete. Certificate eligibility checked." : "Lesson marked complete.");
     await loadLms();

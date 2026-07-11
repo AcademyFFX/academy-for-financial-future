@@ -20,8 +20,18 @@ export function LmsDashboardSummary() {
         const supabase = createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+        const { data: student } = await supabase
+          .from("students")
+          .select("id")
+          .or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const internalStudentId = student?.id ? String(student.id) : "";
         const [enrollmentResult, courseResult, certificateResult] = await Promise.all([
-          supabase.from("enrollments").select("id,course_id,course_name,progress_percentage,enrollment_status").eq("student_id", user.id),
+          internalStudentId
+            ? supabase.from("enrollments").select("id,course_id,course_name,progress_percentage,enrollment_status").eq("student_id", internalStudentId)
+            : Promise.resolve({ data: [], error: null }),
           supabase.from("courses").select("id,course_name,duration"),
           supabase.from("certificates").select("id", { count: "exact", head: true }).eq("student_id", user.id)
         ]);

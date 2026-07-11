@@ -318,7 +318,7 @@ export default function StudentDashboardPage() {
       const authName = resolveAuthFullName(currentUser);
       const authEmail = currentUser.email ?? "";
 
-      const [profileRow, applicationRow, enrollmentRows] = await Promise.all([
+      const [profileRow, applicationRow] = await Promise.all([
         authEmail
           ? safeMaybeSingle(supabase, "students", (table) =>
               supabase
@@ -340,16 +340,19 @@ export default function StudentDashboardPage() {
                 .limit(1)
                 .maybeSingle()
             )
-          : Promise.resolve(null),
-        safeSelect(supabase, "enrollments", (table) =>
-          supabase
-            .from(table)
-            .select("course_name, enrolled_at, enrollment_status, progress_percentage")
-            .eq("student_id", currentUser.id)
-            .order("enrolled_at", { ascending: false })
-        )
+          : Promise.resolve(null)
       ]);
 
+      const internalStudentId = value(profileRow ?? {}, ["id"]);
+      const enrollmentRows = internalStudentId
+        ? await safeSelect(supabase, "enrollments", (table) =>
+            supabase
+              .from(table)
+              .select("course_name, enrolled_at, enrollment_status, progress_percentage")
+              .eq("student_id", internalStudentId)
+              .order("enrolled_at", { ascending: false })
+          )
+        : [];
       const latestEnrollment = enrollmentRows[0] ?? {};
 
       const resolvedProfile: StudentProfile = {

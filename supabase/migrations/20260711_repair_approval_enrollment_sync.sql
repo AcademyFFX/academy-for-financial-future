@@ -1,3 +1,5 @@
+begin;
+
 alter table public.students
   add column if not exists student_id text,
   add column if not exists membership_plan text not null default 'Free Trial',
@@ -8,7 +10,7 @@ alter table public.students
 
 create table if not exists public.enrollments (
   id uuid primary key default gen_random_uuid(),
-  student_id uuid not null references auth.users(id) on delete cascade,
+  student_id bigint not null references public.students(id) on delete cascade,
   course_id bigint,
   course_name text,
   enrollment_status text not null default 'Active',
@@ -20,7 +22,7 @@ create table if not exists public.enrollments (
 );
 
 alter table public.enrollments
-  add column if not exists student_id uuid references auth.users(id) on delete cascade,
+  add column if not exists student_id bigint references public.students(id) on delete cascade,
   add column if not exists course_id bigint,
   add column if not exists course_name text,
   add column if not exists enrollment_status text not null default 'Active',
@@ -30,9 +32,14 @@ alter table public.enrollments
   add column if not exists created_at timestamptz not null default now(),
   add column if not exists updated_at timestamptz not null default now();
 
-create index if not exists students_auth_email_status_idx on public.students (auth_user_id, lower(email), status);
-create index if not exists student_applications_auth_email_status_idx on public.student_applications (auth_user_id, lower(email), application_status);
-create index if not exists enrollments_student_course_name_idx on public.enrollments (student_id, course_name);
+create index if not exists students_auth_email_status_idx
+on public.students (auth_user_id, lower(email), status);
+
+create index if not exists student_applications_auth_email_status_idx
+on public.student_applications (auth_user_id, lower(email), application_status);
+
+create index if not exists enrollments_student_course_name_idx
+on public.enrollments (student_id, course_name);
 
 alter table public.students enable row level security;
 alter table public.student_applications enable row level security;
@@ -55,7 +62,11 @@ create policy "Students can read own student account"
 on public.students
 for select
 to authenticated
-using (auth.uid() = auth_user_id or lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')) or lower(coalesce(auth.jwt() ->> 'email', '')) = 'acafffx@gmail.com');
+using (
+  auth.uid() = auth_user_id
+  or lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+  or lower(coalesce(auth.jwt() ->> 'email', '')) = 'acafffx@gmail.com'
+);
 
 drop policy if exists "AFF admin can approve enrollment applications" on public.student_applications;
 create policy "AFF admin can approve enrollment applications"
@@ -70,14 +81,29 @@ create policy "Students can read own enrollment application"
 on public.student_applications
 for select
 to authenticated
-using (auth.uid() = auth_user_id or lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')) or lower(coalesce(auth.jwt() ->> 'email', '')) = 'acafffx@gmail.com');
+using (
+  auth.uid() = auth_user_id
+  or lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+  or lower(coalesce(auth.jwt() ->> 'email', '')) = 'acafffx@gmail.com'
+);
 
 drop policy if exists "Students can read own enrollments" on public.enrollments;
 create policy "Students can read own enrollments"
 on public.enrollments
 for select
 to authenticated
-using (auth.uid() = student_id or lower(coalesce(auth.jwt() ->> 'email', '')) = 'acafffx@gmail.com');
+using (
+  exists (
+    select 1
+    from public.students s
+    where s.id = enrollments.student_id
+      and (
+        s.auth_user_id = auth.uid()
+        or lower(s.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+      )
+  )
+  or lower(coalesce(auth.jwt() ->> 'email', '')) = 'acafffx@gmail.com'
+);
 
 drop policy if exists "AFF admin can manage approval enrollments" on public.enrollments;
 create policy "AFF admin can manage approval enrollments"
@@ -112,7 +138,7 @@ insert into public.enrollments (
   updated_at
 )
 select
-  a.auth_user_id,
+  s.id,
   null,
   coalesce(nullif(a.program_interest, ''), 'Academy for Financial Future'),
   coalesce(a.reviewed_at, now()),
@@ -121,13 +147,19 @@ select
   now(),
   now()
 from public.student_applications a
+join public.students s
+  on (
+    (a.auth_user_id is not null and s.auth_user_id = a.auth_user_id)
+    or lower(s.email) = lower(a.email)
+  )
 where a.application_status = 'Approved'
-  and a.auth_user_id is not null
   and not exists (
     select 1
     from public.enrollments e
-    where e.student_id = a.auth_user_id
+    where e.student_id = s.id
       and coalesce(e.course_name, '') = coalesce(nullif(a.program_interest, ''), 'Academy for Financial Future')
   );
 
 notify pgrst, 'reload schema';
+
+commit;

@@ -54,6 +54,7 @@ import { LmsDashboardSummary } from "@/components/lms-dashboard-summary";
 import { ZoomClassesPanel } from "@/components/zoom-classes-panel";
 
 type DbRow = Record<string, unknown>;
+const enrollmentStatuses = ["Pending Review", "Active", "Suspended", "Graduated"] as const;
 type StudentProfile = {
   id: string;
   studentId: string;
@@ -230,6 +231,10 @@ function value(row: DbRow, keys: string[], fallback = "") {
   return fallback;
 }
 
+function normalizeEnrollmentStatus(status: string) {
+  return enrollmentStatuses.includes(status as (typeof enrollmentStatuses)[number]) ? status : "Pending Review";
+}
+
 function numberValue(row: DbRow, keys: string[], fallback = 0) {
   const parsed = Number(value(row, keys));
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -340,7 +345,7 @@ export default function StudentDashboardPage() {
         email: value(profileRow ?? {}, ["email"], authEmail || "Not recorded"),
         enrollmentDate: value(profileRow ?? {}, ["enrollment_date", "created_at"], ""),
         certificationLevel: value(profileRow ?? {}, ["certification_level"], "Not recorded"),
-        status: value(profileRow ?? {}, ["status"], "Not recorded")
+        status: normalizeEnrollmentStatus(value(profileRow ?? {}, ["status"], "Pending Review"))
       };
 
       setStudentProfile(resolvedProfile);
@@ -548,13 +553,7 @@ export default function StudentDashboardPage() {
     };
   }, [datasets]);
 
-  const certificationStatus = useMemo(() => {
-    if (datasets.certificates.length > 0 || datasets.certifications.length > 0 || datasets.digitalCertificates.length > 0) return "Certified";
-    if ([...datasets.exams, ...datasets.certificationAttempts].some((row) => value(row, ["result", "status", "pass_fail"]).toLowerCase() === "pass" || numberValue(row, ["score"]) >= 80)) {
-      return "Exam Passed";
-    }
-    return studentProfile?.status && studentProfile.status !== "Not recorded" ? studentProfile.status : "In Progress";
-  }, [datasets.certificates, datasets.certifications, datasets.digitalCertificates, datasets.exams, datasets.certificationAttempts, studentProfile?.status]);
+  const unifiedStudentStatus = studentProfile?.status && studentProfile.status !== "Not recorded" ? studentProfile.status : "Pending Review";
 
   const membershipLevel = membershipProfile?.membershipPlan && membershipProfile.membershipPlan !== "Not selected"
     ? membershipProfile.membershipPlan
@@ -640,9 +639,9 @@ export default function StudentDashboardPage() {
                 <ProfileLine icon={<BadgeCheck size={18} />} label="Student ID" value={studentProfile?.studentId ?? user?.id ?? "Not recorded"} />
                 <ProfileLine icon={<Mail size={18} />} label="Email" value={studentProfile?.email ?? user?.email ?? "Not recorded"} />
                 <ProfileLine icon={<CalendarDays size={18} />} label="Enrollment Date" value={shortDate(studentProfile?.enrollmentDate ?? "")} />
-                <ProfileLine icon={<BadgeCheck size={18} />} label="Enrollment Status" value={studentProfile?.status ?? "Pending Review"} />
+                <ProfileLine icon={<BadgeCheck size={18} />} label="Enrollment Status" value={unifiedStudentStatus} />
                 <ProfileLine icon={<CreditCard size={18} />} label="Membership Level" value={membershipLevel} />
-                <ProfileLine icon={<ShieldCheck size={18} />} label="Certification Status" value={certificationStatus} />
+                <ProfileLine icon={<ShieldCheck size={18} />} label="Certification Status" value={unifiedStudentStatus} />
                 <Link href="/messages" className="flex items-center justify-between border border-gold-500/25 px-4 py-3 text-sm font-semibold text-gold-300">
                   <span>Unread Messages</span>
                   <span>{unreadCount}</span>

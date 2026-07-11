@@ -8,13 +8,14 @@ import { Section, SectionInner } from "@/components/section";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
+const enrollmentStatuses = ["Pending Review", "Active", "Suspended", "Graduated"] as const;
 
 type DirectoryStudent = {
   id: string;
   fullName: string;
   studentId: string;
   certificationLevel: string;
-  membershipStatus: string;
+  enrollmentStatus: string;
   membershipPlan: string;
   profilePhotoUrl: string;
 };
@@ -27,13 +28,17 @@ function value(row: DbRow, keys: string[], fallback = "") {
   return fallback;
 }
 
+function normalizeEnrollmentStatus(status: string) {
+  return enrollmentStatuses.includes(status as (typeof enrollmentStatuses)[number]) ? status : "Pending Review";
+}
+
 function normalizeStudent(row: DbRow): DirectoryStudent {
   return {
     id: value(row, ["id"], crypto.randomUUID()),
     fullName: value(row, ["full_name"], "AFF Student"),
     studentId: value(row, ["auth_user_id"], "Pending"),
     certificationLevel: value(row, ["certification_level"], "Academy for Financial Future"),
-    membershipStatus: value(row, ["membership_status"], "Active"),
+    enrollmentStatus: normalizeEnrollmentStatus(value(row, ["status"], "Pending Review")),
     membershipPlan: value(row, ["membership_plan"], "Free Trial"),
     profilePhotoUrl: value(row, ["profile_photo_url"])
   };
@@ -50,7 +55,7 @@ export default function StudentDirectoryPage() {
     const term = query.trim().toLowerCase();
     if (!term) return students;
     return students.filter((student) =>
-      [student.fullName, student.studentId, student.certificationLevel, student.membershipStatus, student.membershipPlan]
+      [student.fullName, student.studentId, student.certificationLevel, student.enrollmentStatus, student.membershipPlan]
         .join(" ")
         .toLowerCase()
         .includes(term)
@@ -134,7 +139,7 @@ export default function StudentDirectoryPage() {
                   </div>
                   <div className="mt-5 grid gap-3">
                     <DirectoryLine icon={<Award size={16} />} label="Certification Level" value={student.certificationLevel} />
-                    <DirectoryLine icon={<ShieldCheck size={16} />} label="Membership Status" value={`${student.membershipPlan} - ${student.membershipStatus}`} />
+                    <DirectoryLine icon={<ShieldCheck size={16} />} label="Enrollment Status" value={student.enrollmentStatus} />
                   </div>
                 </article>
               ))}

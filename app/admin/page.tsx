@@ -100,6 +100,7 @@ type Announcement = {
 
 const adminEmail = "acafffx@gmail.com";
 const initialAnnouncement = { id: "", title: "", body: "" };
+const studentStatuses = ["Pending Review", "Active", "Suspended", "Graduated"] as const;
 const adminDestinations = [
   { href: "/admin/course-management", label: "Course Management", detail: "Courses, modules, lessons, quizzes", icon: BookOpen },
   { href: "/admin/course-management/upload-center", label: "Upload Center", detail: "Video, PDF, PowerPoint, assignments", icon: UploadCloud },
@@ -128,6 +129,16 @@ function normalizeDate(raw: string) {
   if (!raw) return new Date().toISOString();
   const date = new Date(raw);
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
+function normalizeEnrollmentStatus(status: string) {
+  return studentStatuses.includes(status as (typeof studentStatuses)[number]) ? status : "Pending Review";
+}
+
+function applicationToStudentStatus(status: "Approved" | "Rejected" | "Suspended") {
+  if (status === "Approved") return "Active";
+  if (status === "Suspended") return "Suspended";
+  return "Suspended";
 }
 
 export default function AdminPage() {
@@ -201,17 +212,18 @@ export default function AdminPage() {
   }
 
   function normalizeStudent(row: DbRow): Student {
+    const studentStatus = normalizeEnrollmentStatus(value(row, ["status"], "Pending Review"));
     return {
       id: value(row, ["id", "student_id"]),
       authUserId: value(row, ["auth_user_id"]),
-      studentId: value(row, ["student_id"], value(row, ["id"], "Pending")),
+      studentId: value(row, ["student_id"], value(row, ["auth_user_id"], value(row, ["id"], "Pending"))),
       name: value(row, ["name", "full_name", "student_name"], "Student"),
       email: value(row, ["email", "student_email"], "Not recorded"),
       enrollmentDate: normalizeDate(value(row, ["enrollment_date", "created_at", "date_enrolled"])),
       certificationLevel: value(row, ["certification_level", "level", "course_name"], "Academy for Financial Future"),
       membershipPlan: value(row, ["membership_plan"], "Free Trial"),
-      membershipStatus: value(row, ["membership_status"], "Active"),
-      status: value(row, ["status"], "Active"),
+      membershipStatus: studentStatus,
+      status: studentStatus,
       profilePhotoUrl: value(row, ["profile_photo_url"])
     };
   }
@@ -479,10 +491,11 @@ export default function AdminPage() {
 
     try {
       const supabase = createClient();
+      const normalizedStatus = normalizeEnrollmentStatus(nextStatus);
       const { data, error } = await supabase
         .from("students")
         .update({
-          status: nextStatus
+          status: normalizedStatus
         })
         .eq("id", student.id)
         .select("*")
@@ -491,8 +504,8 @@ export default function AdminPage() {
       if (error) throw error;
 
       await supabase.from("student_profiles").update({
-        enrollment_status: nextStatus,
-        certification_status: nextStatus === "Graduated" ? "Graduated" : nextStatus,
+        enrollment_status: normalizedStatus,
+        certification_status: normalizedStatus,
         updated_at: new Date().toISOString()
       }).eq("auth_user_id", student.authUserId);
 
@@ -500,7 +513,7 @@ export default function AdminPage() {
         auth_user_id: student.authUserId || null,
         student_id: student.studentId,
         previous_status: student.status,
-        new_status: nextStatus,
+        new_status: normalizedStatus,
         changed_by: adminEmail,
         note: `Admin changed student status to ${nextStatus}.`
       });
@@ -516,7 +529,7 @@ export default function AdminPage() {
       }
 
       setStudents((current) => current.map((item) => (item.id === student.id ? normalizeStudent(data as DbRow) : item)));
-      setMessage(`Student ${nextStatus.toLowerCase()} status saved.`);
+      setMessage(`Student ${normalizedStatus.toLowerCase()} status saved.`);
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to update student status."));
     }
@@ -531,6 +544,7 @@ export default function AdminPage() {
       const student = findStudentByApplication(application);
       const welcomeBody = "Welcome to Academy for Financial Future.";
       const mentorName = mentorDrafts[application.id]?.trim() || "Dr. Jean Rene Moricette";
+      const unifiedStatus = applicationToStudentStatus(nextStatus);
 
       const [applicationResult, studentResult, profileResult, membershipResult, historyResult] = await Promise.all([
         supabase.from("student_applications").update({
@@ -542,7 +556,7 @@ export default function AdminPage() {
         }).eq("id", application.id).select("*").single(),
         student
           ? supabase.from("students").update({
-              status: nextStatus === "Approved" ? "Active" : nextStatus
+              status: unifiedStatus
             }).eq("id", student.id).select("*").single()
           : Promise.resolve({ data: null, error: null }),
         application.authUserId
@@ -555,8 +569,8 @@ export default function AdminPage() {
               country: application.country,
               program_interest: application.programInterest,
               membership_level: application.membershipPlan,
-              certification_status: nextStatus === "Approved" ? "Active" : nextStatus,
-              enrollment_status: nextStatus === "Approved" ? "Active" : nextStatus,
+              certification_status: unifiedStatus,
+              enrollment_status: unifiedStatus,
               updated_at: reviewedAt
             }, { onConflict: "auth_user_id" }).select("*").single()
           : Promise.resolve({ data: null, error: null }),
@@ -574,7 +588,7 @@ export default function AdminPage() {
           auth_user_id: application.authUserId || null,
           student_id: application.studentId,
           previous_status: application.applicationStatus,
-          new_status: nextStatus === "Approved" ? "Active" : nextStatus,
+          new_status: unifiedStatus,
           changed_by: adminEmail,
           note: nextStatus === "Approved" ? welcomeBody : `Application review: ${nextStatus}.`
         })
@@ -635,7 +649,7 @@ export default function AdminPage() {
         }, { onConflict: "student_id" });
       }
 
-      setStudents((current) => current.map((item) => (item.id === student.id ? { ...item, membershipPlan: nextPlan, membershipStatus: nextPlan === "Free Trial" ? "Free Trial" : "Active" } : item)));
+      setStudents((current) => current.map((item) => (item.id === student.id ? { ...item, membershipPlan: nextPlan, membershipStatus: item.status } : item)));
       setMessage("Membership updated.");
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to update membership."));
@@ -909,7 +923,7 @@ export default function AdminPage() {
                                   <option>Premium Mentorship</option>
                                   <option>Certification Fee</option>
                                 </select>
-                                <p className="text-xs text-ink/58">{student.membershipStatus}</p>
+                                <p className="text-xs text-ink/58">Enrollment Status: {student.status}</p>
                               </div>
                             </td>
                             <td className="p-4">

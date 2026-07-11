@@ -8,6 +8,7 @@ import { Section, SectionInner } from "@/components/section";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
+const enrollmentStatuses = ["Pending Review", "Active", "Suspended", "Graduated"] as const;
 
 type StudentProfile = {
   id: string;
@@ -30,6 +31,10 @@ function value(row: DbRow | null, keys: string[], fallback = "") {
     if (current !== null && current !== undefined && String(current).trim().length > 0) return String(current);
   }
   return fallback;
+}
+
+function normalizeEnrollmentStatus(status: string) {
+  return enrollmentStatuses.includes(status as (typeof enrollmentStatuses)[number]) ? status : "Pending Review";
 }
 
 function shortDate(raw: string) {
@@ -88,18 +93,19 @@ export default function StudentProfilePage() {
       const row = (studentResult.data ?? {}) as DbRow;
       const profileRow = (profileResult.data ?? {}) as DbRow;
       const membership = (membershipResult.data ?? {}) as DbRow;
+      const enrollmentStatus = normalizeEnrollmentStatus(value(row, ["status"], "Pending Review"));
       const loadedProfile: StudentProfile = {
         id: value(row, ["id"]),
         authUserId: value(row, ["auth_user_id"], user.id),
-        studentId: value(profileRow, ["student_id"], value(row, ["student_id"], user.id)),
+        studentId: value(profileRow, ["student_id"], value(row, ["auth_user_id"], user.id)),
         fullName: value(profileRow, ["full_name"], value(row, ["full_name"], user.user_metadata?.full_name as string | undefined ?? email)),
         email: value(profileRow, ["email"], value(row, ["email"], email)),
         membershipLevel: value(membership, ["membership_plan"], value(profileRow, ["membership_level"], value(row, ["membership_plan"], "Free Trial"))),
-        membershipStatus: value(membership, ["account_status", "membership_status"], value(row, ["membership_status"], "Active")),
+        membershipStatus: enrollmentStatus,
         enrollmentDate: value(row, ["enrollment_date", "created_at"]),
         certificationLevel: value(row, ["certification_level"], value(profileRow, ["program_interest"], "Academy for Financial Future")),
-        certificationStatus: value(profileRow, ["certification_status"], certificationsResult.data?.length || certificatesResult.data?.length ? "Certified" : "Pending Review"),
-        status: value(profileRow, ["enrollment_status"], value(row, ["status"], "Pending Review")),
+        certificationStatus: enrollmentStatus,
+        status: enrollmentStatus,
         profilePhotoUrl: value(profileRow, ["profile_photo_url"], value(row, ["profile_photo_url"]))
       };
 
@@ -194,7 +200,7 @@ export default function StudentProfilePage() {
           <main className="grid gap-6">
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <ProfileMetric icon={<CreditCard size={20} />} label="Membership Level" value={profile?.membershipLevel ?? "Pending"} />
-              <ProfileMetric icon={<ShieldCheck size={20} />} label="Membership Status" value={profile?.membershipStatus ?? "Pending"} />
+              <ProfileMetric icon={<ShieldCheck size={20} />} label="Enrollment Status" value={profile?.status ?? "Pending Review"} />
               <ProfileMetric icon={<ShieldCheck size={20} />} label="Certification Status" value={profile?.certificationStatus ?? "Pending Review"} />
               <ProfileMetric icon={<Award size={20} />} label="Certifications Earned" value={String(certificationsEarned)} />
               <ProfileMetric icon={<BookOpenCheck size={20} />} label="Course Progress" value={`${courseProgress}%`} />
@@ -212,8 +218,8 @@ export default function StudentProfilePage() {
                 <ProfileLine label="Enrollment Date" value={shortDate(profile?.enrollmentDate ?? "")} />
                 <ProfileLine label="Certification Level" value={profile?.certificationLevel ?? "Academy for Financial Future"} />
                 <ProfileLine label="Certification Status" value={profile?.certificationStatus ?? "Pending Review"} />
-                <ProfileLine label="Account Status" value={profile?.status ?? "Active"} />
-                <ProfileLine label="Membership Status" value={profile?.membershipStatus ?? "Pending"} />
+                <ProfileLine label="Account Status" value={profile?.status ?? "Pending Review"} />
+                <ProfileLine label="Enrollment Status" value={profile?.status ?? "Pending Review"} />
               </div>
             </section>
 

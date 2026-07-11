@@ -118,7 +118,7 @@ set
   status = 'Active',
   enrollment_date = coalesce(s.enrollment_date, coalesce(a.reviewed_at::date, current_date)),
   student_id = coalesce(nullif(s.student_id, ''), nullif(a.student_id, '')),
-  membership_plan = coalesce(nullif(s.membership_plan, ''), nullif(a.membership_plan, ''), 'Free Trial'),
+  membership_plan = coalesce(nullif(s.membership_plan, ''), 'Free Trial'),
   certification_level = coalesce(nullif(s.certification_level, ''), nullif(a.program_interest, ''), 'Academy for Financial Future')
 from public.student_applications a
 where a.application_status = 'Approved'

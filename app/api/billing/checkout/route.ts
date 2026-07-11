@@ -34,8 +34,11 @@ export async function POST(request: Request) {
       const { error } = await adminSupabase.from("student_memberships").upsert({
         student_id: user.id,
         student_email: user.email ?? "",
-        membership_plan: plan.name,
-        membership_status: plan.membershipStatus,
+        selected_membership_plan: plan.name,
+        active_membership_plan: "Free Trial",
+        membership_plan: "Free Trial",
+        payment_status: "Not Required",
+        membership_status: "Free Trial",
         account_status: plan.accountStatus,
         trial_ends_at: trialEndsAt,
         updated_at: new Date().toISOString()
@@ -98,8 +101,11 @@ export async function POST(request: Request) {
     const { error } = await adminSupabase.from("student_memberships").upsert({
       student_id: user.id,
       student_email: user.email ?? "",
-      membership_plan: plan.name,
-      membership_status: "Checkout Started",
+      selected_membership_plan: plan.name,
+      active_membership_plan: "Free Trial",
+      membership_plan: "Free Trial",
+      payment_status: "Pending",
+      membership_status: "Pending Payment",
       account_status: "Pending",
       stripe_checkout_session_id: session.id,
       stripe_customer_id: typeof session.customer === "string" ? session.customer : null,

@@ -93,6 +93,8 @@ export default function StudentProfilePage() {
       const row = (studentResult.data ?? {}) as DbRow;
       const applicationRow = (applicationResult.data ?? {}) as DbRow;
       const profileRow = (profileResult.data ?? {}) as DbRow;
+      const { data: membershipData } = await supabase.from("student_memberships").select("*").eq("student_id", user.id).maybeSingle();
+      const membershipRow = (membershipData ?? {}) as DbRow;
       const internalStudentId = value(row, ["id"]);
       const enrollmentResult = internalStudentId
         ? await supabase.from("enrollments").select("*").eq("student_id", internalStudentId).order("enrolled_at", { ascending: false }).limit(1)
@@ -106,7 +108,7 @@ export default function StudentProfilePage() {
         studentId: value(applicationRow, ["student_id"], value(row, ["student_id"], value(profileRow, ["student_id"], "Not assigned"))),
         fullName: value(row, ["full_name"], value(applicationRow, ["full_name"], value(profileRow, ["full_name"], user.user_metadata?.full_name as string | undefined ?? email))),
         email: value(profileRow, ["email"], value(row, ["email"], email)),
-        membershipLevel: value(applicationRow, ["membership_plan"], value(row, ["membership_plan"], value(profileRow, ["membership_level"], "Not enrolled"))),
+        membershipLevel: value(membershipRow, ["active_membership_plan", "membership_plan"], value(row, ["membership_plan"], value(profileRow, ["membership_level"], "Free Trial"))),
         membershipStatus: enrollmentStatus,
         enrollmentDate: value(row, ["enrollment_date"], value(enrollmentRow, ["enrolled_at"], value(row, ["created_at"]))),
         certificationLevel: value(applicationRow, ["program_interest"], value(row, ["certification_level"], value(profileRow, ["program_interest"], "Academy for Financial Future"))),

@@ -83,18 +83,16 @@ export function getBillingPlan(planId: string) {
 
 export function hasAcademyAccess(membership?: {
   account_status?: string | null;
+  payment_status?: string | null;
+  membership_status?: string | null;
   trial_ends_at?: string | null;
   current_period_end?: string | null;
 }) {
   if (!membership) return false;
-  if (membership.account_status === "Active") return true;
+  if (membership.account_status === "Active" && membership.membership_status === "Active" && membership.payment_status === "Paid") return true;
 
   if (membership.account_status === "Trial" && membership.trial_ends_at) {
     return new Date(membership.trial_ends_at).getTime() > Date.now();
-  }
-
-  if (membership.current_period_end) {
-    return new Date(membership.current_period_end).getTime() > Date.now();
   }
 
   return false;

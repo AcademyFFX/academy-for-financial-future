@@ -68,18 +68,29 @@ async function updateMembershipFromCheckout(object: StripeObject) {
   if (!studentId || !plan) return;
 
   const periodEnd = object.lines?.data?.[0]?.period?.end;
+  const paid = object.payment_status === "paid";
   await supabase.from("student_memberships").upsert({
     student_id: studentId,
     student_email: object.metadata?.student_email ?? "",
-    membership_plan: plan.name,
-    membership_status: object.payment_status === "paid" ? plan.membershipStatus : "Payment Pending",
-    account_status: object.payment_status === "paid" ? plan.accountStatus : "Pending",
+    selected_membership_plan: plan.name,
+    active_membership_plan: paid ? plan.name : "Free Trial",
+    membership_plan: paid ? plan.name : "Free Trial",
+    payment_status: paid ? "Paid" : "Pending",
+    membership_status: paid ? "Active" : "Pending Payment",
+    account_status: paid ? plan.accountStatus : "Pending",
     stripe_customer_id: asString(object.customer),
     stripe_subscription_id: asString(object.subscription),
     stripe_checkout_session_id: asString(object.id),
     current_period_end: typeof periodEnd === "number" ? new Date(periodEnd * 1000).toISOString() : null,
     updated_at: new Date().toISOString()
   }, { onConflict: "student_id" });
+
+  if (paid) {
+    await supabase
+      .from("students")
+      .update({ membership_plan: plan.name })
+      .eq("auth_user_id", studentId);
+  }
 }
 
 async function updateMarketplacePurchaseFromCheckout(object: StripeObject) {
@@ -144,14 +155,22 @@ async function updateMembershipFromSubscription(object: StripeObject) {
   await supabase.from("student_memberships").upsert({
     student_id: studentId,
     student_email: object.metadata?.student_email ?? "",
-    membership_plan: plan?.name ?? object.metadata?.membership_plan ?? "Academy Membership",
-    membership_status: isActive ? plan?.membershipStatus ?? "Active Membership" : asString(object.status || "Inactive"),
+    selected_membership_plan: plan?.name ?? object.metadata?.membership_plan ?? "Academy Membership",
+    active_membership_plan: isActive ? plan?.name ?? object.metadata?.membership_plan ?? "Academy Membership" : "Free Trial",
+    membership_plan: isActive ? plan?.name ?? object.metadata?.membership_plan ?? "Academy Membership" : "Free Trial",
+    payment_status: isActive ? "Paid" : "Pending",
+    membership_status: isActive ? "Active" : asString(object.status || "Inactive"),
     account_status: isActive ? "Active" : "Restricted",
     stripe_customer_id: asString(object.customer),
     stripe_subscription_id: asString(object.id),
     current_period_end: typeof object.current_period_end === "number" ? new Date(object.current_period_end * 1000).toISOString() : null,
     updated_at: new Date().toISOString()
   }, { onConflict: "student_id" });
+
+  await supabase
+    .from("students")
+    .update({ membership_plan: isActive ? plan?.name ?? object.metadata?.membership_plan ?? "Academy Membership" : "Free Trial" })
+    .eq("auth_user_id", studentId);
 }
 
 export async function POST(request: Request) {

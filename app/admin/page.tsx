@@ -24,8 +24,10 @@ type Student = {
   email: string;
   enrollmentDate: string;
   certificationLevel: string;
+  selectedMembershipPlan: string;
   membershipPlan: string;
   membershipStatus: string;
+  paymentStatus: string;
   status: string;
   profilePhotoUrl: string;
 };
@@ -223,8 +225,10 @@ export default function AdminPage() {
     return fallback;
   }
 
-  function normalizeStudent(row: DbRow): Student {
+  function normalizeStudent(row: DbRow, membershipRow?: DbRow): Student {
     const studentStatus = normalizeEnrollmentStatus(value(row, ["status"], "Pending Review"));
+    const selectedMembershipPlan = value(membershipRow ?? {}, ["selected_membership_plan"], value(row, ["membership_plan"], "Free Trial"));
+    const activeMembershipPlan = value(membershipRow ?? {}, ["active_membership_plan", "membership_plan"], value(row, ["membership_plan"], "Free Trial"));
     return {
       id: value(row, ["id", "student_id"]),
       authUserId: value(row, ["auth_user_id"]),
@@ -233,8 +237,10 @@ export default function AdminPage() {
       email: value(row, ["email", "student_email"], "Not recorded"),
       enrollmentDate: normalizeDate(value(row, ["enrollment_date", "created_at", "date_enrolled"])),
       certificationLevel: value(row, ["certification_level", "level", "course_name"], "Academy for Financial Future"),
-      membershipPlan: value(row, ["membership_plan"], "Free Trial"),
-      membershipStatus: studentStatus,
+      selectedMembershipPlan,
+      membershipPlan: activeMembershipPlan,
+      membershipStatus: value(membershipRow ?? {}, ["membership_status"], "Pending Payment"),
+      paymentStatus: value(membershipRow ?? {}, ["payment_status"], "Pending"),
       status: studentStatus,
       profilePhotoUrl: value(row, ["profile_photo_url"])
     };
@@ -262,7 +268,7 @@ export default function AdminPage() {
       status,
       enrollment_date: new Date().toISOString().slice(0, 10),
       student_id: application.studentId && application.studentId !== "Pending" ? application.studentId : undefined,
-      membership_plan: application.membershipPlan || undefined,
+      membership_plan: "Free Trial",
       certification_level: application.programInterest || undefined
     };
     if (application.authUserId) {
@@ -428,8 +434,9 @@ export default function AdminPage() {
 
       setAuthorized(true);
 
-      const [studentsResult, applicationsResult, assignmentsResult, examsResult, certificatesResult, announcementsResult] = await Promise.all([
+      const [studentsResult, membershipsResult, applicationsResult, assignmentsResult, examsResult, certificatesResult, announcementsResult] = await Promise.all([
         supabase.from("students").select("*"),
+        supabase.from("student_memberships").select("*"),
         supabase.from("student_applications").select("*").order("created_at", { ascending: false }),
         supabase.from("assignments").select("*"),
         supabase.from("exams").select("*"),
@@ -439,6 +446,7 @@ export default function AdminPage() {
 
       const queryFailures = [
         ["students", studentsResult.error],
+        ["student memberships", membershipsResult.error],
         ["student applications", applicationsResult.error],
         ["assignments", assignmentsResult.error],
         ["exams", examsResult.error],
@@ -446,9 +454,19 @@ export default function AdminPage() {
         ["announcements", announcementsResult.error]
       ].filter((entry) => entry[1]);
 
-      if (queryFailures.length === 6) throw queryFailures[0][1];
+      if (queryFailures.length === 7) throw queryFailures[0][1];
 
-      const normalizedStudents = ((studentsResult.data ?? []) as DbRow[]).map(normalizeStudent);
+      const membershipRows = (membershipsResult.data ?? []) as DbRow[];
+      const normalizedStudents = ((studentsResult.data ?? []) as DbRow[]).map((studentRow) => {
+        const studentAuthId = value(studentRow, ["auth_user_id"]);
+        const studentEmail = value(studentRow, ["email"]).toLowerCase();
+        const membershipRow = membershipRows.find((row) => {
+          const membershipStudentId = value(row, ["student_id"]);
+          const membershipEmail = value(row, ["student_email"]).toLowerCase();
+          return (studentAuthId && membershipStudentId === studentAuthId) || (studentEmail && membershipEmail === studentEmail);
+        });
+        return normalizeStudent(studentRow, membershipRow);
+      });
       const normalizedApplications = ((applicationsResult.data ?? []) as DbRow[]).map(normalizeApplication);
       const normalizedAssignments = ((assignmentsResult.data ?? []) as DbRow[])
         .map(normalizeAssignment)
@@ -707,9 +725,12 @@ export default function AdminPage() {
           ? supabase.from("student_memberships").upsert({
               student_id: application.authUserId,
               student_email: application.email,
-              membership_plan: application.membershipPlan,
-              membership_status: nextStatus === "Approved" ? application.membershipPlan : nextStatus,
-              account_status: nextStatus === "Approved" ? "Active" : "Restricted",
+              selected_membership_plan: application.membershipPlan,
+              active_membership_plan: "Free Trial",
+              membership_plan: "Free Trial",
+              payment_status: nextStatus === "Approved" ? "Pending" : "Not Required",
+              membership_status: nextStatus === "Approved" ? "Pending Payment" : nextStatus,
+              account_status: nextStatus === "Approved" ? "Pending" : "Restricted",
               updated_at: reviewedAt
             }, { onConflict: "student_id" })
           : Promise.resolve({ data: null, error: null }),
@@ -774,7 +795,7 @@ export default function AdminPage() {
 
   async function upgradeMembership(student: Student) {
     const nextPlan = membershipDrafts[student.id] ?? student.membershipPlan;
-    setMessage(`Updating membership for ${student.name}...`);
+    setMessage(`Updating selected membership for ${student.name}...`);
 
     try {
       const supabase = createClient();
@@ -782,17 +803,94 @@ export default function AdminPage() {
         await supabase.from("student_memberships").upsert({
           student_id: student.authUserId,
           student_email: student.email,
-          membership_plan: nextPlan,
-          membership_status: nextPlan,
-          account_status: nextPlan === "Free Trial" ? "Trial" : "Active",
+          selected_membership_plan: nextPlan,
+          active_membership_plan: student.membershipPlan || "Free Trial",
+          membership_plan: student.membershipPlan || "Free Trial",
+          payment_status: nextPlan === "Free Trial" ? "Not Required" : "Pending",
+          membership_status: nextPlan === "Free Trial" ? "Free Trial" : "Pending Payment",
+          account_status: nextPlan === "Free Trial" ? "Trial" : "Pending",
           updated_at: new Date().toISOString()
         }, { onConflict: "student_id" });
       }
 
-      setStudents((current) => current.map((item) => (item.id === student.id ? { ...item, membershipPlan: nextPlan, membershipStatus: item.status } : item)));
-      setMessage("Membership updated.");
+      setStudents((current) => current.map((item) => (item.id === student.id ? {
+        ...item,
+        selectedMembershipPlan: nextPlan,
+        paymentStatus: nextPlan === "Free Trial" ? "Not Required" : "Pending",
+        membershipStatus: nextPlan === "Free Trial" ? "Free Trial" : "Pending Payment"
+      } : item)));
+      setMessage(`Selected membership updated for ${student.name}. Payment status is ${nextPlan === "Free Trial" ? "Not Required" : "Pending"}.`);
     } catch (error) {
-      setMessage(getErrorMessage(error, "Unable to update membership."));
+      setMessage(getErrorMessage(error, "Unable to update selected membership."));
+    }
+  }
+
+  async function updateMembershipWorkflow(student: Student, action: "mark-paid" | "activate" | "suspend" | "cancel") {
+    const selectedPlan = membershipDrafts[student.id] ?? student.selectedMembershipPlan ?? student.membershipPlan ?? "Free Trial";
+    const activePlan = action === "activate" ? selectedPlan : action === "cancel" ? "Free Trial" : student.membershipPlan || "Free Trial";
+    const labels = {
+      "mark-paid": "Mark Paid",
+      activate: "Activate Membership",
+      suspend: "Suspend Membership",
+      cancel: "Cancel Membership"
+    };
+    setMessage(`${labels[action]} started for ${student.name}...`);
+
+    try {
+      if (!student.authUserId) throw new Error("Student is missing auth_user_id; membership cannot be updated.");
+
+      const payload = {
+        selected_membership_plan: selectedPlan,
+        active_membership_plan: activePlan,
+        membership_plan: activePlan,
+        payment_status: action === "mark-paid" || action === "activate" ? "Paid" : student.paymentStatus,
+        membership_status: action === "mark-paid" ? "Pending Activation" : action === "activate" ? "Active" : action === "suspend" ? "Suspended" : "Cancelled",
+        account_status: action === "activate" ? "Active" : action === "suspend" ? "Restricted" : action === "cancel" ? "Cancelled" : "Pending",
+        updated_at: new Date().toISOString()
+      };
+
+      const supabase = createClient();
+      const membershipResult = await supabase
+        .from("student_memberships")
+        .upsert({
+          student_id: student.authUserId,
+          student_email: student.email,
+          ...payload
+        }, { onConflict: "student_id" });
+
+      if (membershipResult.error) throw membershipResult.error;
+
+      if (action === "activate" || action === "cancel") {
+        const studentResult = await supabase
+          .from("students")
+          .update({ membership_plan: activePlan })
+          .eq("id", student.id);
+        if (studentResult.error) throw studentResult.error;
+      }
+
+      setStudents((current) => current.map((item) => (item.id === student.id ? {
+        ...item,
+        selectedMembershipPlan: selectedPlan,
+        membershipPlan: activePlan,
+        paymentStatus: payload.payment_status,
+        membershipStatus: payload.membership_status
+      } : item)));
+
+      const successMessages = {
+        "mark-paid": `Payment marked Paid for ${student.name}. Membership is pending activation.`,
+        activate: `Membership activated for ${student.name}. Paid course access is unlocked.`,
+        suspend: `Membership suspended for ${student.name}. Paid course access is restricted.`,
+        cancel: `Membership cancelled for ${student.name}. Active plan reset to Free Trial.`
+      };
+      setMessage(successMessages[action]);
+    } catch (error) {
+      const errorMessages = {
+        "mark-paid": "Mark Paid failed",
+        activate: "Activate Membership failed",
+        suspend: "Suspend Membership failed",
+        cancel: "Cancel Membership failed"
+      };
+      setMessage(`${errorMessages[action]}: ${getErrorMessage(error, "Unable to update membership workflow.")}`);
     }
   }
 
@@ -1088,7 +1186,7 @@ export default function AdminPage() {
                               <div className="grid gap-2">
                                 <select
                                   className="border border-gold-500/24 bg-navy-900 px-3 py-2 text-ink outline-none"
-                                  value={membershipDrafts[student.id] ?? student.membershipPlan}
+                                  value={membershipDrafts[student.id] ?? student.selectedMembershipPlan}
                                   onChange={(event) => setMembershipDrafts((current) => ({ ...current, [student.id]: event.target.value }))}
                                 >
                                   <option>Free Trial</option>
@@ -1097,7 +1195,10 @@ export default function AdminPage() {
                                   <option>Premium Mentorship</option>
                                   <option>Certification Fee</option>
                                 </select>
-                                <p className="text-xs text-ink/58">Enrollment Status: {student.status}</p>
+                                <p className="text-xs text-ink/58">Selected Plan: {student.selectedMembershipPlan}</p>
+                                <p className="text-xs text-ink/58">Current Plan: {student.membershipPlan}</p>
+                                <p className="text-xs text-ink/58">Payment Status: {student.paymentStatus}</p>
+                                <p className="text-xs text-ink/58">Membership Status: {student.membershipStatus}</p>
                               </div>
                             </td>
                             <td className="p-4">
@@ -1110,7 +1211,19 @@ export default function AdminPage() {
                             <td className="p-4">
                               <div className="grid gap-2">
                                 <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-3 py-2 text-xs font-bold text-navy-950" type="button" onClick={() => upgradeMembership(student)}>
-                                  <CreditCard size={14} /> Upgrade
+                                  <CreditCard size={14} /> Save Selected Plan
+                                </button>
+                                <button className="border border-gold-500/35 px-3 py-2 text-xs font-semibold text-gold-300" type="button" onClick={() => updateMembershipWorkflow(student, "mark-paid")}>
+                                  Mark Paid
+                                </button>
+                                <button className="border border-green-300/45 px-3 py-2 text-xs font-semibold text-green-200" type="button" onClick={() => updateMembershipWorkflow(student, "activate")}>
+                                  Activate Membership
+                                </button>
+                                <button className="border border-amber-300/45 px-3 py-2 text-xs font-semibold text-amber-200" type="button" onClick={() => updateMembershipWorkflow(student, "suspend")}>
+                                  Suspend Membership
+                                </button>
+                                <button className="border border-red-300/45 px-3 py-2 text-xs font-semibold text-red-200" type="button" onClick={() => updateMembershipWorkflow(student, "cancel")}>
+                                  Cancel Membership
                                 </button>
                                 <button className="border border-gold-500/35 px-3 py-2 text-xs font-semibold text-gold-300" type="button" onClick={() => updateStudentStatus(student, student.status === "Suspended" ? "Active" : "Suspended")}>
                                   {student.status === "Suspended" ? "Reactivate" : "Suspend"}

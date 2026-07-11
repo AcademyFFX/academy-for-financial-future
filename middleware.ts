@@ -73,14 +73,16 @@ export async function middleware(request: NextRequest) {
   if (requiresEnrollment && user.email?.toLowerCase() !== "acafffx@gmail.com") {
     const { data, error } = await supabase
       .from("student_memberships")
-      .select("account_status, trial_ends_at, current_period_end")
+      .select("account_status, payment_status, membership_status, trial_ends_at, current_period_end")
       .eq("student_id", user.id)
       .maybeSingle();
 
     if (!error) {
       const activeUntil = data?.current_period_end ?? data?.trial_ends_at;
       const hasActivePeriod = activeUntil ? new Date(activeUntil).getTime() > Date.now() : false;
-      const hasAccess = data?.account_status === "Active" || (data?.account_status === "Trial" && hasActivePeriod) || hasActivePeriod;
+      const hasPaidAccess = data?.account_status === "Active" && data?.membership_status === "Active" && data?.payment_status === "Paid";
+      const hasTrialAccess = data?.account_status === "Trial" && hasActivePeriod;
+      const hasAccess = hasPaidAccess || hasTrialAccess;
 
       if (!hasAccess) {
         const url = request.nextUrl.clone();

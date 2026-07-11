@@ -121,7 +121,7 @@ export function StudentRegistrationForm() {
         phone: form.phone.trim(),
         country: form.country.trim(),
         enrollment_date: enrollmentDate,
-        membership_plan: form.membership_plan,
+        membership_plan: "Free Trial",
         certification_level: "Academy for Financial Future",
         status: "Pending Review",
         created_at: authCreatedAt
@@ -149,13 +149,15 @@ export function StudentRegistrationForm() {
         return;
       }
 
-      const selectedPlan = billingPlans.find((plan) => plan.name === form.membership_plan);
       const { error: membershipError } = await supabase.from("student_memberships").upsert({
         student_id: authUserId,
         student_email: email,
-        membership_plan: form.membership_plan,
-        membership_status: selectedPlan?.membershipStatus ?? form.membership_plan,
-        account_status: selectedPlan?.accountStatus ?? "Pending",
+        selected_membership_plan: form.membership_plan,
+        active_membership_plan: "Free Trial",
+        membership_plan: "Free Trial",
+        payment_status: form.membership_plan === "Free Trial" ? "Not Required" : "Pending",
+        membership_status: form.membership_plan === "Free Trial" ? "Free Trial" : "Pending Payment",
+        account_status: "Pending",
         trial_ends_at: form.membership_plan === "Free Trial" ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null,
         updated_at: new Date().toISOString()
       }, { onConflict: "student_id" });

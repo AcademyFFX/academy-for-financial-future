@@ -10,7 +10,10 @@ import { billingPlans } from "@/lib/billing";
 import { createClient } from "@/lib/supabase";
 
 type Membership = {
+  selected_membership_plan: string | null;
+  active_membership_plan: string | null;
   membership_plan: string | null;
+  payment_status: string | null;
   membership_status: string | null;
   account_status: string | null;
   trial_ends_at: string | null;
@@ -150,8 +153,10 @@ export default function BillingPage() {
               ) : (
                 <div className="mt-5 grid gap-4">
                   <StatusLine label="Student" value={user?.email ?? "Student"} />
-                  <StatusLine label="Plan" value={membership?.membership_plan ?? "No membership selected"} />
-                  <StatusLine label="Membership" value={membership?.membership_status ?? "Not enrolled"} />
+                  <StatusLine label="Selected Plan" value={membership?.selected_membership_plan ?? "No membership selected"} />
+                  <StatusLine label="Current Plan" value={membership?.active_membership_plan ?? membership?.membership_plan ?? "Free Trial"} />
+                  <StatusLine label="Payment Status" value={membership?.payment_status ?? "Pending"} />
+                  <StatusLine label="Membership Status" value={membership?.membership_status ?? "Pending Payment"} />
                   <StatusLine label="Account" value={membership?.account_status ?? "Restricted"} />
                   {activeUntil ? <StatusLine label="Access Through" value={activeUntil} /> : null}
                   <button

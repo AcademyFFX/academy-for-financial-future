@@ -97,8 +97,6 @@ export function StudentEnrollmentForm() {
       }
 
       const authUserId = signupData.user.id;
-      const selectedPlan = billingPlans.find((plan) => plan.name === form.membership_plan);
-
       const applicationPayload = {
         auth_user_id: authUserId,
         student_id: studentId,
@@ -124,7 +122,7 @@ export function StudentEnrollmentForm() {
         phone: form.phone.trim(),
         country: form.country.trim(),
         enrollment_date: enrollmentDate,
-        membership_plan: form.membership_plan,
+        membership_plan: "Free Trial",
         certification_level: form.program_interest,
         status: "Pending Review",
         created_at: new Date().toISOString()
@@ -169,8 +167,11 @@ export function StudentEnrollmentForm() {
         supabase.from("student_memberships").upsert({
           student_id: authUserId,
           student_email: email,
-          membership_plan: form.membership_plan,
-          membership_status: selectedPlan?.membershipStatus ?? form.membership_plan,
+          selected_membership_plan: form.membership_plan,
+          active_membership_plan: "Free Trial",
+          membership_plan: "Free Trial",
+          payment_status: form.membership_plan === "Free Trial" ? "Not Required" : "Pending",
+          membership_status: form.membership_plan === "Free Trial" ? "Free Trial" : "Pending Payment",
           account_status: "Pending",
           updated_at: new Date().toISOString()
         }, { onConflict: "student_id" }),

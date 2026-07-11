@@ -61,7 +61,10 @@ type StudentProfile = {
   fullName: string;
   email: string;
   enrollmentDate: string;
+  selectedMembershipPlan: string;
   membershipPlan: string;
+  paymentStatus: string;
+  membershipStatus: string;
   certificationLevel: string;
   status: string;
 };
@@ -318,7 +321,7 @@ export default function StudentDashboardPage() {
       const authName = resolveAuthFullName(currentUser);
       const authEmail = currentUser.email ?? "";
 
-      const [profileRow, applicationRow] = await Promise.all([
+      const [profileRow, applicationRow, membershipRow] = await Promise.all([
         authEmail
           ? safeMaybeSingle(supabase, "students", (table) =>
               supabase
@@ -340,7 +343,14 @@ export default function StudentDashboardPage() {
                 .limit(1)
                 .maybeSingle()
             )
-          : Promise.resolve(null)
+          : Promise.resolve(null),
+        safeMaybeSingle(supabase, "student_memberships", (table) =>
+          supabase
+            .from(table)
+            .select("selected_membership_plan, active_membership_plan, membership_plan, payment_status, membership_status, account_status")
+            .eq("student_id", currentUser.id)
+            .maybeSingle()
+        )
       ]);
 
       const internalStudentId = value(profileRow ?? {}, ["id"]);
@@ -361,7 +371,10 @@ export default function StudentDashboardPage() {
         fullName: value(profileRow ?? {}, ["full_name", "name"], value(applicationRow ?? {}, ["full_name"], authName || authEmail || "Not recorded")),
         email: value(profileRow ?? {}, ["email"], authEmail || "Not recorded"),
         enrollmentDate: value(profileRow ?? {}, ["enrollment_date"], value(latestEnrollment, ["enrolled_at"], value(profileRow ?? {}, ["created_at"], ""))),
-        membershipPlan: value(applicationRow ?? {}, ["membership_plan"], value(profileRow ?? {}, ["membership_plan"], "Not enrolled")),
+        selectedMembershipPlan: value(applicationRow ?? {}, ["membership_plan"], value(membershipRow ?? {}, ["selected_membership_plan"], "Not selected")),
+        membershipPlan: value(membershipRow ?? {}, ["active_membership_plan", "membership_plan"], value(profileRow ?? {}, ["membership_plan"], "Free Trial")),
+        paymentStatus: value(membershipRow ?? {}, ["payment_status"], "Pending"),
+        membershipStatus: value(membershipRow ?? {}, ["membership_status"], "Pending Payment"),
         certificationLevel: value(applicationRow ?? {}, ["program_interest"], value(profileRow ?? {}, ["certification_level"], value(latestEnrollment, ["course_name"], "Not recorded"))),
         status: normalizeEnrollmentStatus(value(profileRow ?? {}, ["status"], "Pending Review"))
       };
@@ -369,8 +382,8 @@ export default function StudentDashboardPage() {
       setStudentProfile(resolvedProfile);
       setMembershipProfile({
         membershipPlan: resolvedProfile.membershipPlan,
-        membershipStatus: resolvedProfile.status,
-        accountStatus: resolvedProfile.status
+        membershipStatus: resolvedProfile.membershipStatus,
+        accountStatus: value(membershipRow ?? {}, ["account_status"], "Pending")
       });
 
       const [
@@ -581,7 +594,7 @@ export default function StudentDashboardPage() {
 
   const unifiedStudentStatus = studentProfile?.status && studentProfile.status !== "Not recorded" ? studentProfile.status : "Pending Review";
 
-  const membershipLevel = studentProfile?.membershipPlan || membershipProfile?.membershipPlan || "Not enrolled";
+  const membershipLevel = studentProfile?.membershipPlan || membershipProfile?.membershipPlan || "Free Trial";
   const certificationStatus = datasets.certificates.length > 0 || datasets.certifications.length > 0 || datasets.digitalCertificates.length > 0 ? "Certified" : "Not Started";
 
   async function completeMission(mission: DbRow) {
@@ -666,7 +679,10 @@ export default function StudentDashboardPage() {
                 <ProfileLine icon={<CalendarDays size={18} />} label="Enrollment Date" value={shortDate(studentProfile?.enrollmentDate ?? "")} />
                 <ProfileLine icon={<BadgeCheck size={18} />} label="Enrollment Status" value={unifiedStudentStatus} />
                 <ProfileLine icon={<BookOpenCheck size={18} />} label="Program" value={studentProfile?.certificationLevel ?? "Not recorded"} />
-                <ProfileLine icon={<CreditCard size={18} />} label="Membership Level" value={membershipLevel} />
+                <ProfileLine icon={<CreditCard size={18} />} label="Selected Plan" value={studentProfile?.selectedMembershipPlan ?? "Not selected"} />
+                <ProfileLine icon={<CreditCard size={18} />} label="Current Plan" value={membershipLevel} />
+                <ProfileLine icon={<CreditCard size={18} />} label="Payment Status" value={studentProfile?.paymentStatus ?? "Pending"} />
+                <ProfileLine icon={<CreditCard size={18} />} label="Membership Status" value={studentProfile?.membershipStatus ?? "Pending Payment"} />
                 <ProfileLine icon={<ShieldCheck size={18} />} label="Certification Status" value={certificationStatus} />
                 <Link href="/messages" className="flex items-center justify-between border border-gold-500/25 px-4 py-3 text-sm font-semibold text-gold-300">
                   <span>Unread Messages</span>

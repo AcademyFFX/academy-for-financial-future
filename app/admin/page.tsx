@@ -170,7 +170,10 @@ export default function AdminPage() {
   }, [students]);
 
   const pendingApplications = useMemo(() => applications.filter((application) => application.applicationStatus === "Pending Review"), [applications]);
-  const approvedApplications = useMemo(() => applications.filter((application) => ["Approved", "Active"].includes(application.applicationStatus)), [applications]);
+  const approvedApplications = useMemo(
+    () => applications.filter((application) => ["Approved", "Active"].includes(application.applicationStatus) && studentIsActiveForApplication(application, students)),
+    [applications, students]
+  );
 
   const filteredStudents = useMemo(() => {
     const term = studentSearch.trim().toLowerCase();
@@ -267,19 +270,19 @@ export default function AdminPage() {
     }
 
     if (application.email) {
-      const result = await supabase.from("students").update(payload).eq("email", application.email).select("*");
+      const result = await supabase.from("students").update(payload).ilike("email", application.email).select("*");
       if (result.error || (result.data ?? []).length > 0) return { data: (result.data ?? []) as DbRow[], error: result.error };
     }
 
-    if (application.studentId && application.studentId !== "Pending") {
-      const result = await supabase.from("students").update(payload).eq("student_id", application.studentId).select("*");
-      if (result.error && result.error.message.toLowerCase().includes("student_id")) {
-        return { data: [] as DbRow[], error: null };
-      }
-      return { data: (result.data ?? []) as DbRow[], error: result.error };
-    }
-
     return { data: [] as DbRow[], error: null };
+  }
+
+  function studentIsActiveForApplication(application: StudentApplication, studentRows: Student[]) {
+    return studentRows.some((student) => {
+      const authMatch = application.authUserId && student.authUserId === application.authUserId;
+      const emailMatch = application.email && student.email.toLowerCase() === application.email.toLowerCase();
+      return (authMatch || emailMatch) && student.status === "Active";
+    });
   }
 
   function normalizeAssignment(row: DbRow): Assignment {
@@ -618,7 +621,7 @@ export default function AdminPage() {
       });
       if (studentResult.error) throw studentResult.error;
       if (!studentResult.data.length) {
-        throw new Error("No matching student record was updated.");
+        throw new Error("Application approved, but no matching student account was activated.");
       }
 
       const [profileResult, membershipResult, historyResult] = await Promise.all([

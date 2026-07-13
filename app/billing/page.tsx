@@ -7,6 +7,7 @@ import type { User } from "@supabase/supabase-js";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
 import { billingPlans } from "@/lib/billing";
+import { buildPendingPaymentState, membershipStateToDbPayload, normalizeMembershipState } from "@/lib/membership-state";
 import { createClient } from "@/lib/supabase";
 
 type Membership = {
@@ -99,15 +100,11 @@ export default function BillingPage() {
           const selectedPlan = typeof application?.membership_plan === "string" && application.membership_plan.trim()
             ? application.membership_plan
             : "Free Trial";
+          const fallbackState = buildPendingPaymentState(selectedPlan);
           const fallback = {
             student_id: currentUser.id,
             student_email: currentUser.email ?? application?.email ?? "",
-            selected_membership_plan: selectedPlan,
-            active_membership_plan: "Free Trial",
-            membership_plan: "Free Trial",
-            payment_status: selectedPlan === "Free Trial" ? "Not Required" : "Pending",
-            membership_status: selectedPlan === "Free Trial" ? "Free Trial" : "Pending Payment",
-            account_status: "Active",
+            ...membershipStateToDbPayload(fallbackState),
             updated_at: new Date().toISOString()
           };
           const fallbackResult = await supabase.from("student_memberships").upsert(fallback, { onConflict: "student_id" }).select("*").single();
@@ -118,7 +115,16 @@ export default function BillingPage() {
           setMessage("Billing center ready.");
         }
 
-        setMembership(resolvedMembership);
+        const normalizedState = normalizeMembershipState(resolvedMembership);
+        setMembership({
+          ...resolvedMembership,
+          selected_membership_plan: normalizedState.selectedPlan,
+          active_membership_plan: normalizedState.currentPlan,
+          membership_plan: normalizedState.currentPlan,
+          payment_status: normalizedState.paymentStatus,
+          membership_status: normalizedState.membershipStatus,
+          account_status: normalizedState.accountStatus
+        });
         setHistory((historyResult.data ?? []) as BillingHistoryRow[]);
       } catch (error) {
         const errorMessage = getErrorMessage(error, "Run the billing migration to enable memberships and billing history.");

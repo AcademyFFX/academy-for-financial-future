@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { billingPlans } from "@/lib/billing";
+import { buildPendingPaymentState, membershipStateToDbPayload } from "@/lib/membership-state";
 import { createClient } from "@/lib/supabase";
 
 const initialForm = {
@@ -149,15 +150,11 @@ export function StudentRegistrationForm() {
         return;
       }
 
+      const membershipState = buildPendingPaymentState(form.membership_plan);
       const { error: membershipError } = await supabase.from("student_memberships").upsert({
         student_id: authUserId,
         student_email: email,
-        selected_membership_plan: form.membership_plan,
-        active_membership_plan: "Free Trial",
-        membership_plan: "Free Trial",
-        payment_status: form.membership_plan === "Free Trial" ? "Not Required" : "Pending",
-        membership_status: form.membership_plan === "Free Trial" ? "Free Trial" : "Pending Payment",
-        account_status: "Active",
+        ...membershipStateToDbPayload(membershipState),
         trial_ends_at: form.membership_plan === "Free Trial" ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null,
         updated_at: new Date().toISOString()
       }, { onConflict: "student_id" });

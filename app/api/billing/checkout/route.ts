@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getBillingPlan } from "@/lib/billing";
+import { buildFreeTrialState, buildPendingPaymentState, membershipStateToDbPayload, normalizeMembershipState } from "@/lib/membership-state";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { appendMetadata, stripeRequest } from "@/lib/stripe-rest";
@@ -54,15 +55,11 @@ export async function POST(request: Request) {
     if (plan.mode === "trial") {
       const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       const adminSupabase = createSupabaseAdminClient();
+      const trialState = buildFreeTrialState();
       const { error } = await adminSupabase.from("student_memberships").upsert({
         student_id: user.id,
         student_email: user.email ?? "",
-        selected_membership_plan: plan.name,
-        active_membership_plan: "Free Trial",
-        membership_plan: "Free Trial",
-        payment_status: "Not Required",
-        membership_status: "Free Trial",
-        account_status: "Active",
+        ...membershipStateToDbPayload(trialState),
         trial_ends_at: trialEndsAt,
         updated_at: new Date().toISOString()
       }, { onConflict: "student_id" });
@@ -126,19 +123,14 @@ export async function POST(request: Request) {
       .select("active_membership_plan, membership_plan, payment_status, membership_status")
       .eq("student_id", user.id)
       .maybeSingle();
-    const preserveActivePlan = existingMembership?.payment_status === "Paid" && existingMembership?.membership_status === "Active";
-    const currentActivePlan = preserveActivePlan
-      ? existingMembership.active_membership_plan ?? existingMembership.membership_plan ?? "Free Trial"
-      : "Free Trial";
+    const existingState = normalizeMembershipState(existingMembership);
+    const preserveActivePlan = existingState.paymentStatus === "Paid" && existingState.membershipStatus === "Active Membership";
+    const pendingState = buildPendingPaymentState(plan.name);
+    const checkoutState = preserveActivePlan ? existingState : pendingState;
     const { error } = await adminSupabase.from("student_memberships").upsert({
       student_id: user.id,
       student_email: user.email ?? "",
-      selected_membership_plan: plan.name,
-      active_membership_plan: currentActivePlan,
-      membership_plan: currentActivePlan,
-      payment_status: preserveActivePlan ? "Paid" : "Pending",
-      membership_status: preserveActivePlan ? "Active" : "Pending Payment",
-      account_status: "Active",
+      ...membershipStateToDbPayload(checkoutState),
       stripe_checkout_session_id: session.id,
       stripe_customer_id: typeof session.customer === "string" ? session.customer : null,
       updated_at: new Date().toISOString()

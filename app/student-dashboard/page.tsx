@@ -48,6 +48,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { AFFInstitutionalLogo } from "@/components/aff-logo";
+import { normalizeMembershipState } from "@/lib/membership-state";
 import { createClient } from "@/lib/supabase";
 import { DashboardCourseSummary } from "@/components/dashboard-course-summary";
 import { LmsDashboardSummary } from "@/components/lms-dashboard-summary";
@@ -364,6 +365,14 @@ export default function StudentDashboardPage() {
           )
         : [];
       const latestEnrollment = enrollmentRows[0] ?? {};
+      const membershipState = normalizeMembershipState({
+        selected_membership_plan: value(membershipRow ?? {}, ["selected_membership_plan"], value(applicationRow ?? {}, ["membership_plan"], "Free Trial")),
+        active_membership_plan: value(membershipRow ?? {}, ["active_membership_plan", "membership_plan"], value(profileRow ?? {}, ["membership_plan"], "Free Trial")),
+        membership_plan: value(membershipRow ?? {}, ["membership_plan"], value(profileRow ?? {}, ["membership_plan"], "Free Trial")),
+        payment_status: value(membershipRow ?? {}, ["payment_status"], "Pending"),
+        membership_status: value(membershipRow ?? {}, ["membership_status"], "Pending Payment"),
+        account_status: value(membershipRow ?? {}, ["account_status"], "Restricted")
+      });
 
       const resolvedProfile: StudentProfile = {
         id: value(profileRow ?? {}, ["id"], currentUser.id),
@@ -371,10 +380,10 @@ export default function StudentDashboardPage() {
         fullName: value(profileRow ?? {}, ["full_name", "name"], value(applicationRow ?? {}, ["full_name"], authName || authEmail || "Not recorded")),
         email: value(profileRow ?? {}, ["email"], authEmail || "Not recorded"),
         enrollmentDate: value(profileRow ?? {}, ["enrollment_date"], value(latestEnrollment, ["enrolled_at"], value(profileRow ?? {}, ["created_at"], ""))),
-        selectedMembershipPlan: value(membershipRow ?? {}, ["selected_membership_plan"], value(applicationRow ?? {}, ["membership_plan"], "Not selected")),
-        membershipPlan: value(membershipRow ?? {}, ["active_membership_plan", "membership_plan"], value(profileRow ?? {}, ["membership_plan"], "Free Trial")),
-        paymentStatus: value(membershipRow ?? {}, ["payment_status"], "Pending"),
-        membershipStatus: value(membershipRow ?? {}, ["membership_status"], "Pending Payment"),
+        selectedMembershipPlan: membershipState.selectedPlan,
+        membershipPlan: membershipState.currentPlan,
+        paymentStatus: membershipState.paymentStatus,
+        membershipStatus: membershipState.membershipStatus,
         certificationLevel: value(applicationRow ?? {}, ["program_interest"], value(profileRow ?? {}, ["certification_level"], value(latestEnrollment, ["course_name"], "Not recorded"))),
         status: normalizeEnrollmentStatus(value(profileRow ?? {}, ["status"], "Pending Review"))
       };
@@ -383,7 +392,7 @@ export default function StudentDashboardPage() {
       setMembershipProfile({
         membershipPlan: resolvedProfile.membershipPlan,
         membershipStatus: resolvedProfile.membershipStatus,
-        accountStatus: value(membershipRow ?? {}, ["account_status"], "Pending")
+        accountStatus: membershipState.accountStatus
       });
 
       const [

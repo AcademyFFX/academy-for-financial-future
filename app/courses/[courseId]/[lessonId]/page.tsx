@@ -17,6 +17,7 @@ import {
   lessonNotesStorageKey,
   type CourseProgressMap
 } from "@/lib/course-catalog";
+import { hasFullCourseAccess } from "@/lib/membership-state";
 import { createClient } from "@/lib/supabase";
 
 type LessonNotesMap = Record<string, string>;
@@ -38,6 +39,7 @@ export default function LessonPage() {
   const [notesMap, setNotesMap] = useState<LessonNotesMap>({});
   const [notes, setNotes] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
+  const [hasPaidAccess, setHasPaidAccess] = useState(false);
   const [savingCompletion, setSavingCompletion] = useState(false);
   const [message, setMessage] = useState("Add private lesson notes and mark the lesson complete when finished.");
 
@@ -60,6 +62,20 @@ export default function LessonPage() {
         }
 
         setUserId(user.id);
+
+        const { data: membership } = await supabase
+          .from("student_memberships")
+          .select("selected_membership_plan, active_membership_plan, membership_plan, account_status, payment_status, membership_status, trial_ends_at, current_period_end")
+          .eq("student_id", user.id)
+          .maybeSingle();
+        const fullCourseAccess = hasFullCourseAccess(membership);
+        setHasPaidAccess(fullCourseAccess);
+
+        if (!fullCourseAccess && lessonIndex > 0) {
+          setMessage("Free Trial includes preview lessons only. Upgrade your membership to continue this course.");
+          setProgressMap(localProgress);
+          return;
+        }
 
         const { data, error } = await supabase
           .from("lesson_progress")
@@ -98,7 +114,7 @@ export default function LessonPage() {
       setNotesMap(parsed);
       setNotes(parsed[noteKey] ?? "");
     }
-  }, [noteKey, params.courseId, params.lessonId, router]);
+  }, [lessonIndex, noteKey, params.courseId, params.lessonId, router]);
 
   useEffect(() => {
     if (!course || !lesson) return;
@@ -121,6 +137,7 @@ export default function LessonPage() {
   const completed = Boolean(progress?.completedLessonIds.includes(params.lessonId));
   const percent = course ? getCourseProgressPercent(course, progress) : 0;
   const hasVideo = Boolean(lesson?.videoUrl.trim());
+  const previewOnly = !hasPaidAccess && lessonIndex > 0;
   const embedUrl = useMemo(() => (lesson && lesson.videoUrl.trim() ? getVideoEmbedUrl(lesson.videoUrl) : ""), [lesson]);
 
   function saveNotes() {
@@ -132,6 +149,10 @@ export default function LessonPage() {
 
   async function markComplete() {
     if (!course || !lesson) return;
+    if (previewOnly) {
+      setMessage("Upgrade to a paid membership to complete full course lessons.");
+      return;
+    }
     setSavingCompletion(true);
 
     try {
@@ -273,9 +294,14 @@ export default function LessonPage() {
                 <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-5 py-3 font-bold text-navy-950" type="button" onClick={saveNotes}>
                   <Save size={18} /> Save Notes
                 </button>
-                <button className="inline-flex items-center justify-center gap-2 border border-gold-500/45 px-5 py-3 font-semibold text-gold-300 disabled:opacity-60" type="button" onClick={markComplete} disabled={savingCompletion}>
+                <button className="inline-flex items-center justify-center gap-2 border border-gold-500/45 px-5 py-3 font-semibold text-gold-300 disabled:opacity-60" type="button" onClick={markComplete} disabled={savingCompletion || previewOnly}>
                   <CheckCircle2 size={18} /> {savingCompletion ? "Saving..." : completed ? "Completed" : "Mark Complete"}
                 </button>
+                {previewOnly ? (
+                  <Link className="inline-flex items-center justify-center gap-2 border border-gold-500/45 px-5 py-3 font-semibold text-gold-300" href="/billing">
+                    Upgrade Membership
+                  </Link>
+                ) : null}
               </div>
               <p className="mt-3 text-sm text-ink/70">{message}</p>
             </div>
@@ -290,12 +316,18 @@ export default function LessonPage() {
                     <Download size={17} /> {pdf.title}
                   </a>
                 ))}
-                <Link
-                  href={`/assignments?courseId=${course.id}&lessonId=${lesson.id}`}
-                  className="inline-flex items-center gap-3 bg-gold-500 px-4 py-3 text-sm font-bold text-navy-950"
-                >
-                  <FileUp size={17} /> Submit Lesson Assignment
-                </Link>
+                {previewOnly ? (
+                  <Link href="/billing" className="inline-flex items-center gap-3 border border-gold-500/35 px-4 py-3 text-sm font-semibold text-gold-300">
+                    Upgrade for assignments
+                  </Link>
+                ) : (
+                  <Link
+                    href={`/assignments?courseId=${course.id}&lessonId=${lesson.id}`}
+                    className="inline-flex items-center gap-3 bg-gold-500 px-4 py-3 text-sm font-bold text-navy-950"
+                  >
+                    <FileUp size={17} /> Submit Lesson Assignment
+                  </Link>
+                )}
               </div>
             </div>
 

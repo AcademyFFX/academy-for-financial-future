@@ -1,3 +1,5 @@
+import { hasFullCourseAccess, hasPreviewAccess } from "@/lib/membership-state";
+
 export type BillingPlan = {
   id: string;
   name: string;
@@ -7,7 +9,7 @@ export type BillingPlan = {
   mode: "trial" | "subscription" | "payment";
   priceEnv?: string;
   membershipStatus: string;
-  accountStatus: "Active";
+  accountStatus: "Trial" | "Active" | "Restricted";
   features: string[];
   highlighted?: boolean;
 };
@@ -21,7 +23,7 @@ export const billingPlans: BillingPlan[] = [
     cadence: "7 days",
     mode: "trial",
     membershipStatus: "Free Trial",
-    accountStatus: "Active",
+    accountStatus: "Trial",
     features: ["Student dashboard", "Course preview access", "Live class schedule", "Upgrade anytime"]
   },
   {
@@ -32,7 +34,7 @@ export const billingPlans: BillingPlan[] = [
     cadence: "recurring",
     mode: "subscription",
     priceEnv: "STRIPE_MONTHLY_MEMBERSHIP_PRICE_ID",
-    membershipStatus: "Monthly Membership",
+    membershipStatus: "Active Membership",
     accountStatus: "Active",
     highlighted: true,
     features: ["Full course access", "Trading journal", "Assignments", "Live trading room", "Zoom classes"]
@@ -45,7 +47,7 @@ export const billingPlans: BillingPlan[] = [
     cadence: "recurring",
     mode: "subscription",
     priceEnv: "STRIPE_ANNUAL_MEMBERSHIP_PRICE_ID",
-    membershipStatus: "Annual Membership",
+    membershipStatus: "Active Membership",
     accountStatus: "Active",
     features: ["Annual academy access", "All monthly benefits", "Priority live class seats", "Certificate readiness tracking"]
   },
@@ -57,7 +59,7 @@ export const billingPlans: BillingPlan[] = [
     cadence: "recurring",
     mode: "subscription",
     priceEnv: "STRIPE_PREMIUM_MENTORSHIP_PRICE_ID",
-    membershipStatus: "Premium Mentorship",
+    membershipStatus: "Active Membership",
     accountStatus: "Active",
     features: ["Mentorship access", "Advanced trade review", "Premium live sessions", "Priority instructor feedback"]
   },
@@ -69,7 +71,7 @@ export const billingPlans: BillingPlan[] = [
     cadence: "payment",
     mode: "payment",
     priceEnv: "STRIPE_CERTIFICATION_FEE_PRICE_ID",
-    membershipStatus: "Certification Fee",
+    membershipStatus: "Active Membership",
     accountStatus: "Active",
     features: ["Certification processing", "Verified certificate record", "Employer verification support"]
   }
@@ -82,6 +84,9 @@ export function getBillingPlan(planId: string) {
 }
 
 export function hasAcademyAccess(membership?: {
+  selected_membership_plan?: string | null;
+  active_membership_plan?: string | null;
+  membership_plan?: string | null;
   account_status?: string | null;
   payment_status?: string | null;
   membership_status?: string | null;
@@ -89,11 +94,9 @@ export function hasAcademyAccess(membership?: {
   current_period_end?: string | null;
 }) {
   if (!membership) return false;
-  if (membership.account_status === "Active" && membership.membership_status === "Active" && membership.payment_status === "Paid") return true;
-
-  if (membership.account_status === "Active" && membership.membership_status === "Free Trial" && membership.payment_status === "Not Required" && membership.trial_ends_at) {
+  if (hasFullCourseAccess(membership)) return true;
+  if (hasPreviewAccess(membership) && membership.trial_ends_at) {
     return new Date(membership.trial_ends_at).getTime() > Date.now();
   }
-
   return false;
 }

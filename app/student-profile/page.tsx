@@ -5,6 +5,7 @@ import { Award, BookOpenCheck, CalendarCheck, Camera, ChartCandlestick, Clipboar
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
+import { normalizeMembershipState } from "@/lib/membership-state";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -102,14 +103,22 @@ export default function StudentProfilePage() {
       const enrollmentRow = ((enrollmentResult.data ?? []) as DbRow[])[0] ?? {};
       const enrollmentStatus = normalizeEnrollmentStatus(value(row, ["status"], "Pending Review"));
       const earnedCredentialCount = (certificatesResult.data ?? []).length + (certificationsResult.data ?? []).length;
+      const membershipState = normalizeMembershipState({
+        selected_membership_plan: value(membershipRow, ["selected_membership_plan"], value(applicationRow, ["membership_plan"], "Free Trial")),
+        active_membership_plan: value(membershipRow, ["active_membership_plan", "membership_plan"], value(row, ["membership_plan"], value(profileRow, ["membership_level"], "Free Trial"))),
+        membership_plan: value(membershipRow, ["membership_plan"], value(row, ["membership_plan"], value(profileRow, ["membership_level"], "Free Trial"))),
+        payment_status: value(membershipRow, ["payment_status"], "Pending"),
+        membership_status: value(membershipRow, ["membership_status"], "Pending Payment"),
+        account_status: value(membershipRow, ["account_status"], "Restricted")
+      });
       const loadedProfile: StudentProfile = {
         id: value(row, ["id"]),
         authUserId: value(row, ["auth_user_id"], user.id),
         studentId: value(applicationRow, ["student_id"], value(row, ["student_id"], value(profileRow, ["student_id"], "Not assigned"))),
         fullName: value(row, ["full_name"], value(applicationRow, ["full_name"], value(profileRow, ["full_name"], user.user_metadata?.full_name as string | undefined ?? email))),
         email: value(profileRow, ["email"], value(row, ["email"], email)),
-        membershipLevel: value(membershipRow, ["active_membership_plan", "membership_plan"], value(row, ["membership_plan"], value(profileRow, ["membership_level"], "Free Trial"))),
-        membershipStatus: enrollmentStatus,
+        membershipLevel: membershipState.currentPlan,
+        membershipStatus: membershipState.membershipStatus,
         enrollmentDate: value(row, ["enrollment_date"], value(enrollmentRow, ["enrolled_at"], value(row, ["created_at"]))),
         certificationLevel: value(applicationRow, ["program_interest"], value(row, ["certification_level"], value(profileRow, ["program_interest"], "Academy for Financial Future"))),
         certificationStatus: earnedCredentialCount > 0 ? "Certified" : "Not Started",

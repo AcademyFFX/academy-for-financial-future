@@ -12,6 +12,7 @@ import { AdminSimulatorReview } from "@/components/admin-simulator-review";
 import { AdminSocialModeration } from "@/components/admin-social-moderation";
 import { AdminTVStudio } from "@/components/admin-tv-studio";
 import { AdminZoomSessionManager } from "@/components/admin-zoom-session-manager";
+import { buildActiveMembershipState, buildPendingPaymentState, membershipStateToDbPayload, normalizeMembershipPlan, normalizeMembershipState } from "@/lib/membership-state";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -227,8 +228,14 @@ export default function AdminPage() {
 
   function normalizeStudent(row: DbRow, membershipRow?: DbRow): Student {
     const studentStatus = normalizeEnrollmentStatus(value(row, ["status"], "Pending Review"));
-    const selectedMembershipPlan = value(membershipRow ?? {}, ["selected_membership_plan"], value(row, ["membership_plan"], "Free Trial"));
-    const activeMembershipPlan = value(membershipRow ?? {}, ["active_membership_plan", "membership_plan"], value(row, ["membership_plan"], "Free Trial"));
+    const membershipState = normalizeMembershipState({
+      selected_membership_plan: value(membershipRow ?? {}, ["selected_membership_plan"], value(row, ["membership_plan"], "Free Trial")),
+      active_membership_plan: value(membershipRow ?? {}, ["active_membership_plan", "membership_plan"], value(row, ["membership_plan"], "Free Trial")),
+      membership_plan: value(membershipRow ?? {}, ["membership_plan"], value(row, ["membership_plan"], "Free Trial")),
+      payment_status: value(membershipRow ?? {}, ["payment_status"], "Pending"),
+      membership_status: value(membershipRow ?? {}, ["membership_status"], "Pending Payment"),
+      account_status: value(membershipRow ?? {}, ["account_status"], "Restricted")
+    });
     return {
       id: value(row, ["id", "student_id"]),
       authUserId: value(row, ["auth_user_id"]),
@@ -237,10 +244,10 @@ export default function AdminPage() {
       email: value(row, ["email", "student_email"], "Not recorded"),
       enrollmentDate: normalizeDate(value(row, ["enrollment_date", "created_at", "date_enrolled"])),
       certificationLevel: value(row, ["certification_level", "level", "course_name"], "Academy for Financial Future"),
-      selectedMembershipPlan,
-      membershipPlan: activeMembershipPlan,
-      membershipStatus: value(membershipRow ?? {}, ["membership_status"], "Pending Payment"),
-      paymentStatus: value(membershipRow ?? {}, ["payment_status"], "Pending"),
+      selectedMembershipPlan: membershipState.selectedPlan,
+      membershipPlan: membershipState.currentPlan,
+      membershipStatus: membershipState.membershipStatus,
+      paymentStatus: membershipState.paymentStatus,
       status: studentStatus,
       profilePhotoUrl: value(row, ["profile_photo_url"])
     };
@@ -623,13 +630,13 @@ export default function AdminPage() {
       });
 
       if (student.authUserId) {
-        await supabase
-          .from("student_memberships")
-          .update({
-            account_status: nextStatus === "Suspended" ? "Restricted" : "Active",
-            updated_at: new Date().toISOString()
-          })
-          .eq("student_id", student.authUserId);
+        const restoredState = student.paymentStatus === "Paid" && student.membershipPlan !== "Free Trial"
+          ? buildActiveMembershipState(student.membershipPlan)
+          : buildPendingPaymentState(student.selectedMembershipPlan);
+        const membershipPayload = nextStatus === "Suspended"
+          ? { membership_status: "Suspended", account_status: "Suspended", suspended_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+          : { ...membershipStateToDbPayload(restoredState), updated_at: new Date().toISOString() };
+        await supabase.from("student_memberships").update(membershipPayload).eq("student_id", student.authUserId);
       }
 
       setStudents((current) => current.map((item) => (item.id === student.id ? normalizeStudent(data as DbRow) : item)));
@@ -725,12 +732,7 @@ export default function AdminPage() {
           ? supabase.from("student_memberships").upsert({
               student_id: application.authUserId,
               student_email: application.email,
-              selected_membership_plan: application.membershipPlan,
-              active_membership_plan: "Free Trial",
-              membership_plan: "Free Trial",
-              payment_status: "Pending",
-              membership_status: "Pending Payment",
-              account_status: "Active",
+              ...membershipStateToDbPayload(buildPendingPaymentState(application.membershipPlan)),
               updated_at: reviewedAt
             }, { onConflict: "student_id" })
           : Promise.resolve({ data: null, error: null }),
@@ -802,15 +804,14 @@ export default function AdminPage() {
       if (nextPlan === "Free Trial" && student.membershipPlan !== "Free Trial") {
         throw new Error("Use Cancel Membership to downgrade an active paid account to Free Trial.");
       }
-      const nextPaymentStatus = student.paymentStatus === "Paid" ? "Paid" : nextPlan === "Free Trial" ? "Not Required" : "Pending";
-      const nextMembershipStatus = student.membershipStatus === "Active" && student.paymentStatus === "Paid" ? "Active" : nextPlan === "Free Trial" ? "Free Trial" : "Pending Payment";
+      const nextState = student.paymentStatus === "Paid" && student.membershipStatus === "Active Membership"
+        ? buildActiveMembershipState(nextPlan)
+        : buildPendingPaymentState(nextPlan);
       const supabase = createClient();
       const result = await supabase
         .from("student_memberships")
         .update({
-          selected_membership_plan: nextPlan,
-          payment_status: nextPaymentStatus,
-          membership_status: nextMembershipStatus,
+          ...membershipStateToDbPayload(nextState),
           updated_at: new Date().toISOString()
         })
         .eq("student_id", student.authUserId)
@@ -823,11 +824,12 @@ export default function AdminPage() {
 
       setStudents((current) => current.map((item) => (item.id === student.id ? {
         ...item,
-        selectedMembershipPlan: nextPlan,
-        paymentStatus: nextPaymentStatus,
-        membershipStatus: nextMembershipStatus
+        selectedMembershipPlan: nextState.selectedPlan,
+        membershipPlan: nextState.currentPlan,
+        paymentStatus: nextState.paymentStatus,
+        membershipStatus: nextState.membershipStatus
       } : item)));
-      setMessage(`Selected membership updated for ${student.name}. Payment status is ${nextPaymentStatus}.`);
+      setMessage(`Selected membership updated for ${student.name}. Payment status is ${nextState.paymentStatus}.`);
     } catch (error) {
       setMessage(`Save Selected Plan failed: ${getErrorMessage(error, "Unable to update selected membership.")}`);
     }
@@ -835,7 +837,6 @@ export default function AdminPage() {
 
   async function updateMembershipWorkflow(student: Student, action: "mark-paid" | "activate" | "suspend" | "cancel") {
     const selectedPlan = membershipDrafts[student.id] ?? student.selectedMembershipPlan ?? student.membershipPlan ?? "Free Trial";
-    const activePlan = action === "activate" ? selectedPlan : action === "cancel" ? "Free Trial" : student.membershipPlan || "Free Trial";
     const labels = {
       "mark-paid": "Mark Paid",
       activate: "Activate Membership",
@@ -851,23 +852,26 @@ export default function AdminPage() {
       }
 
       const now = new Date().toISOString();
-      const nextPaymentStatus = action === "mark-paid" || action === "activate"
-        ? selectedPlan === "Free Trial" ? "Not Required" : "Paid"
-        : student.paymentStatus;
-      const nextMembershipStatus = action === "mark-paid" ? "Pending Activation" : action === "activate" ? selectedPlan === "Free Trial" ? "Free Trial" : "Active" : action === "suspend" ? "Suspended" : "Cancelled";
-      const nextAccountStatus = action === "activate" ? "Active" : action === "suspend" ? "Restricted" : action === "cancel" ? "Cancelled" : student.membershipStatus === "Active" ? "Active" : "Active";
+      const workflowState = action === "cancel"
+        ? buildPendingPaymentState("Free Trial")
+        : action === "suspend"
+          ? {
+              selectedPlan: normalizeMembershipPlan(selectedPlan),
+              currentPlan: normalizeMembershipPlan(student.membershipPlan),
+              paymentStatus: student.paymentStatus === "Paid" ? "Paid" : "Pending",
+              membershipStatus: "Suspended",
+              accountStatus: "Suspended"
+            } as const
+          : action === "mark-paid" || action === "activate"
+            ? buildActiveMembershipState(selectedPlan)
+            : buildPendingPaymentState(selectedPlan);
 
       const payload: Record<string, string> = {
-        selected_membership_plan: selectedPlan,
-        active_membership_plan: activePlan,
-        membership_plan: activePlan,
-        payment_status: nextPaymentStatus,
-        membership_status: nextMembershipStatus,
-        account_status: nextAccountStatus,
+        ...membershipStateToDbPayload(workflowState),
         updated_at: now
       };
-      if (action === "mark-paid") payload.paid_at = now;
-      if (action === "activate") payload.activated_at = now;
+      if (action === "mark-paid" || action === "activate") payload.paid_at = now;
+      if (action === "mark-paid" || action === "activate") payload.activated_at = now;
       if (action === "suspend") payload.suspended_at = now;
       if (action === "cancel") payload.cancelled_at = now;
 
@@ -881,24 +885,24 @@ export default function AdminPage() {
       if (membershipResult.error) throw membershipResult.error;
       if (!membershipResult.data?.length) throw new Error("No existing membership row was updated.");
 
-      if (action === "activate" || action === "cancel") {
+      if (action === "activate" || action === "cancel" || action === "mark-paid") {
         const studentResult = await supabase
           .from("students")
-          .update({ membership_plan: activePlan })
+          .update({ membership_plan: workflowState.currentPlan })
           .eq("id", student.id);
         if (studentResult.error) throw studentResult.error;
       }
 
       setStudents((current) => current.map((item) => (item.id === student.id ? {
         ...item,
-        selectedMembershipPlan: selectedPlan,
-        membershipPlan: activePlan,
+        selectedMembershipPlan: workflowState.selectedPlan,
+        membershipPlan: workflowState.currentPlan,
         paymentStatus: payload.payment_status,
         membershipStatus: payload.membership_status
       } : item)));
 
       const successMessages = {
-        "mark-paid": `Payment marked Paid for ${student.name}. Membership is pending activation.`,
+        "mark-paid": `Payment marked Paid for ${student.name}. Membership is active.`,
         activate: `Membership activated for ${student.name}. Paid course access is unlocked.`,
         suspend: `Membership suspended for ${student.name}. Paid course access is restricted.`,
         cancel: `Membership cancelled for ${student.name}. Active plan reset to Free Trial.`

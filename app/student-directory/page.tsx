@@ -5,6 +5,7 @@ import { Award, Search, ShieldCheck, UserRound } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
+import { normalizeMembershipState } from "@/lib/membership-state";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -42,6 +43,13 @@ function formatDate(raw: string) {
 }
 
 function normalizeStudent(row: DbRow): DirectoryStudent {
+  const membershipState = normalizeMembershipState({
+    active_membership_plan: value(row, ["active_membership_plan"], "Free Trial"),
+    membership_plan: value(row, ["active_membership_plan"], "Free Trial"),
+    membership_status: value(row, ["membership_status"], "Pending Payment"),
+    payment_status: value(row, ["payment_status"], ""),
+    account_status: value(row, ["account_status"], "")
+  });
   return {
     id: value(row, ["id"], crypto.randomUUID()),
     fullName: value(row, ["full_name"], "AFF Student"),
@@ -49,8 +57,8 @@ function normalizeStudent(row: DbRow): DirectoryStudent {
     certificationLevel: value(row, ["certification_level"], "Academy for Financial Future"),
     enrollmentDate: value(row, ["enrollment_date"], "Not recorded"),
     enrollmentStatus: normalizeEnrollmentStatus(value(row, ["enrollment_status", "status"], "Pending Review")),
-    membershipPlan: value(row, ["active_membership_plan"], "Free Trial"),
-    membershipStatus: value(row, ["membership_status"], "Pending Payment"),
+    membershipPlan: membershipState.currentPlan,
+    membershipStatus: membershipState.membershipStatus,
     profilePhotoUrl: value(row, ["profile_photo_url"]),
     email: value(row, ["email"])
   };

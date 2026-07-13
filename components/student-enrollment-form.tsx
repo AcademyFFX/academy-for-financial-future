@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { billingPlans } from "@/lib/billing";
+import { buildPendingPaymentState, membershipStateToDbPayload } from "@/lib/membership-state";
 import { createClient } from "@/lib/supabase";
 
 const programInterests = [
@@ -150,6 +151,7 @@ export function StudentEnrollmentForm() {
         return;
       }
 
+      const membershipState = buildPendingPaymentState(form.membership_plan);
       const [profileResult, membershipResult, historyResult] = await Promise.all([
         supabase.from("student_profiles").upsert({
           auth_user_id: authUserId,
@@ -167,12 +169,7 @@ export function StudentEnrollmentForm() {
         supabase.from("student_memberships").upsert({
           student_id: authUserId,
           student_email: email,
-          selected_membership_plan: form.membership_plan,
-          active_membership_plan: "Free Trial",
-          membership_plan: "Free Trial",
-          payment_status: form.membership_plan === "Free Trial" ? "Not Required" : "Pending",
-          membership_status: form.membership_plan === "Free Trial" ? "Free Trial" : "Pending Payment",
-          account_status: "Active",
+          ...membershipStateToDbPayload(membershipState),
           updated_at: new Date().toISOString()
         }, { onConflict: "student_id" }),
         supabase.from("student_status_history").insert({

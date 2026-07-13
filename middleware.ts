@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import type { ResponseCookie } from "next/dist/compiled/@edge-runtime/cookies";
 import { NextResponse, type NextRequest } from "next/server";
+import { hasFullCourseAccess } from "./lib/membership-state";
 
 const protectedRoutes = ["/student-dashboard", "/dashboard", "/aff-os", "/mobile-super-app", "/alumni-network", "/publishing-house", "/economic-intelligence", "/investment-bank", "/governance-school", "/think-tank", "/university", "/courses", "/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/trading-simulator", "/trading-floor", "/social-network", "/tv-studio", "/executive-command-center", "/accreditation", "/career-center", "/research-institute", "/events", "/global-network", "/campus-expansion", "/endowment-fund", "/foundation", "/civic-leadership", "/digital-civilization", "/human-flourishing", "/marketplace", "/billing", "/messages", "/ai-coach", "/voice-coach", "/chart-analyst", "/admin"];
 const enrollmentRestrictedRoutes = ["/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/trading-simulator", "/social-network", "/tv-studio"];
@@ -73,18 +74,12 @@ export async function middleware(request: NextRequest) {
   if (requiresEnrollment && user.email?.toLowerCase() !== "acafffx@gmail.com") {
     const { data, error } = await supabase
       .from("student_memberships")
-      .select("account_status, payment_status, membership_status, trial_ends_at, current_period_end")
+      .select("selected_membership_plan, active_membership_plan, membership_plan, account_status, payment_status, membership_status, trial_ends_at, current_period_end")
       .eq("student_id", user.id)
       .maybeSingle();
 
     if (!error) {
-      const activeUntil = data?.current_period_end ?? data?.trial_ends_at;
-      const hasActivePeriod = activeUntil ? new Date(activeUntil).getTime() > Date.now() : false;
-      const hasPaidAccess = data?.account_status === "Active" && data?.membership_status === "Active" && data?.payment_status === "Paid";
-      const hasTrialAccess = data?.account_status === "Trial" && hasActivePeriod;
-      const hasAccess = hasPaidAccess || hasTrialAccess;
-
-      if (!hasAccess) {
+      if (!hasFullCourseAccess(data)) {
         const url = request.nextUrl.clone();
         url.pathname = "/billing";
         url.searchParams.set("restricted", "membership");

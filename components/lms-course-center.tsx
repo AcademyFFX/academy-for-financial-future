@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Award, BookOpen, CheckCircle2, Download, FileText, PlayCircle, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProgressBar } from "@/components/progress";
+import { hasFullCourseAccess } from "@/lib/membership-state";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -82,6 +83,7 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
   const [attempts, setAttempts] = useState<DbRow[]>([]);
   const [certificates, setCertificates] = useState<DbRow[]>([]);
   const [answers, setAnswers] = useState<Record<string, Record<number, string>>>({});
+  const [hasPaidAccess, setHasPaidAccess] = useState(false);
 
   const loadLms = useCallback(async () => {
     try {
@@ -103,6 +105,12 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
       const internalStudentId = studentRecord?.id ? String(studentRecord.id) : "";
       setStudentDbId(internalStudentId);
       if (studentRecord?.full_name) setStudentName(String(studentRecord.full_name));
+      const { data: membership } = await supabase
+        .from("student_memberships")
+        .select("selected_membership_plan, active_membership_plan, membership_plan, account_status, payment_status, membership_status")
+        .eq("student_id", user.id)
+        .maybeSingle();
+      setHasPaidAccess(hasFullCourseAccess(membership));
       const [courseResult, lessonResult, assetResult, enrollmentResult, progressResult, attemptResult, certificateResult] = await Promise.all([
         supabase.from("courses").select("*").order("created_at"),
         supabase.from("lessons").select("*").order("lesson_order"),
@@ -193,6 +201,10 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
 
   async function completeLesson(course: DbRow, lesson: DbRow) {
     if (!userId) return;
+    if (!hasPaidAccess) {
+      setMessage("Upgrade to an active paid membership to complete managed course lessons.");
+      return;
+    }
     const courseId = idOf(course);
     const lessonId = idOf(lesson);
     const supabase = createClient();
@@ -211,6 +223,10 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
 
   async function submitQuiz(course: DbRow, quiz: DbRow) {
     if (!userId) return;
+    if (!hasPaidAccess) {
+      setMessage("Upgrade to an active paid membership to submit quizzes and unlock certification progress.");
+      return;
+    }
     const quizQuestions = questionsOf(quiz);
     if (!quizQuestions.length) return;
     const quizAnswers = answers[idOf(quiz)] ?? {};

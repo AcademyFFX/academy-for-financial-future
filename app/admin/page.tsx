@@ -721,16 +721,16 @@ export default function AdminPage() {
               updated_at: reviewedAt
             }, { onConflict: "auth_user_id" }).select("*").single()
           : Promise.resolve({ data: null, error: null }),
-        application.authUserId
+        application.authUserId && nextStatus === "Approved"
           ? supabase.from("student_memberships").upsert({
               student_id: application.authUserId,
               student_email: application.email,
               selected_membership_plan: application.membershipPlan,
               active_membership_plan: "Free Trial",
               membership_plan: "Free Trial",
-              payment_status: nextStatus === "Approved" ? "Pending" : "Not Required",
-              membership_status: nextStatus === "Approved" ? "Pending Payment" : nextStatus,
-              account_status: nextStatus === "Approved" ? "Pending" : "Restricted",
+              payment_status: "Pending",
+              membership_status: "Pending Payment",
+              account_status: "Active",
               updated_at: reviewedAt
             }, { onConflict: "student_id" })
           : Promise.resolve({ data: null, error: null }),
@@ -799,6 +799,9 @@ export default function AdminPage() {
 
     try {
       if (!student.authUserId) throw new Error("Student is missing auth_user_id; selected membership cannot be updated.");
+      if (nextPlan === "Free Trial" && student.membershipPlan !== "Free Trial") {
+        throw new Error("Use Cancel Membership to downgrade an active paid account to Free Trial.");
+      }
       const nextPaymentStatus = student.paymentStatus === "Paid" ? "Paid" : nextPlan === "Free Trial" ? "Not Required" : "Pending";
       const nextMembershipStatus = student.membershipStatus === "Active" && student.paymentStatus === "Paid" ? "Active" : nextPlan === "Free Trial" ? "Free Trial" : "Pending Payment";
       const supabase = createClient();

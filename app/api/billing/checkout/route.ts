@@ -62,7 +62,7 @@ export async function POST(request: Request) {
         membership_plan: "Free Trial",
         payment_status: "Not Required",
         membership_status: "Free Trial",
-        account_status: plan.accountStatus,
+        account_status: "Active",
         trial_ends_at: trialEndsAt,
         updated_at: new Date().toISOString()
       }, { onConflict: "student_id" });
@@ -121,15 +121,24 @@ export async function POST(request: Request) {
     const session = await stripeRequest<CheckoutSessionResponse>("/checkout/sessions", params);
 
     const adminSupabase = createSupabaseAdminClient();
+    const { data: existingMembership } = await adminSupabase
+      .from("student_memberships")
+      .select("active_membership_plan, membership_plan, payment_status, membership_status")
+      .eq("student_id", user.id)
+      .maybeSingle();
+    const preserveActivePlan = existingMembership?.payment_status === "Paid" && existingMembership?.membership_status === "Active";
+    const currentActivePlan = preserveActivePlan
+      ? existingMembership.active_membership_plan ?? existingMembership.membership_plan ?? "Free Trial"
+      : "Free Trial";
     const { error } = await adminSupabase.from("student_memberships").upsert({
       student_id: user.id,
       student_email: user.email ?? "",
       selected_membership_plan: plan.name,
-      active_membership_plan: "Free Trial",
-      membership_plan: "Free Trial",
-      payment_status: "Pending",
-      membership_status: "Pending Payment",
-      account_status: "Pending",
+      active_membership_plan: currentActivePlan,
+      membership_plan: currentActivePlan,
+      payment_status: preserveActivePlan ? "Paid" : "Pending",
+      membership_status: preserveActivePlan ? "Active" : "Pending Payment",
+      account_status: "Active",
       stripe_checkout_session_id: session.id,
       stripe_customer_id: typeof session.customer === "string" ? session.customer : null,
       updated_at: new Date().toISOString()

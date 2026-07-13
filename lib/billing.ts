@@ -7,7 +7,7 @@ export type BillingPlan = {
   mode: "trial" | "subscription" | "payment";
   priceEnv?: string;
   membershipStatus: string;
-  accountStatus: "Trial" | "Active";
+  accountStatus: "Active";
   features: string[];
   highlighted?: boolean;
 };
@@ -21,7 +21,7 @@ export const billingPlans: BillingPlan[] = [
     cadence: "7 days",
     mode: "trial",
     membershipStatus: "Free Trial",
-    accountStatus: "Trial",
+    accountStatus: "Active",
     features: ["Student dashboard", "Course preview access", "Live class schedule", "Upgrade anytime"]
   },
   {
@@ -91,7 +91,7 @@ export function hasAcademyAccess(membership?: {
   if (!membership) return false;
   if (membership.account_status === "Active" && membership.membership_status === "Active" && membership.payment_status === "Paid") return true;
 
-  if (membership.account_status === "Trial" && membership.trial_ends_at) {
+  if (membership.account_status === "Active" && membership.membership_status === "Free Trial" && membership.payment_status === "Not Required" && membership.trial_ends_at) {
     return new Date(membership.trial_ends_at).getTime() > Date.now();
   }
 

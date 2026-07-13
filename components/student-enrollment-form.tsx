@@ -172,7 +172,7 @@ export function StudentEnrollmentForm() {
           membership_plan: "Free Trial",
           payment_status: form.membership_plan === "Free Trial" ? "Not Required" : "Pending",
           membership_status: form.membership_plan === "Free Trial" ? "Free Trial" : "Pending Payment",
-          account_status: "Pending",
+          account_status: "Active",
           updated_at: new Date().toISOString()
         }, { onConflict: "student_id" }),
         supabase.from("student_status_history").insert({

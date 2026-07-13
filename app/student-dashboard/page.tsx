@@ -371,7 +371,7 @@ export default function StudentDashboardPage() {
         fullName: value(profileRow ?? {}, ["full_name", "name"], value(applicationRow ?? {}, ["full_name"], authName || authEmail || "Not recorded")),
         email: value(profileRow ?? {}, ["email"], authEmail || "Not recorded"),
         enrollmentDate: value(profileRow ?? {}, ["enrollment_date"], value(latestEnrollment, ["enrolled_at"], value(profileRow ?? {}, ["created_at"], ""))),
-        selectedMembershipPlan: value(applicationRow ?? {}, ["membership_plan"], value(membershipRow ?? {}, ["selected_membership_plan"], "Not selected")),
+        selectedMembershipPlan: value(membershipRow ?? {}, ["selected_membership_plan"], value(applicationRow ?? {}, ["membership_plan"], "Not selected")),
         membershipPlan: value(membershipRow ?? {}, ["active_membership_plan", "membership_plan"], value(profileRow ?? {}, ["membership_plan"], "Free Trial")),
         paymentStatus: value(membershipRow ?? {}, ["payment_status"], "Pending"),
         membershipStatus: value(membershipRow ?? {}, ["membership_status"], "Pending Payment"),
@@ -683,6 +683,7 @@ export default function StudentDashboardPage() {
                 <ProfileLine icon={<CreditCard size={18} />} label="Current Plan" value={membershipLevel} />
                 <ProfileLine icon={<CreditCard size={18} />} label="Payment Status" value={studentProfile?.paymentStatus ?? "Pending"} />
                 <ProfileLine icon={<CreditCard size={18} />} label="Membership Status" value={studentProfile?.membershipStatus ?? "Pending Payment"} />
+                <ProfileLine icon={<CreditCard size={18} />} label="Account Status" value={membershipProfile?.accountStatus ?? "Pending"} />
                 <ProfileLine icon={<ShieldCheck size={18} />} label="Certification Status" value={certificationStatus} />
                 <Link href="/messages" className="flex items-center justify-between border border-gold-500/25 px-4 py-3 text-sm font-semibold text-gold-300">
                   <span>Unread Messages</span>

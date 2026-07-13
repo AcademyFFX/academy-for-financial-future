@@ -77,11 +77,13 @@ async function updateMembershipFromCheckout(object: StripeObject) {
     membership_plan: paid ? plan.name : "Free Trial",
     payment_status: paid ? "Paid" : "Pending",
     membership_status: paid ? "Active" : "Pending Payment",
-    account_status: paid ? plan.accountStatus : "Pending",
+    account_status: "Active",
     stripe_customer_id: asString(object.customer),
     stripe_subscription_id: asString(object.subscription),
     stripe_checkout_session_id: asString(object.id),
     current_period_end: typeof periodEnd === "number" ? new Date(periodEnd * 1000).toISOString() : null,
+    paid_at: paid ? new Date().toISOString() : null,
+    activated_at: paid ? new Date().toISOString() : null,
     updated_at: new Date().toISOString()
   }, { onConflict: "student_id" });
 

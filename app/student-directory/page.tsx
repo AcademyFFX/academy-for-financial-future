@@ -56,6 +56,17 @@ function normalizeStudent(row: DbRow): DirectoryStudent {
   };
 }
 
+function formatSupabaseError(error: unknown) {
+  if (!error || typeof error !== "object") return "Unable to load student directory.";
+  const row = error as { code?: string; message?: string; details?: string; hint?: string };
+  return [
+    row.code ? `Code: ${row.code}` : "",
+    row.message ? `Message: ${row.message}` : "",
+    row.details ? `Details: ${row.details}` : "",
+    row.hint ? `Hint: ${row.hint}` : ""
+  ].filter(Boolean).join(" | ") || "Unable to load student directory.";
+}
+
 export default function StudentDirectoryPage() {
   const router = useRouter();
   const [students, setStudents] = useState<DirectoryStudent[]>([]);
@@ -87,17 +98,23 @@ export default function StudentDirectoryPage() {
         return;
       }
 
-      const studentsResult = await supabase
-        .from("aff_student_directory")
-        .select("*")
-        .order("full_name", { ascending: true });
+      const studentsResult = await supabase.rpc("get_aff_student_directory");
 
-      if (studentsResult.error) throw studentsResult.error;
-      setStudents(((studentsResult.data ?? []) as DbRow[]).map(normalizeStudent));
+      if (studentsResult.error) {
+        setStudents([]);
+        const formattedError = formatSupabaseError(studentsResult.error);
+        setLoadError(formattedError);
+        setMessage(`Unable to load student directory: ${formattedError}`);
+        return;
+      }
+      const sortedStudents = ((studentsResult.data ?? []) as DbRow[])
+        .map(normalizeStudent)
+        .sort((first, second) => first.fullName.localeCompare(second.fullName));
+      setStudents(sortedStudents);
       setLoadError("");
       setMessage("Active student directory loaded.");
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unable to load student directory.";
+      const errorMessage = error instanceof Error ? error.message : formatSupabaseError(error);
       setLoadError(errorMessage);
       setMessage(`Unable to load student directory: ${errorMessage}`);
     } finally {

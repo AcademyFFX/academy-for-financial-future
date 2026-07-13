@@ -15,10 +15,11 @@ type DirectoryStudent = {
   fullName: string;
   studentId: string;
   certificationLevel: string;
+  enrollmentDate: string;
   enrollmentStatus: string;
   membershipPlan: string;
+  membershipStatus: string;
   profilePhotoUrl: string;
-  authUserId: string;
   email: string;
 };
 
@@ -34,16 +35,23 @@ function normalizeEnrollmentStatus(status: string) {
   return enrollmentStatuses.includes(status as (typeof enrollmentStatuses)[number]) ? status : "Pending Review";
 }
 
-function normalizeStudent(row: DbRow, application?: DbRow): DirectoryStudent {
+function formatDate(raw: string) {
+  if (!raw || raw === "Not recorded") return "Not recorded";
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? raw : date.toLocaleDateString();
+}
+
+function normalizeStudent(row: DbRow): DirectoryStudent {
   return {
     id: value(row, ["id"], crypto.randomUUID()),
     fullName: value(row, ["full_name"], "AFF Student"),
-    studentId: value(application ?? {}, ["student_id"], value(row, ["student_id"], "Pending")),
-    certificationLevel: value(application ?? {}, ["program_interest"], value(row, ["certification_level"], "Academy for Financial Future")),
-    enrollmentStatus: normalizeEnrollmentStatus(value(row, ["status"], "Pending Review")),
-    membershipPlan: value(application ?? {}, ["membership_plan"], value(row, ["membership_plan"], "Free Trial")),
+    studentId: value(row, ["aff_student_id", "student_id"], "Pending"),
+    certificationLevel: value(row, ["certification_level"], "Academy for Financial Future"),
+    enrollmentDate: value(row, ["enrollment_date"], "Not recorded"),
+    enrollmentStatus: normalizeEnrollmentStatus(value(row, ["enrollment_status", "status"], "Pending Review")),
+    membershipPlan: value(row, ["active_membership_plan"], "Free Trial"),
+    membershipStatus: value(row, ["membership_status"], "Pending Payment"),
     profilePhotoUrl: value(row, ["profile_photo_url"]),
-    authUserId: value(row, ["auth_user_id"]),
     email: value(row, ["email"])
   };
 }
@@ -54,6 +62,7 @@ export default function StudentDirectoryPage() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("Loading student directory...");
+  const [loadError, setLoadError] = useState("");
 
   const filteredStudents = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -78,32 +87,19 @@ export default function StudentDirectoryPage() {
         return;
       }
 
-      const [studentsResult, applicationsResult] = await Promise.all([
-        supabase
-          .from("students")
-          .select("id, student_id, auth_user_id, full_name, email, certification_level, membership_plan, status, profile_photo_url")
-          .eq("status", "Active")
-          .order("full_name", { ascending: true }),
-        supabase
-          .from("student_applications")
-          .select("auth_user_id, student_id, full_name, email, program_interest, membership_plan, application_status")
-      ]);
+      const studentsResult = await supabase
+        .from("aff_student_directory")
+        .select("*")
+        .order("full_name", { ascending: true });
 
       if (studentsResult.error) throw studentsResult.error;
-      const applications = (applicationsResult.data ?? []) as DbRow[];
-      setStudents(((studentsResult.data ?? []) as DbRow[]).map((student) => {
-        const authUserId = value(student, ["auth_user_id"]);
-        const email = value(student, ["email"]).toLowerCase();
-        const application = applications.find((item) => {
-          const appAuthId = value(item, ["auth_user_id"]);
-          const appEmail = value(item, ["email"]).toLowerCase();
-          return (authUserId && appAuthId === authUserId) || (email && appEmail === email);
-        });
-        return normalizeStudent(student, application);
-      }));
+      setStudents(((studentsResult.data ?? []) as DbRow[]).map(normalizeStudent));
+      setLoadError("");
       setMessage("Active student directory loaded.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to load student directory.");
+      const errorMessage = error instanceof Error ? error.message : "Unable to load student directory.";
+      setLoadError(errorMessage);
+      setMessage(`Unable to load student directory: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -128,6 +124,11 @@ export default function StudentDirectoryPage() {
                 <h2 className="text-2xl font-semibold text-white">Active Students</h2>
                 <p className="mt-2 text-sm text-ink/68">{message}</p>
               </div>
+              {loadError ? (
+                <button className="border border-gold-500/35 px-4 py-3 text-sm font-semibold text-gold-300" type="button" onClick={loadDirectory}>
+                  Retry
+                </button>
+              ) : null}
               <label className="flex min-w-0 items-center gap-2 border border-gold-500/25 bg-navy-950 px-4 py-3 text-ink md:w-96">
                 <Search className="shrink-0 text-gold-300" size={18} />
                 <input className="min-w-0 flex-1 bg-transparent text-white outline-none" placeholder="Search students..." value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -137,6 +138,8 @@ export default function StudentDirectoryPage() {
 
           {loading ? (
             <div className="terminal-panel p-6 text-ink/72">Loading directory...</div>
+          ) : loadError ? (
+            <div className="terminal-panel p-6 text-red-200">Directory query failed: {loadError}</div>
           ) : filteredStudents.length === 0 ? (
             <div className="terminal-panel p-6 text-ink/72">No active students found.</div>
           ) : (
@@ -154,11 +157,15 @@ export default function StudentDirectoryPage() {
                     <div className="min-w-0">
                       <h3 className="break-words text-lg font-semibold text-white">{student.fullName}</h3>
                       <p className="mt-1 text-sm text-gold-300">{student.studentId}</p>
+                      <p className="mt-1 break-words text-xs text-ink/58">{student.email}</p>
                     </div>
                   </div>
                   <div className="mt-5 grid gap-3">
                     <DirectoryLine icon={<Award size={16} />} label="Certification Level" value={student.certificationLevel} />
+                    <DirectoryLine icon={<ShieldCheck size={16} />} label="Enrollment Date" value={formatDate(student.enrollmentDate)} />
                     <DirectoryLine icon={<ShieldCheck size={16} />} label="Enrollment Status" value={student.enrollmentStatus} />
+                    <DirectoryLine icon={<ShieldCheck size={16} />} label="Current Plan" value={student.membershipPlan} />
+                    <DirectoryLine icon={<ShieldCheck size={16} />} label="Membership Status" value={student.membershipStatus} />
                   </div>
                 </article>
               ))}

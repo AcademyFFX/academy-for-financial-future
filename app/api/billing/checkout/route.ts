@@ -10,6 +10,29 @@ type CheckoutSessionResponse = {
   customer?: string;
 };
 
+export async function GET() {
+  return NextResponse.json({
+    plans: Object.fromEntries(
+      ["free-trial", "monthly-membership", "annual-membership", "premium-mentorship", "certification-fee"].map((planId) => {
+        const plan = getBillingPlan(planId);
+        return [planId, {
+          configured: !plan?.priceEnv || Boolean(process.env[plan.priceEnv]),
+          missingEnv: plan?.priceEnv && !process.env[plan.priceEnv] ? plan.priceEnv : null
+        }];
+      })
+    ),
+    requiredEnvironmentVariables: [
+      "STRIPE_SECRET_KEY",
+      "STRIPE_WEBHOOK_SECRET",
+      "STRIPE_MONTHLY_MEMBERSHIP_PRICE_ID",
+      "STRIPE_ANNUAL_MEMBERSHIP_PRICE_ID",
+      "STRIPE_PREMIUM_MENTORSHIP_PRICE_ID",
+      "STRIPE_CERTIFICATION_FEE_PRICE_ID",
+      "NEXT_PUBLIC_SITE_URL"
+    ]
+  });
+}
+
 export async function POST(request: Request) {
   try {
     const { planId, couponCode } = await request.json();
@@ -57,7 +80,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Missing ${plan.priceEnv}.` }, { status: 500 });
     }
 
-    const origin = new URL(request.url).origin;
+    const origin = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
     const params = new URLSearchParams();
     params.append("mode", plan.mode);
     params.append("line_items[0][price]", priceId);

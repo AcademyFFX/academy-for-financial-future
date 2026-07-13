@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { BadgeDollarSign, CheckCircle2, CreditCard, Crown, FileText, ShieldCheck, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
@@ -31,12 +31,16 @@ type BillingHistoryRow = {
   created_at: string;
 };
 
+type PlanConfig = Record<string, { configured: boolean; missingEnv: string | null }>;
+
 export default function BillingPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [membership, setMembership] = useState<Membership | null>(null);
   const [history, setHistory] = useState<BillingHistoryRow[]>([]);
   const [couponCode, setCouponCode] = useState("");
+  const [planConfig, setPlanConfig] = useState<PlanConfig>({});
+  const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
   const [processingPlan, setProcessingPlan] = useState("");
   const [message, setMessage] = useState("Choose an academy membership or manage your billing profile.");
@@ -53,9 +57,10 @@ export default function BillingPage() {
     return fallback;
   }
 
-  useEffect(() => {
-    async function loadBilling() {
-      try {
+  const loadBilling = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
         const supabase = createClient();
         const {
           data: { user: currentUser }
@@ -68,28 +73,73 @@ export default function BillingPage() {
 
         setUser(currentUser);
 
-        const [membershipResult, historyResult] = await Promise.all([
+        const [membershipResult, historyResult, configResponse] = await Promise.all([
           supabase.from("student_memberships").select("*").eq("student_id", currentUser.id).maybeSingle(),
-          supabase.from("billing_history").select("*").eq("student_id", currentUser.id).order("created_at", { ascending: false }).limit(20)
+          supabase.from("billing_history").select("*").eq("student_id", currentUser.id).order("created_at", { ascending: false }).limit(20),
+          fetch("/api/billing/checkout")
         ]);
 
         if (membershipResult.error) throw membershipResult.error;
         if (historyResult.error) throw historyResult.error;
+        if (configResponse.ok) {
+          const config = await configResponse.json();
+          setPlanConfig(config.plans ?? {});
+        }
 
-        setMembership(membershipResult.data as Membership | null);
+        let resolvedMembership = membershipResult.data as Membership | null;
+
+        if (!resolvedMembership) {
+          const { data: application } = await supabase
+            .from("student_applications")
+            .select("membership_plan,email")
+            .or(`auth_user_id.eq.${currentUser.id},email.eq.${currentUser.email ?? ""}`)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          const selectedPlan = typeof application?.membership_plan === "string" && application.membership_plan.trim()
+            ? application.membership_plan
+            : "Free Trial";
+          const fallback = {
+            student_id: currentUser.id,
+            student_email: currentUser.email ?? application?.email ?? "",
+            selected_membership_plan: selectedPlan,
+            active_membership_plan: "Free Trial",
+            membership_plan: "Free Trial",
+            payment_status: selectedPlan === "Free Trial" ? "Not Required" : "Pending",
+            membership_status: selectedPlan === "Free Trial" ? "Free Trial" : "Pending Payment",
+            account_status: "Active",
+            updated_at: new Date().toISOString()
+          };
+          const fallbackResult = await supabase.from("student_memberships").upsert(fallback, { onConflict: "student_id" }).select("*").single();
+          if (fallbackResult.error) throw fallbackResult.error;
+          resolvedMembership = fallbackResult.data as Membership;
+          setMessage("No membership record was found. A controlled membership record was created for your authenticated account.");
+        } else {
+          setMessage("Billing center ready.");
+        }
+
+        setMembership(resolvedMembership);
         setHistory((historyResult.data ?? []) as BillingHistoryRow[]);
-        setMessage("Billing center ready.");
       } catch (error) {
-        setMessage(getErrorMessage(error, "Run the billing migration to enable memberships and billing history."));
-      } finally {
-        setLoading(false);
-      }
+        const errorMessage = getErrorMessage(error, "Run the billing migration to enable memberships and billing history.");
+        setLoadError(errorMessage);
+        setMessage(`Billing load failed: ${errorMessage}`);
+    } finally {
+      setLoading(false);
     }
-
-    loadBilling();
   }, [router]);
 
+  useEffect(() => {
+    loadBilling();
+  }, [loadBilling]);
+
   async function startCheckout(planId: string) {
+    const missingEnv = planConfig[planId]?.missingEnv;
+    if (missingEnv) {
+      setMessage(`Administrator configuration needed before checkout can start: ${missingEnv}.`);
+      return;
+    }
+
     setProcessingPlan(planId);
     setMessage("Preparing secure Stripe checkout...");
 
@@ -141,6 +191,11 @@ export default function BillingPage() {
       <Section>
         <SectionInner className="grid gap-8">
           <p className="text-sm text-ink/72">{message}</p>
+          {loadError ? (
+            <button className="w-fit border border-gold-500/35 px-5 py-3 text-sm font-semibold text-gold-300" type="button" onClick={loadBilling}>
+              Retry Billing Sync
+            </button>
+          ) : null}
 
           <section className="grid gap-5 lg:grid-cols-[380px_1fr]">
             <aside className="terminal-panel h-fit p-6">
@@ -153,11 +208,11 @@ export default function BillingPage() {
               ) : (
                 <div className="mt-5 grid gap-4">
                   <StatusLine label="Student" value={user?.email ?? "Student"} />
-                  <StatusLine label="Selected Plan" value={membership?.selected_membership_plan ?? "No membership selected"} />
-                  <StatusLine label="Current Plan" value={membership?.active_membership_plan ?? membership?.membership_plan ?? "Free Trial"} />
-                  <StatusLine label="Payment Status" value={membership?.payment_status ?? "Pending"} />
-                  <StatusLine label="Membership Status" value={membership?.membership_status ?? "Pending Payment"} />
-                  <StatusLine label="Account" value={membership?.account_status ?? "Restricted"} />
+                  <StatusLine label="Selected Plan" value={membership?.selected_membership_plan ?? "Membership record unavailable"} />
+                  <StatusLine label="Current Plan" value={membership?.active_membership_plan ?? membership?.membership_plan ?? "Membership record unavailable"} />
+                  <StatusLine label="Payment Status" value={membership?.payment_status ?? "Membership record unavailable"} />
+                  <StatusLine label="Membership Status" value={membership?.membership_status ?? "Membership record unavailable"} />
+                  <StatusLine label="Account Status" value={membership?.account_status ?? "Membership record unavailable"} />
                   {activeUntil ? <StatusLine label="Access Through" value={activeUntil} /> : null}
                   <button
                     className="mt-2 inline-flex items-center justify-center gap-2 border border-gold-500/45 px-5 py-3 font-semibold text-gold-300 disabled:opacity-60"
@@ -189,7 +244,11 @@ export default function BillingPage() {
           </section>
 
           <section className="grid gap-5 xl:grid-cols-5">
-            {billingPlans.map((plan) => (
+            {billingPlans.map((plan) => {
+              const config = planConfig[plan.id];
+              const missingEnv = config?.missingEnv;
+              const disabled = processingPlan === plan.id || Boolean(missingEnv);
+              return (
               <article key={plan.id} className={`terminal-panel flex flex-col p-5 ${plan.highlighted ? "shadow-gold" : ""}`}>
                 <div className="flex items-center justify-between gap-3">
                   <Crown className="text-gold-300" size={22} />
@@ -209,13 +268,14 @@ export default function BillingPage() {
                 <button
                   className="mt-6 inline-flex items-center justify-center gap-2 bg-gold-500 px-4 py-3 text-sm font-bold text-navy-950 disabled:opacity-60"
                   type="button"
-                  disabled={processingPlan === plan.id}
+                  disabled={disabled}
                   onClick={() => startCheckout(plan.id)}
                 >
                   <Sparkles size={16} /> {processingPlan === plan.id ? "Preparing..." : plan.mode === "trial" ? "Start Trial" : "Select Plan"}
                 </button>
+                {missingEnv ? <p className="mt-3 text-xs leading-5 text-amber-200">Administrator configuration needed: {missingEnv}</p> : null}
               </article>
-            ))}
+            );})}
           </section>
 
           <section className="terminal-panel overflow-hidden">

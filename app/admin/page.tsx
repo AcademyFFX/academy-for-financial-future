@@ -794,34 +794,39 @@ export default function AdminPage() {
   }
 
   async function upgradeMembership(student: Student) {
-    const nextPlan = membershipDrafts[student.id] ?? student.membershipPlan;
+    const nextPlan = membershipDrafts[student.id] ?? student.selectedMembershipPlan;
     setMessage(`Updating selected membership for ${student.name}...`);
 
     try {
+      if (!student.authUserId) throw new Error("Student is missing auth_user_id; selected membership cannot be updated.");
+      const nextPaymentStatus = student.paymentStatus === "Paid" ? "Paid" : nextPlan === "Free Trial" ? "Not Required" : "Pending";
+      const nextMembershipStatus = student.membershipStatus === "Active" && student.paymentStatus === "Paid" ? "Active" : nextPlan === "Free Trial" ? "Free Trial" : "Pending Payment";
       const supabase = createClient();
-      if (student.authUserId) {
-        await supabase.from("student_memberships").upsert({
-          student_id: student.authUserId,
-          student_email: student.email,
+      const result = await supabase
+        .from("student_memberships")
+        .update({
           selected_membership_plan: nextPlan,
-          active_membership_plan: student.membershipPlan || "Free Trial",
-          membership_plan: student.membershipPlan || "Free Trial",
-          payment_status: nextPlan === "Free Trial" ? "Not Required" : "Pending",
-          membership_status: nextPlan === "Free Trial" ? "Free Trial" : "Pending Payment",
-          account_status: nextPlan === "Free Trial" ? "Trial" : "Pending",
+          payment_status: nextPaymentStatus,
+          membership_status: nextMembershipStatus,
           updated_at: new Date().toISOString()
-        }, { onConflict: "student_id" });
+        })
+        .eq("student_id", student.authUserId)
+        .select("*");
+
+      if (result.error) throw result.error;
+      if (!result.data?.length) {
+        throw new Error("No existing membership row was updated.");
       }
 
       setStudents((current) => current.map((item) => (item.id === student.id ? {
         ...item,
         selectedMembershipPlan: nextPlan,
-        paymentStatus: nextPlan === "Free Trial" ? "Not Required" : "Pending",
-        membershipStatus: nextPlan === "Free Trial" ? "Free Trial" : "Pending Payment"
+        paymentStatus: nextPaymentStatus,
+        membershipStatus: nextMembershipStatus
       } : item)));
-      setMessage(`Selected membership updated for ${student.name}. Payment status is ${nextPlan === "Free Trial" ? "Not Required" : "Pending"}.`);
+      setMessage(`Selected membership updated for ${student.name}. Payment status is ${nextPaymentStatus}.`);
     } catch (error) {
-      setMessage(getErrorMessage(error, "Unable to update selected membership."));
+      setMessage(`Save Selected Plan failed: ${getErrorMessage(error, "Unable to update selected membership.")}`);
     }
   }
 
@@ -838,27 +843,40 @@ export default function AdminPage() {
 
     try {
       if (!student.authUserId) throw new Error("Student is missing auth_user_id; membership cannot be updated.");
+      if (action === "activate" && selectedPlan !== "Free Trial" && student.paymentStatus !== "Paid") {
+        throw new Error("Paid plans require payment_status = Paid before activation.");
+      }
 
-      const payload = {
+      const now = new Date().toISOString();
+      const nextPaymentStatus = action === "mark-paid" || action === "activate"
+        ? selectedPlan === "Free Trial" ? "Not Required" : "Paid"
+        : student.paymentStatus;
+      const nextMembershipStatus = action === "mark-paid" ? "Pending Activation" : action === "activate" ? selectedPlan === "Free Trial" ? "Free Trial" : "Active" : action === "suspend" ? "Suspended" : "Cancelled";
+      const nextAccountStatus = action === "activate" ? "Active" : action === "suspend" ? "Restricted" : action === "cancel" ? "Cancelled" : student.membershipStatus === "Active" ? "Active" : "Active";
+
+      const payload: Record<string, string> = {
         selected_membership_plan: selectedPlan,
         active_membership_plan: activePlan,
         membership_plan: activePlan,
-        payment_status: action === "mark-paid" || action === "activate" ? "Paid" : student.paymentStatus,
-        membership_status: action === "mark-paid" ? "Pending Activation" : action === "activate" ? "Active" : action === "suspend" ? "Suspended" : "Cancelled",
-        account_status: action === "activate" ? "Active" : action === "suspend" ? "Restricted" : action === "cancel" ? "Cancelled" : "Pending",
-        updated_at: new Date().toISOString()
+        payment_status: nextPaymentStatus,
+        membership_status: nextMembershipStatus,
+        account_status: nextAccountStatus,
+        updated_at: now
       };
+      if (action === "mark-paid") payload.paid_at = now;
+      if (action === "activate") payload.activated_at = now;
+      if (action === "suspend") payload.suspended_at = now;
+      if (action === "cancel") payload.cancelled_at = now;
 
       const supabase = createClient();
       const membershipResult = await supabase
         .from("student_memberships")
-        .upsert({
-          student_id: student.authUserId,
-          student_email: student.email,
-          ...payload
-        }, { onConflict: "student_id" });
+        .update(payload)
+        .eq("student_id", student.authUserId)
+        .select("*");
 
       if (membershipResult.error) throw membershipResult.error;
+      if (!membershipResult.data?.length) throw new Error("No existing membership row was updated.");
 
       if (action === "activate" || action === "cancel") {
         const studentResult = await supabase

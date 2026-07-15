@@ -20,6 +20,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DragEvent, FormEvent, ReactNode } from "react";
 import { ProgressBar } from "@/components/progress";
+import { serializeQuizQuestion } from "@/lib/quiz-question";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -266,7 +267,12 @@ export function CourseUploadCenter() {
   function addQuestion() {
     const options = questionForm.options.split(",").map((option) => option.trim()).filter(Boolean);
     if (!questionForm.prompt || options.length < 2 || !questionForm.correctAnswer) { setMessage("Add a question, at least two options, and the correct answer."); return; }
-    setQuestions((current) => [...current, { prompt: questionForm.prompt, options, correctAnswer: questionForm.correctAnswer }]);
+    setQuestions((current) => [...current, serializeQuizQuestion({
+      questionText: questionForm.prompt,
+      options,
+      correctAnswer: questionForm.correctAnswer,
+      points: 1
+    })]);
     setQuestionForm({ prompt: "", options: "", correctAnswer: "" });
   }
 
@@ -285,7 +291,7 @@ export function CourseUploadCenter() {
       file_type: "Quiz",
       storage_path: storagePath,
       public_url: "#",
-      signed_url: JSON.stringify({ questions, passingScore: Number(quizForm.passingScore) }),
+      signed_url: JSON.stringify({ quizTitle: quizForm.title, quiz_title: quizForm.title, questions, passingScore: Number(quizForm.passingScore) }),
       mime_type: "application/json",
       file_size: JSON.stringify(questions).length,
       asset_status: "Published",

@@ -3,6 +3,7 @@
 import { BookOpen, ClipboardCheck, FilePlus2, Layers3, Save, Video } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
+import { normalizeQuizQuestionRecord, serializeQuizQuestion } from "@/lib/quiz-question";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -31,10 +32,12 @@ type SavedQuizQuestion = {
   lessonId: string;
   quizTitle: string;
   prompt: string;
+  questionText: string;
   options: string[];
   correctAnswer: string;
   points: number;
   status: string;
+  raw: unknown;
 };
 type PublishedQuizSummary = {
   key: string;
@@ -43,6 +46,7 @@ type PublishedQuizSummary = {
   quizTitle: string;
   questionCount: number;
   points: number;
+  questions: SavedQuizQuestion[];
 };
 
 const adminEmail = "acafffx@gmail.com";
@@ -74,14 +78,17 @@ function parseQuizPayload(row: DbRow) {
   const raw = value(row, ["signed_url"]);
   if (!raw || raw === "#") return null;
   try {
-    const parsed = JSON.parse(raw) as { quizTitle?: string; prompt?: string; options?: string[]; correctAnswer?: string; points?: number; question?: { prompt?: string; options?: string[]; correctAnswer?: string; points?: number } };
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
     const question = parsed.question ?? parsed;
+    const normalized = normalizeQuizQuestionRecord(question, value(row, ["asset_title"]));
     return {
-      quizTitle: parsed.quizTitle || value(row, ["asset_title"]),
-      prompt: question.prompt ?? "",
-      options: Array.isArray(question.options) ? question.options.map(String) : [],
-      correctAnswer: question.correctAnswer ?? "",
-      points: Number(question.points ?? parsed.points ?? 1)
+      quizTitle: value(parsed, ["quizTitle", "quiz_title"], value(row, ["asset_title"])),
+      prompt: normalized.prompt,
+      questionText: normalized.questionText,
+      options: normalized.options,
+      correctAnswer: normalized.correctAnswer,
+      points: normalized.points,
+      raw: question
     };
   } catch {
     return null;
@@ -195,39 +202,57 @@ export function AdminLmsManager() {
       </option>
     )), [quizForm.courseId, lessons]);
 
-  const savedQuestions = useMemo<SavedQuizQuestion[]>(() => courseAssets
-    .filter((asset) => value(asset, ["asset_type"]) === "Quiz")
-    .map((asset) => {
+  const savedQuestions = useMemo<SavedQuizQuestion[]>(() => {
+    const questions: SavedQuizQuestion[] = [];
+    for (const asset of courseAssets.filter((row) => value(row, ["asset_type"]) === "Quiz")) {
       const payload = parseQuizPayload(asset);
-      if (!payload) return null;
-      return {
+      if (!payload) continue;
+      questions.push({
         id: value(asset, ["id"]),
         courseId: value(asset, ["course_id"]),
         moduleId: value(asset, ["module_id"]),
         lessonId: value(asset, ["lesson_id"]),
         quizTitle: payload.quizTitle,
         prompt: payload.prompt,
+        questionText: payload.questionText,
         options: payload.options,
         correctAnswer: payload.correctAnswer,
         points: payload.points || 1,
-        status: value(asset, ["asset_status"], "Published")
-      };
-    })
-    .filter((question): question is SavedQuizQuestion => Boolean(question))
-    .filter((question) => !quizForm.courseId || question.courseId === quizForm.courseId)
-    .filter((question) => !quizForm.lessonId || question.lessonId === quizForm.lessonId)
-    .filter((question) => !quizForm.title || question.quizTitle.toLowerCase() === quizForm.title.toLowerCase())
-    .sort((a, b) => a.id.localeCompare(b.id)), [courseAssets, quizForm.courseId, quizForm.lessonId, quizForm.title]);
+        status: value(asset, ["asset_status"], "Published"),
+        raw: payload.raw
+      });
+    }
+
+    return questions
+      .filter((question) => !quizForm.courseId || question.courseId === quizForm.courseId)
+      .filter((question) => !quizForm.lessonId || question.lessonId === quizForm.lessonId)
+      .filter((question) => !quizForm.title || question.quizTitle.toLowerCase() === quizForm.title.toLowerCase())
+      .sort((a, b) => a.id.localeCompare(b.id));
+  }, [courseAssets, quizForm.courseId, quizForm.lessonId, quizForm.title]);
   const publishedQuizzes = useMemo<PublishedQuizSummary[]>(() => {
     const summaries = new Map<string, PublishedQuizSummary>();
-    for (const question of courseAssets.filter((asset) => value(asset, ["asset_type"]) === "Quiz" && value(asset, ["asset_status"], "Published") === "Published")) {
-      const payload = parseQuizPayload(question);
-      if (!payload?.prompt) continue;
+    for (const asset of courseAssets.filter((row) => value(row, ["asset_type"]) === "Quiz" && value(row, ["asset_status"], "Published") === "Published")) {
+      const payload = parseQuizPayload(asset);
+      if (!payload?.questionText) continue;
       const quizTitle = payload.quizTitle;
-      const courseId = value(question, ["course_id"]);
-      const lessonId = value(question, ["lesson_id"]);
+      const courseId = value(asset, ["course_id"]);
+      const lessonId = value(asset, ["lesson_id"]);
       const key = `${courseId}::${lessonId}::${quizTitle}`;
-      const current = summaries.get(key) ?? { key, courseId, lessonId, quizTitle, questionCount: 0, points: 0 };
+      const current = summaries.get(key) ?? { key, courseId, lessonId, quizTitle, questionCount: 0, points: 0, questions: [] };
+      current.questions.push({
+        id: value(asset, ["id"]),
+        courseId,
+        moduleId: value(asset, ["module_id"]),
+        lessonId,
+        quizTitle,
+        prompt: payload.prompt,
+        questionText: payload.questionText,
+        options: payload.options,
+        correctAnswer: payload.correctAnswer,
+        points: payload.points || 1,
+        status: "Published",
+        raw: payload.raw
+      });
       current.questionCount += 1;
       current.points += payload.points || 1;
       summaries.set(key, current);
@@ -348,13 +373,12 @@ export function AdminLmsManager() {
       return;
     }
     const moduleTitle = value(modules.find((moduleRow) => value(moduleRow, ["module_id", "id"]) === quizForm.moduleId), ["module_title", "asset_title"]);
-    const questionData = {
-      quizTitle: quizForm.title.trim(),
-      prompt: quizForm.prompt.trim(),
+    const questionData = serializeQuizQuestion({
+      questionText: quizForm.prompt.trim(),
       options: validation.options,
       correctAnswer: quizForm.correctAnswer.trim(),
       points: Number(quizForm.points || 1)
-    };
+    });
     const payload = {
       course_id: Number(quizForm.courseId),
       module_id: quizForm.moduleId ? Number(quizForm.moduleId) : null,
@@ -532,7 +556,18 @@ export function AdminLmsManager() {
             <p className="text-xs uppercase tracking-[.18em] text-gold-300">Preview Quiz</p>
             <h3 className="mt-2 font-semibold text-white">{quizForm.title || "Untitled Quiz"}</h3>
             <div className="mt-3 grid gap-3">
-              {savedQuestions.length ? savedQuestions.map((question, index) => <article key={question.id} className="border border-gold-500/15 p-3 text-sm text-ink/72"><p className="font-semibold text-white">{index + 1}. {question.prompt}</p><p className="mt-2">Options: {question.options.join(", ")}</p><p className="mt-1 text-gold-300">Correct: {question.correctAnswer} · {question.points} point{question.points === 1 ? "" : "s"}</p></article>) : <p className="text-sm text-ink/65">No saved questions match this quiz yet.</p>}
+              {matchingQuizQuestions.length ? matchingQuizQuestions.map((questionRecord, index) => {
+                console.log(questionRecord);
+                return (
+                  <article key={questionRecord.id} className="border border-gold-500/15 p-3 text-sm text-ink/72">
+                    <p className="font-semibold text-white">{index + 1}. {questionRecord.questionText || questionRecord.prompt}</p>
+                    <div className="mt-2 grid gap-1">
+                      {questionRecord.options.map((option, optionIndex) => <p key={`${questionRecord.id}-preview-option-${optionIndex}`}>Option {String.fromCharCode(65 + optionIndex)}: {option}</p>)}
+                    </div>
+                    <p className="mt-1 text-gold-300">Correct answer: {questionRecord.correctAnswer} · {questionRecord.points} point{questionRecord.points === 1 ? "" : "s"}</p>
+                  </article>
+                );
+              }) : <p className="text-sm text-ink/65">No saved questions match this quiz yet.</p>}
             </div>
           </div> : null}
         </FormPanel>
@@ -547,30 +582,35 @@ export function AdminLmsManager() {
           <p className="text-sm font-semibold text-gold-300">Questions created: {savedQuestions.length} of 20</p>
         </div>
         <div className="mt-4 grid gap-3">
-          {savedQuestions.length === 0 ? <p className="text-sm text-ink/68">No saved questions match the selected course, lesson, and quiz title.</p> : savedQuestions.map((question, index) => (
-            <article key={question.id} className="border border-gold-500/18 bg-navy-950 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[.18em] text-gold-300">Question {index + 1} · {question.points} point{question.points === 1 ? "" : "s"} · {question.status}</p>
-                  <h3 className="mt-2 font-semibold text-white">{question.prompt}</h3>
-                  <p className="mt-2 text-sm text-ink/68">Options: {question.options.join(", ")}</p>
-                  <p className="mt-1 text-sm text-gold-300">Correct answer: {question.correctAnswer}</p>
-                  {question.status === "Published" ? <p className="mt-3 inline-flex border border-emerald-400/40 bg-emerald-500/10 px-2 py-1 text-xs font-semibold uppercase tracking-[.14em] text-emerald-200">Published</p> : <p className="mt-3 inline-flex border border-gold-500/30 bg-gold-500/10 px-2 py-1 text-xs font-semibold uppercase tracking-[.14em] text-gold-200">Draft</p>}
+          {savedQuestions.length === 0 ? <p className="text-sm text-ink/68">No saved questions match the selected course, lesson, and quiz title.</p> : savedQuestions.map((questionRecord, index) => {
+            console.log(questionRecord);
+            return (
+              <article key={questionRecord.id} className="border border-gold-500/18 bg-navy-950 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[.18em] text-gold-300">Question {index + 1} · {questionRecord.points} point{questionRecord.points === 1 ? "" : "s"} · {questionRecord.status}</p>
+                    <h3 className="mt-2 font-semibold text-white">{questionRecord.questionText || questionRecord.prompt}</h3>
+                    <div className="mt-2 grid gap-1 text-sm text-ink/68">
+                      {questionRecord.options.map((option, optionIndex) => <p key={`${questionRecord.id}-option-${optionIndex}`}>Option {String.fromCharCode(65 + optionIndex)}: {option}</p>)}
+                    </div>
+                    <p className="mt-1 text-sm text-gold-300">Correct answer: {questionRecord.correctAnswer}</p>
+                    {questionRecord.status === "Published" ? <p className="mt-3 inline-flex border border-emerald-400/40 bg-emerald-500/10 px-2 py-1 text-xs font-semibold uppercase tracking-[.14em] text-emerald-200">Published</p> : <p className="mt-3 inline-flex border border-gold-500/30 bg-gold-500/10 px-2 py-1 text-xs font-semibold uppercase tracking-[.14em] text-gold-200">Draft</p>}
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <button className="border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300" type="button" onClick={() => editQuestion(questionRecord)}>Edit</button>
+                    <button className="border border-red-400/40 px-3 py-2 text-xs font-semibold text-red-200" type="button" onClick={() => deleteQuestion(questionRecord.id)}>Delete</button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 gap-2">
-                  <button className="border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300" type="button" onClick={() => editQuestion(question)}>Edit</button>
-                  <button className="border border-red-400/40 px-3 py-2 text-xs font-semibold text-red-200" type="button" onClick={() => deleteQuestion(question.id)}>Delete</button>
-                </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       </section>
 
       <section className="terminal-panel p-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[.18em] text-gold-300">Published Quiz Library</p>
+            <p className="text-xs uppercase tracking-[.18em] text-gold-300">Published Question Bank</p>
             <h2 className="mt-2 text-xl font-semibold text-white">Published Quizzes</h2>
           </div>
           <p className="text-sm font-semibold text-emerald-200">{publishedQuizzes.length} published</p>
@@ -585,6 +625,20 @@ export function AdminLmsManager() {
                 <h3 className="mt-2 font-semibold text-white">{quiz.quizTitle}</h3>
                 <p className="mt-2 text-sm text-ink/68">{value(course, ["course_name", "title"], "Course")} {lesson ? `· ${value(lesson, ["lesson_title", "title"])}` : ""}</p>
                 <p className="mt-1 text-sm text-gold-300">{quiz.questionCount} question{quiz.questionCount === 1 ? "" : "s"} · {quiz.points} point{quiz.points === 1 ? "" : "s"}</p>
+                <div className="mt-4 grid gap-3">
+                  {quiz.questions.map((questionRecord, index) => {
+                    console.log(questionRecord);
+                    return (
+                      <div key={`${quiz.key}-${questionRecord.id}`} className="border border-gold-500/15 p-3 text-sm text-ink/72">
+                        <p className="font-semibold text-white">Question {index + 1}: {questionRecord.questionText || questionRecord.prompt}</p>
+                        <div className="mt-2 grid gap-1">
+                          {questionRecord.options.map((option, optionIndex) => <p key={`${questionRecord.id}-published-option-${optionIndex}`}>Option {String.fromCharCode(65 + optionIndex)}: {option}</p>)}
+                        </div>
+                        <p className="mt-1 text-gold-300">Correct answer: {questionRecord.correctAnswer}</p>
+                      </div>
+                    );
+                  })}
+                </div>
               </article>
             );
           })}

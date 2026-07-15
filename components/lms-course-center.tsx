@@ -5,10 +5,11 @@ import { Award, BookOpen, CheckCircle2, Download, FileText, PlayCircle, ShieldCh
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProgressBar } from "@/components/progress";
 import { hasFullCourseAccess } from "@/lib/membership-state";
+import { normalizeQuizQuestionRecord, type NormalizedQuizQuestion } from "@/lib/quiz-question";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
-type QuizQuestion = { prompt: string; options: string[]; correctAnswer: string; points?: number };
+type QuizQuestion = NormalizedQuizQuestion;
 
 function value(row: DbRow | undefined, keys: string[], fallback = "") {
   if (!row) return fallback;
@@ -25,7 +26,7 @@ function idOf(row: DbRow) {
 
 function questionsOf(row: DbRow): QuizQuestion[] {
   const questions = row.questions;
-  return Array.isArray(questions) ? questions as QuizQuestion[] : [];
+  return Array.isArray(questions) ? questions.map((question) => normalizeQuizQuestionRecord(question)) : [];
 }
 
 function safeSlug(text: string) {
@@ -36,7 +37,7 @@ function parseAssetPayload(row: DbRow) {
   const raw = value(row, ["signed_url"]);
   if (!raw || raw === "#") return null;
   try {
-    return JSON.parse(raw) as { quizTitle?: string; question?: QuizQuestion; questions?: QuizQuestion[]; instructions?: string; dueDays?: number };
+    return JSON.parse(raw) as { quizTitle?: string; quiz_title?: string; question?: unknown; questions?: unknown[]; instructions?: string; dueDays?: number; passingScore?: number };
   } catch {
     return null;
   }
@@ -46,22 +47,26 @@ function quizRowsFromAssets(assets: DbRow[]) {
   const grouped = new Map<string, DbRow>();
   for (const asset of assets.filter((row) => value(row, ["asset_type"]) === "Quiz" && value(row, ["asset_status"], "Published") === "Published")) {
     const payload = parseAssetPayload(asset);
-    const question = payload?.question ?? payload?.questions?.[0];
-    if (!question?.prompt) continue;
-    const quizTitle = payload?.quizTitle || value(asset, ["asset_title"], "AFF Quiz");
+    const sourceQuestions = Array.isArray(payload?.questions) ? payload.questions : [payload?.question ?? asset];
+    const normalizedQuestions = sourceQuestions
+      .map((question) => normalizeQuizQuestionRecord(question, value(asset, ["asset_title"])))
+      .filter((question) => question.questionText);
+    if (!normalizedQuestions.length) continue;
+    const quizTitle = payload?.quizTitle || payload?.quiz_title || value(asset, ["asset_title"], "AFF Quiz");
     const key = `${value(asset, ["course_id"])}::${value(asset, ["lesson_id"])}::${quizTitle}`;
     const existing = grouped.get(key);
+    const points = normalizedQuestions.reduce((total, question) => total + Number(question.points ?? 1), 0);
     if (existing) {
-      existing.questions = [...questionsOf(existing), question];
-      existing.file_size = Number(value(existing, ["file_size"], "0")) + Number(question.points ?? 1);
+      existing.questions = [...questionsOf(existing), ...normalizedQuestions];
+      existing.file_size = Number(value(existing, ["file_size"], "0")) + points;
     } else {
       grouped.set(key, {
         ...asset,
         id: key,
         quiz_title: quizTitle,
-        passing_score: "80",
-        questions: [question],
-        file_size: Number(question.points ?? 1)
+        passing_score: String(payload?.passingScore ?? "80"),
+        questions: normalizedQuestions,
+        file_size: points
       });
     }
   }
@@ -293,7 +298,18 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
                 })}</div></section>;
               })}
               {homework.filter((item) => value(item, ["course_id"]) === courseId).map((item) => { const payload = parseAssetPayload(item); return <article key={idOf(item)} className="bg-navy-950 p-5"><p className="text-xs uppercase tracking-[.2em] text-gold-300">Homework · Due in {String(payload?.dueDays ?? "7")} days</p><h4 className="mt-2 font-semibold text-white">{value(item, ["asset_title"])}</h4><p className="mt-2 text-sm text-ink/68">{payload?.instructions ?? ""}</p>{value(item, ["url", "public_url"]) && value(item, ["url", "public_url"]) !== "#" ? <a className="mt-3 inline-flex items-center gap-2 text-sm text-gold-300" href={value(item, ["url", "public_url"])}><FileText size={15} /> Assignment File</a> : null}</article>; })}
-              {quizzes.filter((quiz) => value(quiz, ["course_id"]) === courseId).map((quiz) => <article key={idOf(quiz)} className="bg-navy-950 p-5"><p className="text-xs uppercase tracking-[.2em] text-gold-300">Quiz · Passing {value(quiz, ["passing_score"], "80")}% · {value(quiz, ["file_size"], "1")} points</p><h4 className="mt-2 font-semibold text-white">{value(quiz, ["quiz_title"])}</h4><div className="mt-4 grid gap-4">{questionsOf(quiz).map((question, index) => <label key={`${idOf(quiz)}-${index}`} className="grid gap-2 text-sm text-ink/72"><span>{question.prompt} <span className="text-gold-300">({question.points ?? 1} point{Number(question.points ?? 1) === 1 ? "" : "s"})</span></span><select className="field" value={answers[idOf(quiz)]?.[index] ?? ""} onChange={(event) => setAnswers((current) => ({ ...current, [idOf(quiz)]: { ...(current[idOf(quiz)] ?? {}), [index]: event.target.value } }))}><option value="">Select answer</option>{question.options.map((option) => <option key={option}>{option}</option>)}</select></label>)}</div><button className="mt-4 bg-gold-500 px-4 py-2 text-sm font-bold text-navy-950" onClick={() => submitQuiz(course, quiz)}>Submit Quiz</button></article>)}
+              {quizzes.filter((quiz) => value(quiz, ["course_id"]) === courseId).map((quiz) => <article key={idOf(quiz)} className="bg-navy-950 p-5"><p className="text-xs uppercase tracking-[.2em] text-gold-300">Quiz · Passing {value(quiz, ["passing_score"], "80")}% · {value(quiz, ["file_size"], "1")} points</p><h4 className="mt-2 font-semibold text-white">{value(quiz, ["quiz_title"])}</h4><div className="mt-4 grid gap-4">{questionsOf(quiz).map((questionRecord, index) => {
+                console.log(questionRecord);
+                return (
+                  <label key={`${idOf(quiz)}-${index}`} className="grid gap-2 text-sm text-ink/72">
+                    <span>{questionRecord.questionText || questionRecord.prompt} <span className="text-gold-300">({questionRecord.points ?? 1} point{Number(questionRecord.points ?? 1) === 1 ? "" : "s"})</span></span>
+                    <div className="grid gap-1 text-xs text-ink/60">
+                      {questionRecord.options.map((option, optionIndex) => <span key={`${idOf(quiz)}-${index}-display-${optionIndex}`}>Option {String.fromCharCode(65 + optionIndex)}: {option}</span>)}
+                    </div>
+                    <select className="field" value={answers[idOf(quiz)]?.[index] ?? ""} onChange={(event) => setAnswers((current) => ({ ...current, [idOf(quiz)]: { ...(current[idOf(quiz)] ?? {}), [index]: event.target.value } }))}><option value="">Select answer</option>{questionRecord.options.map((option) => <option key={option}>{option}</option>)}</select>
+                  </label>
+                );
+              })}</div><button className="mt-4 bg-gold-500 px-4 py-2 text-sm font-bold text-navy-950" onClick={() => submitQuiz(course, quiz)}>Submit Quiz</button></article>)}
             </div> : null}
           </article>
         );

@@ -3,8 +3,9 @@ import type { ResponseCookie } from "next/dist/compiled/@edge-runtime/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasFullCourseAccess } from "./lib/membership-state";
 
-const protectedRoutes = ["/student-dashboard", "/dashboard", "/aff-os", "/mobile-super-app", "/alumni-network", "/publishing-house", "/economic-intelligence", "/investment-bank", "/governance-school", "/think-tank", "/university", "/courses", "/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/trading-simulator", "/trading-floor", "/social-network", "/tv-studio", "/executive-command-center", "/accreditation", "/career-center", "/research-institute", "/events", "/global-network", "/campus-expansion", "/endowment-fund", "/foundation", "/civic-leadership", "/digital-civilization", "/human-flourishing", "/marketplace", "/billing", "/messages", "/ai-coach", "/voice-coach", "/chart-analyst", "/admin"];
+const protectedRoutes = ["/student-dashboard", "/dashboard", "/aff-os", "/mobile-super-app", "/alumni-network", "/publishing-house", "/economic-intelligence", "/investment-bank", "/governance-school", "/think-tank", "/university", "/courses", "/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/trading-simulator", "/trading-floor", "/social-network", "/tv-studio", "/executive-command-center", "/accreditation", "/career-center", "/research-institute", "/events", "/global-network", "/campus-expansion", "/endowment-fund", "/foundation", "/civic-leadership", "/digital-civilization", "/human-flourishing", "/marketplace", "/billing", "/messages", "/ai-coach", "/voice-coach", "/chart-analyst", "/admin", "/student-directory"];
 const enrollmentRestrictedRoutes = ["/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/trading-simulator", "/social-network", "/tv-studio"];
+const adminOnlyRoutes = ["/admin", "/student-directory"];
 
 export async function middleware(request: NextRequest) {
   const isProtected = protectedRoutes.some((route) => request.nextUrl.pathname.startsWith(route));
@@ -63,11 +64,22 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (request.nextUrl.pathname.startsWith("/admin") && user.email?.toLowerCase() !== "acafffx@gmail.com") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/student-dashboard";
-    url.searchParams.set("error", "admin_access_required");
-    return NextResponse.redirect(url);
+  const requiresAdmin = adminOnlyRoutes.some((route) => request.nextUrl.pathname.startsWith(route));
+  if (requiresAdmin) {
+    const { data: adminRecord, error: adminError } = await supabase
+      .from("aff_admin_users")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle();
+
+    if (adminError || !adminRecord) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/access-denied";
+      url.searchParams.set("from", request.nextUrl.pathname.replace(/^\//, ""));
+      return NextResponse.redirect(url);
+    }
   }
 
   const requiresEnrollment = enrollmentRestrictedRoutes.some((route) => request.nextUrl.pathname.startsWith(route));
@@ -92,5 +104,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/student-dashboard/:path*", "/dashboard/:path*", "/aff-os/:path*", "/mobile-super-app/:path*", "/alumni-network/:path*", "/publishing-house/:path*", "/economic-intelligence/:path*", "/investment-bank/:path*", "/governance-school/:path*", "/think-tank/:path*", "/university/:path*", "/courses/:path*", "/journal/:path*", "/assignments/:path*", "/exams/:path*", "/certificates/:path*", "/live-trading-room/:path*", "/trading-simulator/:path*", "/trading-floor/:path*", "/social-network/:path*", "/tv-studio/:path*", "/executive-command-center/:path*", "/accreditation/:path*", "/career-center/:path*", "/research-institute/:path*", "/events/:path*", "/global-network/:path*", "/campus-expansion/:path*", "/endowment-fund/:path*", "/foundation/:path*", "/civic-leadership/:path*", "/digital-civilization/:path*", "/human-flourishing/:path*", "/marketplace/:path*", "/billing/:path*", "/messages/:path*", "/ai-coach/:path*", "/voice-coach/:path*", "/chart-analyst/:path*", "/admin/:path*"]
+  matcher: ["/student-dashboard/:path*", "/dashboard/:path*", "/aff-os/:path*", "/mobile-super-app/:path*", "/alumni-network/:path*", "/publishing-house/:path*", "/economic-intelligence/:path*", "/investment-bank/:path*", "/governance-school/:path*", "/think-tank/:path*", "/university/:path*", "/courses/:path*", "/journal/:path*", "/assignments/:path*", "/exams/:path*", "/certificates/:path*", "/live-trading-room/:path*", "/trading-simulator/:path*", "/trading-floor/:path*", "/social-network/:path*", "/tv-studio/:path*", "/executive-command-center/:path*", "/accreditation/:path*", "/career-center/:path*", "/research-institute/:path*", "/events/:path*", "/global-network/:path*", "/campus-expansion/:path*", "/endowment-fund/:path*", "/foundation/:path*", "/civic-leadership/:path*", "/digital-civilization/:path*", "/human-flourishing/:path*", "/marketplace/:path*", "/billing/:path*", "/messages/:path*", "/ai-coach/:path*", "/voice-coach/:path*", "/chart-analyst/:path*", "/admin/:path*", "/student-directory/:path*"]
 };

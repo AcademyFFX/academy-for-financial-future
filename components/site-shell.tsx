@@ -19,16 +19,17 @@ type NavGroup = {
   items: NavLink[];
 };
 
-const adminEmail = "acafffx@gmail.com";
 const studentAuthLinks: NavLink[] = [
   { href: "/student-dashboard", label: "Dashboard" },
   { href: "/courses", label: "My Courses" },
-  { href: "/student-profile", label: "Profile" }
+  { href: "/student-profile", label: "Profile" },
+  { href: "/billing", label: "Billing" }
 ];
 const adminAuthLinks: NavLink[] = [
   { href: "/admin", label: "Admin Dashboard" },
   { href: "/student-directory", label: "Student Directory" },
-  { href: "/admin/course-management", label: "Course Manager" }
+  { href: "/admin/course-management", label: "Course Manager" },
+  { href: "/admin/enrollment", label: "Enrollment Review" }
 ];
 
 const navGroups: NavGroup[] = [
@@ -50,7 +51,6 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/student-dashboard", label: "Student Dashboard" },
       { href: "/student-profile", label: "Student Profile" },
-      { href: "/student-directory", label: "Student Directory" },
       { href: "/mobile-app", label: "Mobile App" },
       { href: "/aff-os", label: "AFF OS" },
       { href: "/assignments", label: "Assignments" },
@@ -111,9 +111,9 @@ export function SiteShell({ children }: { children: ReactNode }) {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [authUser, setAuthUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [welcomeName, setWelcomeName] = useState("");
   const headerRef = useRef<HTMLElement | null>(null);
-  const isAdmin = authUser?.email?.toLowerCase() === adminEmail;
   const authenticatedLinks = isAdmin ? adminAuthLinks : studentAuthLinks;
   const displayName = welcomeName || resolveUserName(authUser);
 
@@ -132,11 +132,20 @@ export function SiteShell({ children }: { children: ReactNode }) {
       setUnreadCount(0);
       if (!user) {
         setWelcomeName("");
+        setIsAdmin(false);
         return;
       }
 
       const fallbackName = resolveUserName(user);
       setWelcomeName(fallbackName);
+
+      try {
+        const adminResponse = await fetch("/api/auth/admin-status", { cache: "no-store" });
+        const adminStatus = await adminResponse.json().catch(() => ({ isAdmin: false }));
+        if (mounted) setIsAdmin(Boolean(adminResponse.ok && adminStatus.isAdmin));
+      } catch {
+        if (mounted) setIsAdmin(false);
+      }
 
       try {
         const email = user.email ?? "";

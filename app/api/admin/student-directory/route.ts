@@ -1,0 +1,75 @@
+import { NextResponse } from "next/server";
+import { isAffAdminUser } from "@/lib/admin-server";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+
+export const dynamic = "force-dynamic";
+
+type DbRow = Record<string, unknown>;
+
+function value(row: DbRow, key: string, fallback = "") {
+  const current = row[key];
+  return current === null || current === undefined ? fallback : String(current);
+}
+
+export async function GET() {
+  const serverSupabase = createSupabaseServerClient();
+  const {
+    data: { user }
+  } = await serverSupabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  }
+
+  const isAdmin = await isAffAdminUser(user.id);
+  if (!isAdmin) {
+    return NextResponse.json({ error: "AFF administrator access required." }, { status: 403 });
+  }
+
+  const adminSupabase = createSupabaseAdminClient();
+  const { data: students, error: studentsError } = await adminSupabase
+    .from("students")
+    .select("id, auth_user_id, student_id, full_name, email, enrollment_date, certification_level, status, profile_photo_url, membership_plan")
+    .ilike("status", "Active")
+    .order("full_name", { ascending: true });
+
+  if (studentsError) {
+    return NextResponse.json({ error: studentsError.message, code: studentsError.code }, { status: 500 });
+  }
+
+  const authIds = ((students ?? []) as DbRow[])
+    .map((student) => value(student, "auth_user_id"))
+    .filter(Boolean);
+
+  const { data: memberships, error: membershipsError } = authIds.length
+    ? await adminSupabase
+        .from("student_memberships")
+        .select("student_id, active_membership_plan, membership_status, payment_status, account_status")
+        .in("student_id", authIds)
+    : { data: [], error: null };
+
+  if (membershipsError) {
+    return NextResponse.json({ error: membershipsError.message, code: membershipsError.code }, { status: 500 });
+  }
+
+  const membershipByAuthId = new Map(((memberships ?? []) as DbRow[]).map((membership) => [value(membership, "student_id"), membership]));
+  const directory = ((students ?? []) as DbRow[]).map((student) => {
+    const membership = membershipByAuthId.get(value(student, "auth_user_id")) ?? {};
+    return {
+      student_id: value(student, "student_id", "Pending"),
+      full_name: value(student, "full_name", "AFF Student"),
+      email: value(student, "email"),
+      enrollment_date: value(student, "enrollment_date", "Not recorded"),
+      certification_level: value(student, "certification_level", "Academy for Financial Future"),
+      enrollment_status: value(student, "status", "Active"),
+      active_membership_plan: value(membership, "active_membership_plan", value(student, "membership_plan", "Free Trial")),
+      membership_status: value(membership, "membership_status", "Pending Payment"),
+      payment_status: value(membership, "payment_status"),
+      account_status: value(membership, "account_status"),
+      profile_photo_url: value(student, "profile_photo_url")
+    };
+  });
+
+  return NextResponse.json({ students: directory });
+}

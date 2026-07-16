@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { createClient } from "@/lib/supabase";
 
 export function PasswordResetPanel() {
@@ -100,12 +101,12 @@ export function PasswordResetPanel() {
     setSubmitting(true);
     try {
       const supabase = createClient();
-      const { data, error } = await supabase.auth.updateUser({ password });
+      const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
       setMessage("Password updated successfully. Redirecting to your AFF dashboard...");
       setPassword("");
       setConfirmPassword("");
-      const destination = data.user.email?.toLowerCase() === "acafffx@gmail.com" ? "/admin" : "/student-dashboard";
+      const destination = await getClientAdminStatus() ? "/admin" : "/student-dashboard";
       router.replace(destination);
       router.refresh();
     } catch (error) {

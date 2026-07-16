@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { billingPlans } from "@/lib/billing";
 import { buildPendingPaymentState, membershipStateToDbPayload, normalizeMembershipState } from "@/lib/membership-state";
 import { createClient } from "@/lib/supabase";
@@ -73,6 +74,10 @@ export default function BillingPage() {
         }
 
         setUser(currentUser);
+        if (await getClientAdminStatus()) {
+          router.replace("/admin");
+          return;
+        }
 
         const [membershipResult, historyResult, configResponse] = await Promise.all([
           supabase.from("student_memberships").select("*").eq("student_id", currentUser.id).maybeSingle(),

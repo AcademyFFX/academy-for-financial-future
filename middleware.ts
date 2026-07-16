@@ -6,6 +6,13 @@ import { hasFullCourseAccess } from "./lib/membership-state";
 const protectedRoutes = ["/student-dashboard", "/dashboard", "/aff-os", "/mobile-super-app", "/alumni-network", "/publishing-house", "/economic-intelligence", "/investment-bank", "/governance-school", "/think-tank", "/university", "/courses", "/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/trading-simulator", "/trading-floor", "/social-network", "/tv-studio", "/executive-command-center", "/accreditation", "/career-center", "/research-institute", "/events", "/global-network", "/campus-expansion", "/endowment-fund", "/foundation", "/civic-leadership", "/digital-civilization", "/human-flourishing", "/marketplace", "/billing", "/messages", "/ai-coach", "/voice-coach", "/chart-analyst", "/admin", "/student-directory"];
 const enrollmentRestrictedRoutes = ["/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/trading-simulator", "/social-network", "/tv-studio"];
 const adminOnlyRoutes = ["/admin", "/student-directory"];
+const adminRedirects: Array<[string, string]> = [
+  ["/student-dashboard", "/admin"],
+  ["/dashboard", "/admin"],
+  ["/student-profile", "/admin/profile"],
+  ["/billing", "/admin"],
+  ["/courses", "/admin/course-management"]
+];
 
 export async function middleware(request: NextRequest) {
   const isProtected = protectedRoutes.some((route) => request.nextUrl.pathname.startsWith(route));
@@ -64,17 +71,26 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const requiresAdmin = adminOnlyRoutes.some((route) => request.nextUrl.pathname.startsWith(route));
-  if (requiresAdmin) {
-    const { data: adminRecord, error: adminError } = await supabase
+  const { data: adminRecord, error: adminError } = await supabase
       .from("aff_admin_users")
       .select("id")
       .eq("user_id", user.id)
       .eq("is_active", true)
       .limit(1)
       .maybeSingle();
+  const isAdmin = !adminError && Boolean(adminRecord);
 
-    if (adminError || !adminRecord) {
+  const adminRedirect = adminRedirects.find(([route]) => request.nextUrl.pathname === route || request.nextUrl.pathname.startsWith(`${route}/`));
+  if (isAdmin && adminRedirect) {
+    const url = request.nextUrl.clone();
+    url.pathname = adminRedirect[1];
+    url.searchParams.delete("next");
+    return NextResponse.redirect(url);
+  }
+
+  const requiresAdmin = adminOnlyRoutes.some((route) => request.nextUrl.pathname === route || request.nextUrl.pathname.startsWith(`${route}/`));
+  if (requiresAdmin) {
+    if (!isAdmin) {
       const url = request.nextUrl.clone();
       url.pathname = "/access-denied";
       url.searchParams.set("from", request.nextUrl.pathname.replace(/^\//, ""));
@@ -83,7 +99,7 @@ export async function middleware(request: NextRequest) {
   }
 
   const requiresEnrollment = enrollmentRestrictedRoutes.some((route) => request.nextUrl.pathname.startsWith(route));
-  if (requiresEnrollment && user.email?.toLowerCase() !== "acafffx@gmail.com") {
+  if (requiresEnrollment && !isAdmin) {
     const { data, error } = await supabase
       .from("student_memberships")
       .select("selected_membership_plan, active_membership_plan, membership_plan, account_status, payment_status, membership_status, trial_ends_at, current_period_end")
@@ -104,5 +120,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/student-dashboard/:path*", "/dashboard/:path*", "/aff-os/:path*", "/mobile-super-app/:path*", "/alumni-network/:path*", "/publishing-house/:path*", "/economic-intelligence/:path*", "/investment-bank/:path*", "/governance-school/:path*", "/think-tank/:path*", "/university/:path*", "/courses/:path*", "/journal/:path*", "/assignments/:path*", "/exams/:path*", "/certificates/:path*", "/live-trading-room/:path*", "/trading-simulator/:path*", "/trading-floor/:path*", "/social-network/:path*", "/tv-studio/:path*", "/executive-command-center/:path*", "/accreditation/:path*", "/career-center/:path*", "/research-institute/:path*", "/events/:path*", "/global-network/:path*", "/campus-expansion/:path*", "/endowment-fund/:path*", "/foundation/:path*", "/civic-leadership/:path*", "/digital-civilization/:path*", "/human-flourishing/:path*", "/marketplace/:path*", "/billing/:path*", "/messages/:path*", "/ai-coach/:path*", "/voice-coach/:path*", "/chart-analyst/:path*", "/admin", "/admin/:path*", "/student-directory", "/student-directory/:path*"]
+  matcher: ["/student-dashboard", "/student-dashboard/:path*", "/dashboard", "/dashboard/:path*", "/student-profile", "/student-profile/:path*", "/aff-os/:path*", "/mobile-super-app/:path*", "/alumni-network/:path*", "/publishing-house/:path*", "/economic-intelligence/:path*", "/investment-bank/:path*", "/governance-school/:path*", "/think-tank/:path*", "/university/:path*", "/courses", "/courses/:path*", "/journal/:path*", "/assignments/:path*", "/exams/:path*", "/certificates/:path*", "/live-trading-room/:path*", "/trading-simulator/:path*", "/trading-floor/:path*", "/social-network/:path*", "/tv-studio/:path*", "/executive-command-center/:path*", "/accreditation/:path*", "/career-center/:path*", "/research-institute/:path*", "/events/:path*", "/global-network/:path*", "/campus-expansion/:path*", "/endowment-fund/:path*", "/foundation/:path*", "/civic-leadership/:path*", "/digital-civilization/:path*", "/human-flourishing/:path*", "/marketplace/:path*", "/billing", "/billing/:path*", "/messages/:path*", "/ai-coach/:path*", "/voice-coach/:path*", "/chart-analyst/:path*", "/admin", "/admin/:path*", "/student-directory", "/student-directory/:path*"]
 };

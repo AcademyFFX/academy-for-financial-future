@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Award, BookOpen, CheckCircle2, Download, FileText, PlayCircle, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProgressBar } from "@/components/progress";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { hasFullCourseAccess } from "@/lib/membership-state";
 import { normalizeQuizQuestionRecord, type NormalizedQuizQuestion } from "@/lib/quiz-question";
 import { createClient } from "@/lib/supabase";
@@ -74,6 +76,7 @@ function quizRowsFromAssets(assets: DbRow[]) {
 }
 
 export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
+  const router = useRouter();
   const [userId, setUserId] = useState("");
   const [studentDbId, setStudentDbId] = useState("");
   const [studentName, setStudentName] = useState("AFF Student");
@@ -96,6 +99,10 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         setMessage("Sign in to enroll and track course progress.");
+        return;
+      }
+      if (await getClientAdminStatus()) {
+        router.replace("/admin/course-management");
         return;
       }
       setUserId(user.id);
@@ -141,7 +148,7 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Run the AFF LMS migration to enable managed courses.");
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => { loadLms(); }, [loadLms]);
 

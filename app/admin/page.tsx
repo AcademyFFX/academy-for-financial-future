@@ -114,7 +114,8 @@ const adminDestinations = [
   { href: "/admin/course-management/upload-center", label: "Upload Center", detail: "Video, PDF, PowerPoint, assignments", icon: UploadCloud },
   { href: "/admin/enrollment", label: "Enrollment", detail: "Applications and student status", icon: UserCheck },
   { href: "/admin/certifications", label: "Certifications", detail: "Exams, grading, and credentials", icon: ShieldCheck },
-  { href: "/admin/live-classroom", label: "Live Classroom", detail: "Classes, attendance, and recordings", icon: RadioTower }
+  { href: "/admin/live-classroom", label: "Live Classroom", detail: "Classes, attendance, and recordings", icon: RadioTower },
+  { href: "/admin/profile", label: "Admin Profile", detail: "Administrator identity and permissions", icon: UserCheck }
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {

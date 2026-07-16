@@ -5,6 +5,7 @@ import { Award, BookOpenCheck, CalendarCheck, Camera, ChartCandlestick, Clipboar
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { normalizeMembershipState } from "@/lib/membership-state";
 import { createClient } from "@/lib/supabase";
 
@@ -72,6 +73,11 @@ export default function StudentProfilePage() {
 
       if (!user) {
         router.replace("/login");
+        return;
+      }
+
+      if (await getClientAdminStatus()) {
+        router.replace("/admin/profile");
         return;
       }
 

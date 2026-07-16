@@ -27,9 +27,10 @@ const studentAuthLinks: NavLink[] = [
 ];
 const adminAuthLinks: NavLink[] = [
   { href: "/admin", label: "Admin Dashboard" },
-  { href: "/student-directory", label: "Student Directory" },
+  { href: "/student-directory", label: "Student Management" },
   { href: "/admin/course-management", label: "Course Manager" },
-  { href: "/admin/enrollment", label: "Enrollment Review" }
+  { href: "/admin/course-management/upload-center", label: "Upload Center" },
+  { href: "/admin/profile", label: "Admin Profile" }
 ];
 
 const navGroups: NavGroup[] = [

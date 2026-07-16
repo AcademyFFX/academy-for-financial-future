@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "NEXT_PRIVATE_BUILD_WORKER=0 next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:role-access": "node scripts/role-access-tests.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { createClient } from "@/lib/supabase";
 
 export function AuthPanel({ mode }: { mode: "login" | "register" }) {
@@ -26,9 +27,10 @@ export function AuthPanel({ mode }: { mode: "login" | "register" }) {
       if (result.error) setMessage(result.error.message);
       else if (mode === "login") {
         const requestedPath = new URLSearchParams(window.location.search).get("next");
-        const destination = requestedPath?.startsWith("/") && !requestedPath.startsWith("//")
+        const isAdmin = await getClientAdminStatus();
+        const destination = requestedPath?.startsWith("/") && !requestedPath.startsWith("//") && !isAdmin
           ? requestedPath
-          : email.trim().toLowerCase() === "acafffx@gmail.com" ? "/admin" : "/student-dashboard";
+          : isAdmin ? "/admin" : "/student-dashboard";
         router.replace(destination);
         router.refresh();
       }

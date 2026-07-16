@@ -48,6 +48,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { AFFInstitutionalLogo } from "@/components/aff-logo";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { normalizeMembershipState } from "@/lib/membership-state";
 import { createClient } from "@/lib/supabase";
 import { DashboardCourseSummary } from "@/components/dashboard-course-summary";
@@ -318,6 +319,10 @@ export default function StudentDashboardPage() {
       }
 
       setUser(currentUser);
+      if (await getClientAdminStatus()) {
+        router.replace("/admin");
+        return;
+      }
       const authName = resolveAuthFullName(currentUser);
       const authEmail = currentUser.email ?? "";
 

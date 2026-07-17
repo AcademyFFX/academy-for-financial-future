@@ -118,7 +118,7 @@ const adminDestinations = [
   { href: "/admin/certifications", label: "Certifications", detail: "Exams, grading, and credentials", icon: ShieldCheck },
   { href: "/admin/live-classroom", label: "Live Classroom", detail: "Classes, attendance, and recordings", icon: RadioTower },
   { href: "/admin/profile", label: "Admin Profile", detail: "Administrator identity and permissions", icon: UserCheck },
-  { href: "/executive-command-center", label: "Command Center", detail: "Executive analytics and intelligence", icon: Bot }
+  { href: "/admin/command-center", label: "Command Center", detail: "Executive analytics and intelligence", icon: Bot }
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -1007,7 +1007,7 @@ export default function AdminPage() {
                 </div>
               </nav>
 
-              <Link href="/executive-command-center" className="terminal-panel flex flex-col gap-3 p-5 transition hover:border-gold-400/60 sm:flex-row sm:items-center sm:justify-between">
+              <Link href="/admin/command-center" className="terminal-panel flex flex-col gap-3 p-5 transition hover:border-gold-400/60 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-[.22em] text-gold-300">Executive Analytics</p>
                   <h2 className="mt-2 text-2xl font-semibold text-white">Open AFF Command Center</h2>

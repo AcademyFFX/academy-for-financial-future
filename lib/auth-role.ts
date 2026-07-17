@@ -8,7 +8,7 @@ export type AdminRoleRow = {
 
 export function resolveAffRole(userId?: string | null, adminRow?: AdminRoleRow | null): AffRole {
   if (!userId) return "anonymous";
-  return adminRow?.is_active === true && adminRow.role === "administrator" ? "administrator" : "student";
+  return adminRow?.is_active === true && ["administrator", "admin"].includes(String(adminRow.role ?? "").toLowerCase()) ? "administrator" : "student";
 }
 
 export function isAdministratorRole(role: AffRole) {

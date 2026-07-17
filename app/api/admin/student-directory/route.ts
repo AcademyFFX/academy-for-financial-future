@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isAffAdminUser } from "@/lib/admin-server";
+import { getAffAdminStatus } from "@/lib/admin-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -22,9 +22,13 @@ export async function GET() {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
-  const isAdmin = await isAffAdminUser(user.id);
-  if (!isAdmin) {
-    return NextResponse.json({ error: "AFF administrator access required." }, { status: 403 });
+  const adminStatus = await getAffAdminStatus();
+  if (!adminStatus.authorized) {
+    return NextResponse.json({
+      error: "AFF administrator access required.",
+      reason: adminStatus.reason,
+      code: adminStatus.error
+    }, { status: 403 });
   }
 
   const adminSupabase = createSupabaseAdminClient();

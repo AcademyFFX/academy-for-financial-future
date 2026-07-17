@@ -3,7 +3,7 @@ import { Mail, ShieldCheck, UserRound } from "lucide-react";
 import { AdminRouteAudit } from "@/components/admin-route-audit";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
-import { getAffAdminRole } from "@/lib/admin-server";
+import { getAffAdminStatus } from "@/lib/admin-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -29,8 +29,9 @@ export default async function AdminProfilePage() {
     redirect("/login?next=/admin/profile");
   }
 
-  const adminRole = await getAffAdminRole(user.id);
-  if (!adminRole) {
+  const adminStatus = await getAffAdminStatus();
+  const adminRole = adminStatus.adminRow;
+  if (!adminStatus.authorized || !adminRole) {
     redirect("/access-denied?from=admin-profile");
   }
 

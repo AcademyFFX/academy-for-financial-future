@@ -1,16 +1,19 @@
 import { createServerClient } from "@supabase/ssr";
 import type { ResponseCookie } from "next/dist/compiled/@edge-runtime/cookies";
 import { NextResponse, type NextRequest } from "next/server";
+import { getAffAdminStatusFromSupabase } from "./lib/admin-status";
 import { hasFullCourseAccess } from "./lib/membership-state";
 
-const protectedRoutes = ["/login", "/student-dashboard", "/dashboard", "/aff-os", "/mobile-super-app", "/alumni-network", "/publishing-house", "/economic-intelligence", "/investment-bank", "/governance-school", "/think-tank", "/university", "/courses", "/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/trading-simulator", "/trading-floor", "/social-network", "/tv-studio", "/executive-command-center", "/accreditation", "/career-center", "/research-institute", "/events", "/global-network", "/campus-expansion", "/endowment-fund", "/foundation", "/civic-leadership", "/digital-civilization", "/human-flourishing", "/marketplace", "/billing", "/messages", "/ai-coach", "/voice-coach", "/chart-analyst", "/admin", "/student-directory"];
+const protectedRoutes = ["/login", "/student-dashboard", "/dashboard", "/profile", "/student-profile", "/my-courses", "/aff-os", "/mobile-super-app", "/alumni-network", "/publishing-house", "/economic-intelligence", "/investment-bank", "/governance-school", "/think-tank", "/university", "/courses", "/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/trading-simulator", "/trading-floor", "/social-network", "/tv-studio", "/executive-command-center", "/accreditation", "/career-center", "/research-institute", "/events", "/global-network", "/campus-expansion", "/endowment-fund", "/foundation", "/civic-leadership", "/digital-civilization", "/human-flourishing", "/marketplace", "/billing", "/messages", "/ai-coach", "/voice-coach", "/chart-analyst", "/admin", "/student-directory"];
 const enrollmentRestrictedRoutes = ["/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/trading-simulator", "/social-network", "/tv-studio"];
 const adminOnlyRoutes = ["/admin", "/student-directory", "/executive-command-center"];
 const adminRedirects: Array<[string, string]> = [
   ["/student-dashboard", "/admin"],
   ["/dashboard", "/admin"],
+  ["/profile", "/admin/profile"],
   ["/student-profile", "/admin/profile"],
   ["/billing", "/admin"],
+  ["/my-courses", "/admin/course-management"],
   ["/courses", "/admin/course-management"]
 ];
 
@@ -74,15 +77,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const { data: adminRecord, error: adminError } = await supabase
-      .from("aff_admin_users")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("role", "administrator")
-      .eq("is_active", true)
-      .limit(1)
-      .maybeSingle();
-  const isAdmin = !adminError && Boolean(adminRecord);
+  const adminStatus = await getAffAdminStatusFromSupabase(supabase);
+  const isAdmin = adminStatus.authorized;
 
   if (isLoginRoute && isAdmin) {
     const url = request.nextUrl.clone();
@@ -131,5 +127,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/login", "/student-dashboard", "/student-dashboard/:path*", "/dashboard", "/dashboard/:path*", "/student-profile", "/student-profile/:path*", "/aff-os/:path*", "/mobile-super-app/:path*", "/alumni-network/:path*", "/publishing-house/:path*", "/economic-intelligence/:path*", "/investment-bank/:path*", "/governance-school/:path*", "/think-tank/:path*", "/university/:path*", "/courses", "/courses/:path*", "/journal/:path*", "/assignments/:path*", "/exams/:path*", "/certificates/:path*", "/live-trading-room/:path*", "/trading-simulator/:path*", "/trading-floor/:path*", "/social-network/:path*", "/tv-studio/:path*", "/executive-command-center/:path*", "/accreditation/:path*", "/career-center/:path*", "/research-institute/:path*", "/events/:path*", "/global-network/:path*", "/campus-expansion/:path*", "/endowment-fund/:path*", "/foundation/:path*", "/civic-leadership/:path*", "/digital-civilization/:path*", "/human-flourishing/:path*", "/marketplace/:path*", "/billing", "/billing/:path*", "/messages/:path*", "/ai-coach/:path*", "/voice-coach/:path*", "/chart-analyst/:path*", "/admin", "/admin/:path*", "/student-directory", "/student-directory/:path*"]
+  matcher: ["/login", "/student-dashboard", "/student-dashboard/:path*", "/dashboard", "/dashboard/:path*", "/profile", "/profile/:path*", "/student-profile", "/student-profile/:path*", "/my-courses", "/my-courses/:path*", "/aff-os/:path*", "/mobile-super-app/:path*", "/alumni-network/:path*", "/publishing-house/:path*", "/economic-intelligence/:path*", "/investment-bank/:path*", "/governance-school/:path*", "/think-tank/:path*", "/university/:path*", "/courses", "/courses/:path*", "/journal/:path*", "/assignments/:path*", "/exams/:path*", "/certificates/:path*", "/live-trading-room/:path*", "/trading-simulator/:path*", "/trading-floor/:path*", "/social-network/:path*", "/tv-studio/:path*", "/executive-command-center/:path*", "/accreditation/:path*", "/career-center/:path*", "/research-institute/:path*", "/events/:path*", "/global-network/:path*", "/campus-expansion/:path*", "/endowment-fund/:path*", "/foundation/:path*", "/civic-leadership/:path*", "/digital-civilization/:path*", "/human-flourishing/:path*", "/marketplace/:path*", "/billing", "/billing/:path*", "/messages/:path*", "/ai-coach/:path*", "/voice-coach/:path*", "/chart-analyst/:path*", "/admin", "/admin/:path*", "/student-directory", "/student-directory/:path*"]
 };

@@ -13,6 +13,7 @@ const siteShell = read("components/site-shell.tsx");
 const directoryRoute = read("app/api/admin/student-directory/route.ts");
 const adminProfile = read("app/admin/profile/page.tsx");
 const authRole = read("lib/auth-role.ts");
+const adminStatus = read("lib/admin-status.ts");
 const adminServer = read("lib/admin-server.ts");
 const executiveCommandCenter = read("app/executive-command-center/page.tsx");
 const adminCommandCenter = read("app/admin/command-center/page.tsx");
@@ -27,21 +28,26 @@ assert.match(middleware, /\["\/student-dashboard", "\/admin"\]/, "administrator 
 assert.match(middleware, /\["\/student-profile", "\/admin\/profile"\]/, "administrator /student-profile must redirect to /admin/profile");
 assert.match(middleware, /\["\/billing", "\/admin"\]/, "administrator /billing must redirect to /admin");
 assert.match(middleware, /\["\/courses", "\/admin\/course-management"\]/, "administrator /courses must redirect to /admin/course-management");
-assert.match(middleware, /\.from\("aff_admin_users"\)/, "middleware must resolve administrator role from aff_admin_users");
-assert.match(middleware, /\.eq\("role", "administrator"\)/, "middleware admin authorization must require administrator role");
-assert.match(middleware, /\.eq\("is_active", true\)/, "middleware admin authorization must require active admin row");
+assert.match(middleware, /\["\/profile", "\/admin\/profile"\]/, "administrator /profile must redirect to /admin/profile");
+assert.match(middleware, /\["\/my-courses", "\/admin\/course-management"\]/, "administrator /my-courses must redirect to /admin/course-management");
+assert.match(middleware, /getAffAdminStatusFromSupabase\(supabase\)/, "middleware must resolve administrator role through the shared admin status helper");
+assert.match(adminStatus, /\.from\("aff_admin_users"\)/, "shared admin status helper must query aff_admin_users");
+assert.match(adminStatus, /\.eq\("user_id", userId\)/, "shared admin status helper must match by user_id first");
+assert.match(adminStatus, /\.eq\("email", email\)/, "shared admin status helper must optionally match by normalized email");
+assert.match(adminStatus, /new Set\(\["administrator", "admin"\]\)/, "shared admin status helper must accept administrator or admin roles");
+assert.match(adminStatus, /params\.row\?\.is_active === true/, "shared admin status helper must require active admin row");
 assert.match(middleware, /const isLoginRoute = request\.nextUrl\.pathname === "\/login"/, "middleware must make /login role-aware");
 assert.match(middleware, /isLoginRoute && isAdmin[\s\S]*url\.pathname = "\/admin"/, "authenticated admins opening /login must redirect to /admin");
 assert.match(middleware, /const adminOnlyRoutes = \["\/admin", "\/student-directory", "\/executive-command-center"\]/, "executive command center must be admin-only");
-assert.match(adminServer, /\.eq\("role", "administrator"\)/, "server admin helper must require administrator role");
-assert.match(adminServer, /\.eq\("is_active", true\)/, "server admin helper must require active admin row");
-assert.match(authRole, /adminRow\?\.is_active === true && adminRow\.role === "administrator"/, "shared role resolver must require role and active status");
+assert.match(adminServer, /export async function getAffAdminStatus\(\)/, "server admin helper must export getAffAdminStatus");
+assert.match(adminServer, /getAffAdminStatusFromSupabase\(createSupabaseServerClient\(\)\)/, "server admin helper must use the cookie-aware Supabase server client");
+assert.match(authRole, /\["administrator", "admin"\]\.includes/, "legacy role resolver must accept administrator/admin roles");
 
 assert.match(studentDashboard, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin"\)/, "student dashboard must redirect admins before student data fallbacks");
 assert.match(studentProfile, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin\/profile"\)/, "student profile must redirect admins before student data fallbacks");
 assert.match(billing, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin"\)/, "billing must redirect admins before membership fallback creation");
 
-assert.match(directoryRoute, /isAffAdminUser\(user\.id\)/, "student directory API must check server-side admin role");
+assert.match(directoryRoute, /getAffAdminStatus\(\)/, "student directory API must check server-side admin status");
 assert.match(directoryRoute, /status: 403/, "student directory API must deny non-admin requests");
 
 const adminLinksBlock = siteShell.match(/const adminAuthLinks:[\s\S]*?];/)?.[0] ?? "";
@@ -50,7 +56,7 @@ assert.doesNotMatch(adminLinksBlock, /label: "Billing"/, "admin auth links must 
 assert.doesNotMatch(adminLinksBlock, /label: "My Courses"/, "admin auth links must not expose student courses");
 assert.match(siteShell, /label: "Admin Profile"/, "admin navigation must include Admin Profile");
 assert.match(siteShell, /href: "\/admin\/command-center", label: "Command Center"/, "admin navigation must include Admin Command Center");
-assert.match(adminProfile, /getAffAdminRole\(user\.id\)/, "admin profile must read administrator role from aff_admin_users");
+assert.match(adminProfile, /getAffAdminStatus\(\)/, "admin profile must read administrator role through getAffAdminStatus");
 assert.match(executiveCommandCenter, /getClientAdminStatus\(\)/, "executive command center must use aff_admin_users admin status");
 
 for (const [route, source] of [

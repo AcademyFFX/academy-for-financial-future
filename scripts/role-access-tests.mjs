@@ -15,6 +15,9 @@ const adminProfile = read("app/admin/profile/page.tsx");
 const authRole = read("lib/auth-role.ts");
 const adminStatus = read("lib/admin-status.ts");
 const adminServer = read("lib/admin-server.ts");
+const adminClient = read("lib/admin-client.ts");
+const adminStatusRoute = read("app/api/auth/admin-status/route.ts");
+const adminRouteAudit = read("components/admin-route-audit.tsx");
 const executiveCommandCenter = read("app/executive-command-center/page.tsx");
 const adminCommandCenter = read("app/admin/command-center/page.tsx");
 const adminCertifications = read("app/admin/certifications/page.tsx");
@@ -51,6 +54,10 @@ assert.match(directoryRoute, /getAffAdminStatus\(\)/, "student directory API mus
 assert.match(directoryRoute, /status: 403/, "student directory API must deny non-admin requests");
 
 const adminLinksBlock = siteShell.match(/const adminAuthLinks:[\s\S]*?];/)?.[0] ?? "";
+const publicHeaderBlock = siteShell.slice(
+  siteShell.indexOf('<div className="mx-auto flex max-w-[1440px]'),
+  siteShell.indexOf("{mobileOpen ?")
+);
 assert.doesNotMatch(adminLinksBlock, /label: "Profile"/, "admin auth links must not use student profile label");
 assert.doesNotMatch(adminLinksBlock, /label: "Billing"/, "admin auth links must not expose student billing");
 assert.doesNotMatch(adminLinksBlock, /label: "My Courses"/, "admin auth links must not expose student courses");
@@ -62,8 +69,17 @@ assert.match(siteShell, /function AdminNavigationRow/, "administrator navigation
 assert.match(siteShell, /AFF ADMINISTRATION/, "dedicated administrator row must be clearly labeled");
 assert.match(siteShell, /Admin Menu/, "administrator navigation must provide a mobile menu");
 assert.match(siteShell, /<AdminNavigationRow[\s\S]*links=\{adminAuthLinks\}/, "administrator links must be passed only to the second row");
+assert.match(siteShell, /<AuthNavigation[\s\S]*links=\{authenticatedLinks\}/, "public header auth controls must use the non-admin authenticated links set");
+assert.doesNotMatch(publicHeaderBlock, /adminAuthLinks|AdminNavigationRow/, "administrator navigation must not render inside the public top header row");
 assert.match(adminProfile, /getAffAdminStatus\(\)/, "admin profile must read administrator role through getAffAdminStatus");
 assert.match(executiveCommandCenter, /getClientAdminStatus\(\)/, "executive command center must use aff_admin_users admin status");
+assert.match(adminRouteAudit, /process\.env\.NODE_ENV === "production"/, "admin route audit must detect production mode");
+assert.match(adminRouteAudit, /Admin dashboard ready\./, "production admin route audit must show only simple success status");
+assert.match(adminRouteAudit, /Administrator authorization required\./, "production admin route audit must show only simple denial status");
+assert.match(adminRouteAudit, /process\.env\.NODE_ENV !== "production"[\s\S]*console\.info/, "verbose admin route diagnostics must be development-only");
+assert.doesNotMatch(adminRouteAudit, /Supabase config/, "admin route audit must not render Supabase configuration details");
+assert.doesNotMatch(adminStatusRoute, /SUPABASE_SERVICE_ROLE_KEY|hasSupabaseServiceRoleKey|supabaseHost|environment/, "admin status API must not expose Supabase environment configuration");
+assert.doesNotMatch(adminClient, /hasSupabaseServiceRoleKey|supabaseHost|environment/, "browser admin client must not carry Supabase environment configuration");
 
 for (const [route, source] of [
   ["/admin/certifications", adminCertifications],

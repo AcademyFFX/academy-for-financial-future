@@ -16,12 +16,6 @@ export type ClientAdminSession = {
     userIdLookup: string;
     emailLookup: string;
   };
-  environment: {
-    supabaseHost: string;
-    hasSupabaseUrl: boolean;
-    hasSupabaseAnonKey: boolean;
-    hasSupabaseServiceRoleKey: boolean;
-  };
 };
 
 export async function getClientAdminSession(): Promise<ClientAdminSession> {
@@ -45,12 +39,6 @@ export async function getClientAdminSession(): Promise<ClientAdminSession> {
       lookupDiagnostics: {
         userIdLookup: typeof payload?.lookupDiagnostics?.userIdLookup === "string" ? payload.lookupDiagnostics.userIdLookup : "",
         emailLookup: typeof payload?.lookupDiagnostics?.emailLookup === "string" ? payload.lookupDiagnostics.emailLookup : ""
-      },
-      environment: {
-        supabaseHost: typeof payload?.environment?.supabaseHost === "string" ? payload.environment.supabaseHost : "",
-        hasSupabaseUrl: Boolean(payload?.environment?.hasSupabaseUrl),
-        hasSupabaseAnonKey: Boolean(payload?.environment?.hasSupabaseAnonKey),
-        hasSupabaseServiceRoleKey: Boolean(payload?.environment?.hasSupabaseServiceRoleKey)
       }
     };
   } catch {
@@ -71,12 +59,6 @@ export async function getClientAdminSession(): Promise<ClientAdminSession> {
       lookupDiagnostics: {
         userIdLookup: "Admin status request failed.",
         emailLookup: "Admin status request failed."
-      },
-      environment: {
-        supabaseHost: "",
-        hasSupabaseUrl: false,
-        hasSupabaseAnonKey: false,
-        hasSupabaseServiceRoleKey: false
       }
     };
   }

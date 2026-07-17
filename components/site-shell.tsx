@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, Menu, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { AFFStandardLogo } from "@/components/aff-logo";
 import { getClientAdminSession } from "@/lib/admin-client";
@@ -116,42 +116,15 @@ export function SiteShell({ children }: { children: ReactNode }) {
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [welcomeName, setWelcomeName] = useState("");
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const headerRef = useRef<HTMLElement | null>(null);
-  const authenticatedLinks = isAdmin ? adminAuthLinks : studentAuthLinks;
-  const visibleNavGroups = useMemo(() => {
-    if (!isAdmin) return navGroups;
-
-    return navGroups.map((group) => {
-      if (group.label === "Student") {
-        return {
-          ...group,
-          items: [
-            { href: "/admin", label: "Admin Dashboard" },
-            { href: "/student-directory", label: "Student Management" },
-            { href: "/admin/course-management", label: "Course Manager" },
-            { href: "/admin/course-management/upload-center", label: "Upload Center" },
-            { href: "/admin/profile", label: "Admin Profile" },
-            { href: "/admin/command-center", label: "Command Center" },
-            { href: "/messages", label: "Messages" }
-          ]
-        };
-      }
-
-      if (group.label === "Business") {
-        return {
-          ...group,
-          items: group.items.filter((item) => item.href !== "/billing")
-        };
-      }
-
-      return group;
-    });
-  }, [isAdmin]);
+  const authenticatedLinks = isAdmin ? [] : studentAuthLinks;
   const displayName = welcomeName || resolveUserName(authUser);
 
   useEffect(() => {
     setMobileOpen(false);
     setOpenMenu(null);
+    setAdminMenuOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -261,6 +234,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
     setUnreadCount(0);
     setOpenMenu(null);
     setMobileOpen(false);
+    setAdminMenuOpen(false);
     router.push("/");
     router.refresh();
   }
@@ -279,7 +253,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
 
           <nav className="relative hidden min-w-0 flex-1 shrink items-center justify-center gap-7 overflow-visible lg:flex">
             <TopLink href="/" label="Home" active={pathname === "/"} />
-            {visibleNavGroups.map((group, index) => (
+            {navGroups.map((group, index) => (
               <DesktopDropdown
                 key={group.label}
                 group={group}
@@ -287,19 +261,25 @@ export function SiteShell({ children }: { children: ReactNode }) {
                 unreadCount={unreadCount}
                 openMenu={openMenu}
                 setOpenMenu={setOpenMenu}
-                alignRight={index >= visibleNavGroups.length - 2}
+                alignRight={index >= navGroups.length - 2}
               />
             ))}
           </nav>
 
-          <AuthNavigation
-            user={authUser}
-            displayName={displayName}
-            links={authenticatedLinks}
-            pathname={pathname}
-            onLogout={logout}
-            desktop
-          />
+          {isAdmin && authUser ? (
+            <div className="hidden shrink-0 items-center border-l border-gold-500/20 pl-4 lg:flex">
+              <p className="max-w-[220px] truncate text-right text-xs font-semibold text-gold-300">Welcome, {displayName}</p>
+            </div>
+          ) : (
+            <AuthNavigation
+              user={authUser}
+              displayName={displayName}
+              links={authenticatedLinks}
+              pathname={pathname}
+              onLogout={logout}
+              desktop
+            />
+          )}
 
           <button
             type="button"
@@ -322,7 +302,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
               >
                 Home
               </Link>
-              {visibleNavGroups.map((group) => (
+              {navGroups.map((group) => (
                 <MobileGroup
                   key={group.label}
                   group={group}
@@ -331,9 +311,19 @@ export function SiteShell({ children }: { children: ReactNode }) {
                   onNavigate={() => setMobileOpen(false)}
                 />
               ))}
-              <AuthNavigation user={authUser} displayName={displayName} links={authenticatedLinks} pathname={pathname} onLogout={logout} onNavigate={() => setMobileOpen(false)} />
+              {!isAdmin ? <AuthNavigation user={authUser} displayName={displayName} links={authenticatedLinks} pathname={pathname} onLogout={logout} onNavigate={() => setMobileOpen(false)} /> : null}
             </div>
           </div>
+        ) : null}
+        {isAdmin && authUser ? (
+          <AdminNavigationRow
+            links={adminAuthLinks}
+            pathname={pathname}
+            displayName={displayName}
+            menuOpen={adminMenuOpen}
+            setMenuOpen={setAdminMenuOpen}
+            onLogout={logout}
+          />
         ) : null}
       </header>
       <main>{children}</main>
@@ -418,6 +408,96 @@ function AuthNavigation({
         >
           Logout
         </button>
+      </div>
+    </div>
+  );
+}
+
+function AdminNavigationRow({
+  links,
+  pathname,
+  displayName,
+  menuOpen,
+  setMenuOpen,
+  onLogout
+}: {
+  links: NavLink[];
+  pathname: string;
+  displayName: string;
+  menuOpen: boolean;
+  setMenuOpen: (open: boolean) => void;
+  onLogout: () => void;
+}) {
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+
+  return (
+    <div className="border-t border-gold-500/20 bg-navy-900/95">
+      <div className="mx-auto flex max-w-[1440px] flex-col gap-3 px-4 py-3 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[.22em] text-gold-300">AFF ADMINISTRATION</p>
+            <p className="mt-1 truncate text-xs text-ink/62 sm:hidden">Welcome, {displayName}</p>
+          </div>
+          <button
+            type="button"
+            aria-expanded={menuOpen}
+            aria-label="Toggle administrator navigation"
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="inline-flex shrink-0 items-center gap-2 border border-gold-500/35 px-3 py-2 text-xs font-semibold text-gold-300 transition hover:border-gold-300 hover:text-white sm:hidden"
+          >
+            {menuOpen ? <X size={16} /> : <Menu size={16} />}
+            Admin Menu
+          </button>
+        </div>
+
+        <div className="hidden flex-wrap items-center gap-2 sm:flex">
+          {links.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`shrink-0 border px-3 py-2 text-xs font-semibold transition ${
+                isActive(link.href)
+                  ? "border-gold-300 bg-gold-500 text-navy-950"
+                  : "border-gold-500/30 text-gold-300 hover:border-gold-300 hover:text-white"
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
+          <button
+            type="button"
+            onClick={onLogout}
+            className="ml-auto shrink-0 bg-gold-500 px-3 py-2 text-xs font-bold text-navy-950 transition hover:bg-gold-300"
+          >
+            Logout
+          </button>
+        </div>
+
+        {menuOpen ? (
+          <div className="grid gap-2 border-t border-gold-500/14 pt-3 sm:hidden">
+            {links.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setMenuOpen(false)}
+                className={`border px-3 py-3 text-sm font-semibold ${
+                  isActive(link.href)
+                    ? "border-gold-300 bg-gold-500 text-navy-950"
+                    : "border-gold-500/24 text-white hover:border-gold-300 hover:text-gold-300"
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
+            <button
+              type="button"
+              onClick={onLogout}
+              className="bg-gold-500 px-3 py-3 text-sm font-bold text-navy-950 transition hover:bg-gold-300"
+            >
+              Logout
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

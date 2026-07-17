@@ -56,6 +56,12 @@ assert.doesNotMatch(adminLinksBlock, /label: "Billing"/, "admin auth links must 
 assert.doesNotMatch(adminLinksBlock, /label: "My Courses"/, "admin auth links must not expose student courses");
 assert.match(siteShell, /label: "Admin Profile"/, "admin navigation must include Admin Profile");
 assert.match(siteShell, /href: "\/admin\/command-center", label: "Command Center"/, "admin navigation must include Admin Command Center");
+assert.doesNotMatch(siteShell, /visibleNavGroups/, "public top navigation must not be replaced with administrator links");
+assert.match(siteShell, /const authenticatedLinks = isAdmin \? \[\] : studentAuthLinks/, "administrator buttons must not be mixed into the top auth navigation");
+assert.match(siteShell, /function AdminNavigationRow/, "administrator navigation must render in a dedicated second row");
+assert.match(siteShell, /AFF ADMINISTRATION/, "dedicated administrator row must be clearly labeled");
+assert.match(siteShell, /Admin Menu/, "administrator navigation must provide a mobile menu");
+assert.match(siteShell, /<AdminNavigationRow[\s\S]*links=\{adminAuthLinks\}/, "administrator links must be passed only to the second row");
 assert.match(adminProfile, /getAffAdminStatus\(\)/, "admin profile must read administrator role through getAffAdminStatus");
 assert.match(executiveCommandCenter, /getClientAdminStatus\(\)/, "executive command center must use aff_admin_users admin status");
 

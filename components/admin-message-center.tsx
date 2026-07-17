@@ -2,6 +2,7 @@
 
 import { Mail, Send, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -94,6 +95,10 @@ export function AdminMessageCenter() {
   const loadMessages = useCallback(async () => {
     try {
       const supabase = createClient();
+      if (!(await getClientAdminStatus())) {
+        setMessage("Administrator access required. Your account must be active in aff_admin_users.");
+        return;
+      }
       const [studentsResult, messagesResult] = await Promise.all([
         supabase.from("students").select("*").order("full_name", { ascending: true }),
         supabase.from("student_messages").select("*").order("created_at", { ascending: false }).limit(80)
@@ -146,6 +151,7 @@ export function AdminMessageCenter() {
       }));
 
       const supabase = createClient();
+      if (!(await getClientAdminStatus())) throw new Error("Administrator access required to send academy messages.");
       const { data, error } = await supabase.from("student_messages").insert(payload).select("*");
       if (error) throw error;
 

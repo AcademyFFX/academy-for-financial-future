@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -184,7 +185,7 @@ export default function LiveClassroomPage() {
       }
 
       const email = user.email ?? "";
-      const admin = email.toLowerCase() === adminEmail;
+      const admin = await getClientAdminStatus();
       setUserId(user.id);
       setUserEmail(email);
       setStudentName(getStudentName(user.user_metadata, email));

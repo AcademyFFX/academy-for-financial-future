@@ -12,6 +12,7 @@ import { AdminSimulatorReview } from "@/components/admin-simulator-review";
 import { AdminSocialModeration } from "@/components/admin-social-moderation";
 import { AdminTVStudio } from "@/components/admin-tv-studio";
 import { AdminZoomSessionManager } from "@/components/admin-zoom-session-manager";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { buildActiveMembershipState, buildPendingPaymentState, membershipStateToDbPayload, normalizeMembershipPlan, normalizeMembershipState } from "@/lib/membership-state";
 import { createClient } from "@/lib/supabase";
 
@@ -434,9 +435,9 @@ export default function AdminPage() {
         return;
       }
 
-      if (user.email?.toLowerCase() !== adminEmail) {
+      if (!(await getClientAdminStatus())) {
         setAuthorized(false);
-        setMessage("Admin access only. Sign in with the academy administrator account.");
+        setMessage("Admin access only. Your account is not active in aff_admin_users.");
         return;
       }
 
@@ -659,9 +660,9 @@ export default function AdminPage() {
       const {
         data: { user }
       } = await supabase.auth.getUser();
-      const authenticatedAdminEmail = user?.email ?? "";
-      if (authenticatedAdminEmail.toLowerCase() !== adminEmail) {
-        throw new Error("Admin approval requires the authenticated AFF administrator session.");
+      const authenticatedAdminEmail = user?.email ?? adminEmail;
+      if (!(await getClientAdminStatus())) {
+        throw new Error("Admin approval requires an active aff_admin_users administrator session.");
       }
 
       const reviewedAt = new Date().toISOString();

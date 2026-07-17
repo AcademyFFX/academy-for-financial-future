@@ -187,6 +187,23 @@ export default function StudentProfilePage() {
     }
   }
 
+  if (loading && !profile) {
+    return (
+      <>
+        <PageHeader
+          eyebrow="Account Profile"
+          title="Loading your Academy profile."
+          text="Verifying your account role and routing you to the correct profile workspace."
+        />
+        <Section>
+          <SectionInner>
+            <div className="terminal-panel p-6 text-sm text-ink/72">{message}</div>
+          </SectionInner>
+        </Section>
+      </>
+    );
+  }
+
   return (
     <>
       <PageHeader

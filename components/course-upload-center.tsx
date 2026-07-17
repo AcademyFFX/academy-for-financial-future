@@ -20,6 +20,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DragEvent, FormEvent, ReactNode } from "react";
 import { ProgressBar } from "@/components/progress";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { serializeQuizQuestion } from "@/lib/quiz-question";
 import { createClient } from "@/lib/supabase";
 
@@ -117,10 +118,10 @@ export function CourseUploadCenter() {
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (user?.email?.toLowerCase() !== adminEmail) {
+      if (!user || !(await getClientAdminStatus())) {
         setAuthorized(false);
         setMessage("Administrator access required for the Course Upload Center.");
-        setUploadStatus({ stage: "failed", title: "Admin access required", detail: "Sign in with acafffx@gmail.com to upload course assets." });
+        setUploadStatus({ stage: "failed", title: "Admin access required", detail: "Your account must be active in aff_admin_users to upload course assets." });
         return;
       }
       setAuthorized(true);
@@ -183,7 +184,7 @@ export function CourseUploadCenter() {
       const supabase = createClient();
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError) throw userError;
-      if (user?.email?.toLowerCase() !== adminEmail) throw new Error("Administrator access required for uploads.");
+      if (!user || !(await getClientAdminStatus())) throw new Error("Administrator access required for uploads.");
       const path = `${target.courseId}/${assetType.toLowerCase().replace(/\s+/g, "-")}/${Date.now()}-${safeName(file.name)}`;
       const { error: uploadError } = await supabase.storage.from("aff-course-assets").upload(path, file, { contentType: file.type || undefined, upsert: false });
       if (uploadError) throw uploadError;

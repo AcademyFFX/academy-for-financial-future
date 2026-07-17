@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, Menu, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { AFFStandardLogo } from "@/components/aff-logo";
+import { getClientAdminSession } from "@/lib/admin-client";
 import { createClient } from "@/lib/supabase";
 
 type NavLink = {
@@ -116,6 +117,34 @@ export function SiteShell({ children }: { children: ReactNode }) {
   const [welcomeName, setWelcomeName] = useState("");
   const headerRef = useRef<HTMLElement | null>(null);
   const authenticatedLinks = isAdmin ? adminAuthLinks : studentAuthLinks;
+  const visibleNavGroups = useMemo(() => {
+    if (!isAdmin) return navGroups;
+
+    return navGroups.map((group) => {
+      if (group.label === "Student") {
+        return {
+          ...group,
+          items: [
+            { href: "/admin", label: "Admin Dashboard" },
+            { href: "/student-directory", label: "Student Management" },
+            { href: "/admin/course-management", label: "Course Manager" },
+            { href: "/admin/course-management/upload-center", label: "Upload Center" },
+            { href: "/admin/profile", label: "Admin Profile" },
+            { href: "/messages", label: "Messages" }
+          ]
+        };
+      }
+
+      if (group.label === "Business") {
+        return {
+          ...group,
+          items: group.items.filter((item) => item.href !== "/billing")
+        };
+      }
+
+      return group;
+    });
+  }, [isAdmin]);
   const displayName = welcomeName || resolveUserName(authUser);
 
   useEffect(() => {
@@ -140,12 +169,13 @@ export function SiteShell({ children }: { children: ReactNode }) {
       const fallbackName = resolveUserName(user);
       setWelcomeName(fallbackName);
 
-      try {
-        const adminResponse = await fetch("/api/auth/admin-status", { cache: "no-store" });
-        const adminStatus = await adminResponse.json().catch(() => ({ isAdmin: false }));
-        if (mounted) setIsAdmin(Boolean(adminResponse.ok && adminStatus.isAdmin));
-      } catch {
-        if (mounted) setIsAdmin(false);
+      const adminSession = await getClientAdminSession();
+      if (!mounted) return;
+      setIsAdmin(adminSession.isAdmin);
+
+      if (adminSession.isAdmin) {
+        setWelcomeName(adminSession.email || fallbackName || "Academy Administrator");
+        return;
       }
 
       try {
@@ -247,7 +277,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
 
           <nav className="relative hidden min-w-0 flex-1 shrink items-center justify-center gap-7 overflow-visible lg:flex">
             <TopLink href="/" label="Home" active={pathname === "/"} />
-            {navGroups.map((group, index) => (
+            {visibleNavGroups.map((group, index) => (
               <DesktopDropdown
                 key={group.label}
                 group={group}
@@ -255,7 +285,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
                 unreadCount={unreadCount}
                 openMenu={openMenu}
                 setOpenMenu={setOpenMenu}
-                alignRight={index >= navGroups.length - 2}
+                alignRight={index >= visibleNavGroups.length - 2}
               />
             ))}
           </nav>
@@ -290,7 +320,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
               >
                 Home
               </Link>
-              {navGroups.map((group) => (
+              {visibleNavGroups.map((group) => (
                 <MobileGroup
                   key={group.label}
                   group={group}

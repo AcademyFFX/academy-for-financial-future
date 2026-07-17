@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -218,6 +219,7 @@ export default function CertificationsPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("Loading AFF Certification and Examination Center...");
   const [userEmail, setUserEmail] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [studentName, setStudentName] = useState("Student");
   const [affStudentId, setAffStudentId] = useState("");
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
@@ -230,8 +232,6 @@ export default function CertificationsPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, { score: string; comments: string; status: string }>>({});
-
-  const isAdmin = userEmail.toLowerCase() === adminEmail;
 
   const loadCenter = useCallback(async () => {
     setLoading(true);
@@ -247,29 +247,37 @@ export default function CertificationsPage() {
       }
 
       setUserEmail(user.email ?? "");
-      const [profileResult, applicationResult] = await Promise.all([
-        supabase
-          .from("students")
-          .select("student_id, auth_user_id, full_name, email")
-          .or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from("student_applications")
-          .select("student_id, auth_user_id, email")
-          .or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle()
-      ]);
+      const admin = await getClientAdminStatus();
+      setIsAdmin(admin);
 
-      const profile = (profileResult.data ?? {}) as DbRow;
-      const application = (applicationResult.data ?? {}) as DbRow;
-      const resolvedName = value(profile, ["full_name"], user.user_metadata?.full_name ?? user.email ?? "Student");
-      const resolvedStudentId = value(application, ["student_id"], value(profile, ["student_id"], "Student ID pending"));
-      setStudentName(resolvedName);
-      setAffStudentId(resolvedStudentId);
+      if (admin) {
+        setStudentName("Academy Administrator");
+        setAffStudentId("Administrator");
+      } else {
+        const [profileResult, applicationResult] = await Promise.all([
+          supabase
+            .from("students")
+            .select("student_id, auth_user_id, full_name, email")
+            .or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase
+            .from("student_applications")
+            .select("student_id, auth_user_id, email")
+            .or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        ]);
+
+        const profile = (profileResult.data ?? {}) as DbRow;
+        const application = (applicationResult.data ?? {}) as DbRow;
+        const resolvedName = value(profile, ["full_name"], user.user_metadata?.full_name ?? user.email ?? "Student");
+        const resolvedStudentId = value(application, ["student_id"], value(profile, ["student_id"], "Student ID pending"));
+        setStudentName(resolvedName);
+        setAffStudentId(resolvedStudentId);
+      }
 
       const [catalogResult, examsResult, questionsResult, attemptsResult, certificatesResult, reviewResult] = await Promise.all([
         supabase.from("certification_catalog").select("*").order("sort_order", { ascending: true }),

@@ -2,6 +2,7 @@
 
 import { CalendarDays, ExternalLink, Radio, Save, Trash2, Video } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -118,6 +119,10 @@ export function AdminZoomSessionManager() {
   const loadZoomData = useCallback(async () => {
     try {
       const supabase = createClient();
+      if (!(await getClientAdminStatus())) {
+        setMessage("Administrator access required. Your account must be active in aff_admin_users.");
+        return;
+      }
       const [sessionsResult, attendanceResult] = await Promise.all([
         supabase.from("zoom_class_sessions").select("*").order("session_date", { ascending: true }),
         supabase.from("zoom_attendance").select("*").order("joined_at", { ascending: false })
@@ -148,6 +153,7 @@ export function AdminZoomSessionManager() {
 
     try {
       const generatedJoinUrl = form.joinUrl.trim() || buildZoomJoinUrl(form.meetingId, form.passcode);
+      if (!(await getClientAdminStatus())) throw new Error("Administrator access required to manage Zoom sessions.");
       const payload = {
         title: form.title.trim(),
         description: form.description.trim() || null,
@@ -186,6 +192,7 @@ export function AdminZoomSessionManager() {
 
     try {
       const supabase = createClient();
+      if (!(await getClientAdminStatus())) throw new Error("Administrator access required to delete Zoom sessions.");
       const { error } = await supabase.from("zoom_class_sessions").delete().eq("id", id);
       if (error) throw error;
       setSessions((current) => current.filter((session) => session.id !== id));

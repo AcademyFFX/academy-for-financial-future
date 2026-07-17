@@ -3,6 +3,7 @@
 import { BookOpen, ClipboardCheck, FilePlus2, Layers3, Save, Video } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { normalizeQuizQuestionRecord, serializeQuizQuestion } from "@/lib/quiz-question";
 import { createClient } from "@/lib/supabase";
 
@@ -141,9 +142,9 @@ export function AdminLmsManager() {
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (user?.email?.toLowerCase() !== adminEmail) {
+      if (!user || !(await getClientAdminStatus())) {
         setAuthorized(false);
-        setMessage("Administrator access required.");
+        setMessage("Administrator access required. Your account must be active in aff_admin_users.");
         return;
       }
 

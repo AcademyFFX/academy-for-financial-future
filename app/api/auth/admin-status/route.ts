@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isAffAdminUser } from "@/lib/admin-server";
+import { getAffAdminRole } from "@/lib/admin-server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -14,5 +14,11 @@ export async function GET() {
     return NextResponse.json({ isAdmin: false }, { status: 401 });
   }
 
-  return NextResponse.json({ isAdmin: await isAffAdminUser(user.id) });
+  const adminRole = await getAffAdminRole(user.id);
+
+  return NextResponse.json({
+    isAdmin: Boolean(adminRole),
+    email: user.email ?? adminRole?.email ?? "",
+    role: adminRole?.role ?? ""
+  });
 }

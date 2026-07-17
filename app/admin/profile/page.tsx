@@ -50,6 +50,7 @@ export default async function AdminProfilePage() {
   const displayName = value(profile, ["full_name", "display_name"], user.user_metadata?.full_name as string | undefined ?? "Academy Administrator");
   const title = value(profile, ["title"], "Administrator");
   const phone = value(profile, ["phone"], "Not listed");
+  const lastLogin = user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : "Not recorded";
   const permissions = [
     "Student enrollment review",
     "Student directory management",
@@ -85,8 +86,9 @@ export default async function AdminProfilePage() {
             </div>
             <div className="mt-6 grid gap-3">
               <AdminLine icon={<Mail size={17} />} label="Email" value={email} />
-              <AdminLine icon={<ShieldCheck size={17} />} label="Role" value={value(adminRole, ["role"], "administrator")} />
+              <AdminLine icon={<ShieldCheck size={17} />} label="Role" value="Administrator" />
               <AdminLine icon={<ShieldCheck size={17} />} label="Active Status" value={adminRole.is_active ? "Active" : "Inactive"} />
+              <AdminLine icon={<ShieldCheck size={17} />} label="Last Login" value={lastLogin} />
               <AdminLine icon={<Mail size={17} />} label="Contact" value={phone} />
             </div>
           </article>

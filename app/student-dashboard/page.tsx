@@ -672,6 +672,21 @@ export default function StudentDashboardPage() {
     await loadExperience();
   }
 
+  if (loading && !studentProfile) {
+    return (
+      <section className="market-grid min-h-[calc(100vh-155px)] border-b border-gold-500/20 bg-navy-900 px-4 py-12 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl">
+          <div className="terminal-panel p-6">
+            <AFFInstitutionalLogo className="h-32 w-48" />
+            <p className="mt-6 text-xs font-semibold uppercase tracking-[.28em] text-gold-300">AFF Account Verification</p>
+            <h1 className="mt-4 font-serif text-4xl font-semibold text-white">Loading your Academy workspace.</h1>
+            <p className="mt-4 leading-7 text-ink/72">{message}</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="market-grid min-h-[calc(100vh-155px)] border-b border-gold-500/20 bg-navy-900 px-4 py-12 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">

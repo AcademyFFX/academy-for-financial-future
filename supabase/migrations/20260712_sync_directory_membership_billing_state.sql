@@ -55,7 +55,7 @@ select
   s.certification_level,
   s.enrollment_date,
   s.status as enrollment_status,
-  s.profile_photo_url,
+  null::text as profile_photo_url,
   coalesce(sm.active_membership_plan, s.membership_plan, 'Free Trial') as active_membership_plan,
   coalesce(sm.membership_status, 'Pending Payment') as membership_status
 from public.students s

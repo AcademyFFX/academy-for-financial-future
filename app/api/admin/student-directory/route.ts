@@ -6,10 +6,19 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 export const dynamic = "force-dynamic";
 
 type DbRow = Record<string, unknown>;
+const photoColumnCandidates = ["profile_photo_url", "photo_url", "avatar_url", "profile_image_url", "image_url"];
 
 function value(row: DbRow, key: string, fallback = "") {
   const current = row[key];
   return current === null || current === undefined ? fallback : String(current);
+}
+
+function nullableValue(row: DbRow, keys: string[]) {
+  for (const key of keys) {
+    const current = row[key];
+    if (current !== null && current !== undefined && String(current).trim().length > 0) return String(current);
+  }
+  return null;
 }
 
 export async function GET() {
@@ -34,13 +43,16 @@ export async function GET() {
   const adminSupabase = createSupabaseAdminClient();
   const { data: students, error: studentsError } = await adminSupabase
     .from("students")
-    .select("id, auth_user_id, student_id, full_name, email, enrollment_date, certification_level, status, profile_photo_url, membership_plan")
+    .select("*")
     .ilike("status", "Active")
     .order("full_name", { ascending: true });
 
   if (studentsError) {
     return NextResponse.json({ error: studentsError.message, code: studentsError.code }, { status: 500 });
   }
+
+  const studentColumns = Array.from(new Set(((students ?? []) as DbRow[]).flatMap((student) => Object.keys(student))));
+  const detectedPhotoColumn = photoColumnCandidates.find((column) => studentColumns.includes(column)) ?? null;
 
   const authIds = ((students ?? []) as DbRow[])
     .map((student) => value(student, "auth_user_id"))
@@ -71,9 +83,16 @@ export async function GET() {
       membership_status: value(membership, "membership_status", "Pending Payment"),
       payment_status: value(membership, "payment_status"),
       account_status: value(membership, "account_status"),
-      profile_photo_url: value(student, "profile_photo_url")
+      profile_photo_url: detectedPhotoColumn ? nullableValue(student, [detectedPhotoColumn]) : null
     };
   });
 
-  return NextResponse.json({ students: directory });
+  return NextResponse.json({
+    students: directory,
+    schema: {
+      studentsColumnsInspected: studentColumns,
+      detectedPhotoColumn,
+      photoColumnCandidates
+    }
+  });
 }

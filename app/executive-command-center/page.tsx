@@ -29,8 +29,10 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { AdminRouteAudit } from "@/components/admin-route-audit";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -277,9 +279,9 @@ export default function ExecutiveCommandCenterPage() {
         return;
       }
 
-      if (user.email?.toLowerCase() !== adminEmail) {
+      if (!(await getClientAdminStatus())) {
         setAuthorized(false);
-        setMessage("Executive analytics are restricted to the Academy administrator account.");
+        setMessage("Executive analytics are restricted to active aff_admin_users administrators.");
         return;
       }
 
@@ -805,6 +807,7 @@ export default function ExecutiveCommandCenterPage() {
 
       <Section>
         <SectionInner className="grid gap-6">
+          <AdminRouteAudit routeName="/executive-command-center" />
           <div className="terminal-panel flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[.22em] text-gold-300">Live Sync</p>

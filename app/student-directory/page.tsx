@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
+import { AdminRouteAudit } from "@/components/admin-route-audit";
 import { StudentDirectoryClient } from "@/components/student-directory-client";
+import { Section, SectionInner } from "@/components/section";
 import { isAffAdminUser } from "@/lib/admin-server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -20,5 +22,14 @@ export default async function StudentDirectoryPage() {
     redirect("/access-denied?from=student-directory");
   }
 
-  return <StudentDirectoryClient />;
+  return (
+    <>
+      <Section>
+        <SectionInner>
+          <AdminRouteAudit routeName="/student-directory" />
+        </SectionInner>
+      </Section>
+      <StudentDirectoryClient />
+    </>
+  );
 }

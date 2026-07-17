@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { AdminRouteAudit } from "@/components/admin-route-audit";
 import { CourseUploadCenter } from "@/components/course-upload-center";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
@@ -14,6 +15,9 @@ export default function CourseUploadCenterPage() {
       />
       <Section>
         <SectionInner>
+          <div className="mb-6">
+            <AdminRouteAudit routeName="/admin/course-management/upload-center" />
+          </div>
           <Link
             href="/admin/course-management"
             className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-gold transition hover:text-cream"

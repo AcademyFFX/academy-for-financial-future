@@ -6,6 +6,7 @@ import { Award, BookOpen, Bot, ClipboardCheck, CreditCard, ExternalLink, FileChe
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
+import { AdminRouteAudit } from "@/components/admin-route-audit";
 import { AdminAICoachKnowledge } from "@/components/admin-ai-coach-knowledge";
 import { AdminMessageCenter } from "@/components/admin-message-center";
 import { AdminSimulatorReview } from "@/components/admin-simulator-review";
@@ -116,7 +117,8 @@ const adminDestinations = [
   { href: "/admin/enrollment", label: "Enrollment", detail: "Applications and student status", icon: UserCheck },
   { href: "/admin/certifications", label: "Certifications", detail: "Exams, grading, and credentials", icon: ShieldCheck },
   { href: "/admin/live-classroom", label: "Live Classroom", detail: "Classes, attendance, and recordings", icon: RadioTower },
-  { href: "/admin/profile", label: "Admin Profile", detail: "Administrator identity and permissions", icon: UserCheck }
+  { href: "/admin/profile", label: "Admin Profile", detail: "Administrator identity and permissions", icon: UserCheck },
+  { href: "/executive-command-center", label: "Command Center", detail: "Executive analytics and intelligence", icon: Bot }
 ];
 
 function value(row: DbRow, keys: string[], fallback = "") {
@@ -980,6 +982,7 @@ export default function AdminPage() {
       />
       <Section>
         <SectionInner className="grid gap-8">
+          <AdminRouteAudit routeName="/admin" />
           <p className="text-sm text-ink/72">{message}</p>
 
           {loading ? (

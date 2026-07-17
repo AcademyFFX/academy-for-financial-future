@@ -10,6 +10,7 @@ export async function getAffAdminRole(userId?: string | null) {
       .from("aff_admin_users")
       .select("id, user_id, email, role, is_active, created_at, updated_at")
       .eq("user_id", userId)
+      .eq("role", "administrator")
       .eq("is_active", true)
       .limit(1)
       .maybeSingle();

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { UploadCloud } from "lucide-react";
 import { AdminLmsManager } from "@/components/admin-lms-manager";
+import { AdminRouteAudit } from "@/components/admin-route-audit";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
 
@@ -14,6 +15,9 @@ export default function AdminCourseManagementPage() {
       />
       <Section>
         <SectionInner>
+          <div className="mb-6">
+            <AdminRouteAudit routeName="/admin/course-management" />
+          </div>
           <div className="mb-8 flex flex-col gap-4 border border-gold/35 bg-navy-900 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold">Admin / Course Management</p>

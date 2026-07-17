@@ -31,7 +31,8 @@ const adminAuthLinks: NavLink[] = [
   { href: "/student-directory", label: "Student Management" },
   { href: "/admin/course-management", label: "Course Manager" },
   { href: "/admin/course-management/upload-center", label: "Upload Center" },
-  { href: "/admin/profile", label: "Admin Profile" }
+  { href: "/admin/profile", label: "Admin Profile" },
+  { href: "/executive-command-center", label: "Command Center" }
 ];
 
 const navGroups: NavGroup[] = [
@@ -130,6 +131,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
             { href: "/admin/course-management", label: "Course Manager" },
             { href: "/admin/course-management/upload-center", label: "Upload Center" },
             { href: "/admin/profile", label: "Admin Profile" },
+            { href: "/executive-command-center", label: "Command Center" },
             { href: "/messages", label: "Messages" }
           ]
         };

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Mail, ShieldCheck, UserRound } from "lucide-react";
+import { AdminRouteAudit } from "@/components/admin-route-audit";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
 import { getAffAdminRole } from "@/lib/admin-server";
@@ -69,6 +70,9 @@ export default async function AdminProfilePage() {
       />
       <Section>
         <SectionInner className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+          <div className="lg:col-span-2">
+            <AdminRouteAudit routeName="/admin/profile" />
+          </div>
           <article className="terminal-panel p-6">
             <div className="flex items-start gap-4">
               <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full border border-gold-500/35 bg-navy-950">

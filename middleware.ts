@@ -5,7 +5,7 @@ import { hasFullCourseAccess } from "./lib/membership-state";
 
 const protectedRoutes = ["/student-dashboard", "/dashboard", "/aff-os", "/mobile-super-app", "/alumni-network", "/publishing-house", "/economic-intelligence", "/investment-bank", "/governance-school", "/think-tank", "/university", "/courses", "/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/trading-simulator", "/trading-floor", "/social-network", "/tv-studio", "/executive-command-center", "/accreditation", "/career-center", "/research-institute", "/events", "/global-network", "/campus-expansion", "/endowment-fund", "/foundation", "/civic-leadership", "/digital-civilization", "/human-flourishing", "/marketplace", "/billing", "/messages", "/ai-coach", "/voice-coach", "/chart-analyst", "/admin", "/student-directory"];
 const enrollmentRestrictedRoutes = ["/journal", "/assignments", "/exams", "/certificates", "/live-trading-room", "/trading-simulator", "/social-network", "/tv-studio"];
-const adminOnlyRoutes = ["/admin", "/student-directory"];
+const adminOnlyRoutes = ["/admin", "/student-directory", "/executive-command-center"];
 const adminRedirects: Array<[string, string]> = [
   ["/student-dashboard", "/admin"],
   ["/dashboard", "/admin"],
@@ -75,6 +75,7 @@ export async function middleware(request: NextRequest) {
       .from("aff_admin_users")
       .select("id")
       .eq("user_id", user.id)
+      .eq("role", "administrator")
       .eq("is_active", true)
       .limit(1)
       .maybeSingle();

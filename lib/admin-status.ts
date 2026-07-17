@@ -19,6 +19,14 @@ export type AffAdminStatus = {
   error: string;
   matchedBy: "user_id" | "email" | "none";
   adminRow: DbRow | null;
+  matchedEmail: string;
+  matchedUserId: string;
+  matchedRole: string;
+  matchedIsActive: string;
+  lookupDiagnostics: {
+    userIdLookup: string;
+    emailLookup: string;
+  };
 };
 
 const adminColumns = "id, user_id, email, role, is_active, created_at, updated_at";
@@ -45,6 +53,15 @@ function safeAdminRow(row: DbRow | null) {
   };
 }
 
+function diagnosticsForRow(row: DbRow | null) {
+  return {
+    matchedEmail: row?.email === null || row?.email === undefined ? "" : String(row.email),
+    matchedUserId: row?.user_id === null || row?.user_id === undefined ? "" : String(row.user_id),
+    matchedRole: row?.role === null || row?.role === undefined ? "" : String(row.role),
+    matchedIsActive: row?.is_active === null || row?.is_active === undefined ? "" : String(row.is_active)
+  };
+}
+
 function statusFromRow(params: {
   row: DbRow | null;
   matchedBy: "user_id" | "email" | "none";
@@ -56,6 +73,7 @@ function statusFromRow(params: {
   const isActive = params.row?.is_active === true;
   const emailMatches = !params.email || normalizeEmail(String(params.row?.email ?? "")) === params.email;
   const authorized = Boolean(params.row && isActive && allowedAdminRoles.has(role) && emailMatches);
+  const rowDiagnostics = diagnosticsForRow(params.row);
 
   let reason = params.fallbackReason;
   if (params.row && !isActive) reason = "Matched admin row is not active.";
@@ -71,7 +89,12 @@ function statusFromRow(params: {
     reason,
     error: "",
     matchedBy: params.row ? params.matchedBy : "none",
-    adminRow: safeAdminRow(params.row)
+    adminRow: safeAdminRow(params.row),
+    ...rowDiagnostics,
+    lookupDiagnostics: {
+      userIdLookup: params.matchedBy === "user_id" ? "Row returned from aff_admin_users by authenticated user_id." : "No row returned by authenticated user_id before fallback.",
+      emailLookup: params.matchedBy === "email" ? "Row returned from aff_admin_users by normalized authenticated email." : params.matchedBy === "user_id" ? "Email fallback not needed because user_id matched." : "No email lookup result."
+    }
   };
 }
 
@@ -93,7 +116,12 @@ export async function getAffAdminStatusFromSupabase(supabase: SupabaseLike): Pro
       reason: "Unable to read authenticated Supabase user.",
       error: userError.message ?? "Supabase auth.getUser failed.",
       matchedBy: "none",
-      adminRow: null
+      adminRow: null,
+      ...diagnosticsForRow(null),
+      lookupDiagnostics: {
+        userIdLookup: "Not attempted because auth.getUser failed.",
+        emailLookup: "Not attempted because auth.getUser failed."
+      }
     };
   }
 
@@ -106,7 +134,12 @@ export async function getAffAdminStatusFromSupabase(supabase: SupabaseLike): Pro
       reason: "No authenticated Supabase user session.",
       error: "",
       matchedBy: "none",
-      adminRow: null
+      adminRow: null,
+      ...diagnosticsForRow(null),
+      lookupDiagnostics: {
+        userIdLookup: "Not attempted because no authenticated user id was available.",
+        emailLookup: "Not attempted because no authenticated user id was available."
+      }
     };
   }
 
@@ -126,7 +159,12 @@ export async function getAffAdminStatusFromSupabase(supabase: SupabaseLike): Pro
       reason: "Admin lookup by user_id failed.",
       error: `${byUserId.error.code ? `${byUserId.error.code}: ` : ""}${byUserId.error.message ?? "Unknown Supabase error."}`,
       matchedBy: "none",
-      adminRow: null
+      adminRow: null,
+      ...diagnosticsForRow(null),
+      lookupDiagnostics: {
+        userIdLookup: `Lookup failed for user_id ${userId}.`,
+        emailLookup: "Not attempted because user_id lookup failed."
+      }
     };
   }
 
@@ -157,7 +195,12 @@ export async function getAffAdminStatusFromSupabase(supabase: SupabaseLike): Pro
         reason: "Admin lookup by normalized email failed.",
         error: `${byEmail.error.code ? `${byEmail.error.code}: ` : ""}${byEmail.error.message ?? "Unknown Supabase error."}`,
         matchedBy: "none",
-        adminRow: null
+        adminRow: null,
+        ...diagnosticsForRow(null),
+        lookupDiagnostics: {
+          userIdLookup: `No row returned from aff_admin_users for user_id ${userId}.`,
+          emailLookup: `Lookup failed for email ${email}.`
+        }
       };
     }
 
@@ -180,6 +223,11 @@ export async function getAffAdminStatusFromSupabase(supabase: SupabaseLike): Pro
     reason: "No matching row found in public.aff_admin_users by user_id or email.",
     error: "",
     matchedBy: "none",
-    adminRow: null
+    adminRow: null,
+    ...diagnosticsForRow(null),
+    lookupDiagnostics: {
+      userIdLookup: `No row returned from aff_admin_users for user_id ${userId}.`,
+      emailLookup: email ? `No row returned from aff_admin_users for email ${email}.` : "Not attempted because authenticated email was blank."
+    }
   };
 }

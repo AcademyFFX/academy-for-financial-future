@@ -24,6 +24,11 @@ export async function GET() {
     error: status.error,
     matchedBy: status.matchedBy,
     adminRow: status.adminRow,
+    matchedEmail: status.matchedEmail,
+    matchedUserId: status.matchedUserId,
+    matchedRole: status.matchedRole,
+    matchedIsActive: status.matchedIsActive,
+    lookupDiagnostics: status.lookupDiagnostics,
     environment: {
       supabaseHost,
       hasSupabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),

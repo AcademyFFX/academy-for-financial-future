@@ -8,6 +8,14 @@ export type ClientAdminSession = {
   error: string;
   matchedBy: string;
   adminRow: Record<string, unknown> | null;
+  matchedEmail: string;
+  matchedUserId: string;
+  matchedRole: string;
+  matchedIsActive: string;
+  lookupDiagnostics: {
+    userIdLookup: string;
+    emailLookup: string;
+  };
   environment: {
     supabaseHost: string;
     hasSupabaseUrl: boolean;
@@ -30,6 +38,14 @@ export async function getClientAdminSession(): Promise<ClientAdminSession> {
       error: typeof payload?.error === "string" ? payload.error : "",
       matchedBy: typeof payload?.matchedBy === "string" ? payload.matchedBy : "",
       adminRow: payload?.adminRow && typeof payload.adminRow === "object" ? payload.adminRow : null,
+      matchedEmail: typeof payload?.matchedEmail === "string" ? payload.matchedEmail : "",
+      matchedUserId: typeof payload?.matchedUserId === "string" ? payload.matchedUserId : "",
+      matchedRole: typeof payload?.matchedRole === "string" ? payload.matchedRole : "",
+      matchedIsActive: typeof payload?.matchedIsActive === "string" ? payload.matchedIsActive : "",
+      lookupDiagnostics: {
+        userIdLookup: typeof payload?.lookupDiagnostics?.userIdLookup === "string" ? payload.lookupDiagnostics.userIdLookup : "",
+        emailLookup: typeof payload?.lookupDiagnostics?.emailLookup === "string" ? payload.lookupDiagnostics.emailLookup : ""
+      },
       environment: {
         supabaseHost: typeof payload?.environment?.supabaseHost === "string" ? payload.environment.supabaseHost : "",
         hasSupabaseUrl: Boolean(payload?.environment?.hasSupabaseUrl),
@@ -48,6 +64,14 @@ export async function getClientAdminSession(): Promise<ClientAdminSession> {
       error: "",
       matchedBy: "none",
       adminRow: null,
+      matchedEmail: "",
+      matchedUserId: "",
+      matchedRole: "",
+      matchedIsActive: "",
+      lookupDiagnostics: {
+        userIdLookup: "Admin status request failed.",
+        emailLookup: "Admin status request failed."
+      },
       environment: {
         supabaseHost: "",
         hasSupabaseUrl: false,

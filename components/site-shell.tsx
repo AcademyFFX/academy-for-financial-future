@@ -2,7 +2,21 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, Menu, X } from "lucide-react";
+import {
+  BarChart3,
+  BookOpen,
+  ChevronDown,
+  GraduationCap,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  MonitorPlay,
+  Radio,
+  Settings,
+  Users,
+  X
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
@@ -20,19 +34,85 @@ type NavGroup = {
   items: NavLink[];
 };
 
+type AdminNavGroup = NavGroup & {
+  icon: LucideIcon;
+  description: string;
+};
+
 const studentAuthLinks: NavLink[] = [
   { href: "/student-dashboard", label: "Dashboard" },
   { href: "/courses", label: "My Courses" },
   { href: "/student-profile", label: "Profile" },
   { href: "/billing", label: "Billing" }
 ];
-const adminAuthLinks: NavLink[] = [
-  { href: "/admin", label: "Admin Dashboard" },
-  { href: "/student-directory", label: "Student Management" },
-  { href: "/admin/course-management", label: "Course Manager" },
-  { href: "/admin/course-management/upload-center", label: "Upload Center" },
-  { href: "/admin/profile", label: "Admin Profile" },
-  { href: "/admin/command-center", label: "Command Center" }
+const adminNavGroups: AdminNavGroup[] = [
+  {
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    description: "Academy operations overview",
+    items: [
+      { href: "/admin", label: "Admin Dashboard" },
+      { href: "/admin/command-center", label: "Command Center" }
+    ]
+  },
+  {
+    label: "Students",
+    icon: Users,
+    description: "Enrollment, directory, and student records",
+    items: [
+      { href: "/student-directory", label: "Student Management" },
+      { href: "/admin/enrollment", label: "Enrollment Review" }
+    ]
+  },
+  {
+    label: "Courses",
+    icon: BookOpen,
+    description: "LMS, assets, exams, and certificates",
+    items: [
+      { href: "/admin/course-management", label: "Course Manager" },
+      { href: "/admin/course-management/upload-center", label: "Upload Center" },
+      { href: "/admin/certifications", label: "Certification Center" }
+    ]
+  },
+  {
+    label: "Media Center",
+    icon: MonitorPlay,
+    description: "Broadcasting and content channels",
+    items: [
+      { href: "/broadcast-network", label: "Broadcast Network" },
+      { href: "/tv-studio", label: "AFF TV Studio" },
+      { href: "/broadcast-network/eyes-on-society", label: "Eyes on Society TV" }
+    ]
+  },
+  {
+    label: "Live Academy",
+    icon: Radio,
+    description: "Live classroom and academy events",
+    items: [
+      { href: "/admin/live-classroom", label: "Live Classroom" },
+      { href: "/events", label: "Events Division" },
+      { href: "/homework-center", label: "Homework Center" }
+    ]
+  },
+  {
+    label: "Analytics",
+    icon: BarChart3,
+    description: "Executive and performance intelligence",
+    items: [
+      { href: "/executive-command-center", label: "Executive Command Center" },
+      { href: "/admin/command-center", label: "Admin Command Center" }
+    ]
+  },
+  {
+    label: "Administration",
+    icon: Settings,
+    description: "Profiles, governance, and university controls",
+    items: [
+      { href: "/admin/profile", label: "Admin Profile" },
+      { href: "/university", label: "Global University" },
+      { href: "/accreditation", label: "Accreditation Authority" }
+    ]
+  }
 ];
 
 const navGroups: NavGroup[] = [
@@ -117,6 +197,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [welcomeName, setWelcomeName] = useState("");
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
+  const [openAdminMenu, setOpenAdminMenu] = useState<string | null>(null);
   const headerRef = useRef<HTMLElement | null>(null);
   const authenticatedLinks = isAdmin ? [] : studentAuthLinks;
   const displayName = welcomeName || resolveUserName(authUser);
@@ -125,6 +206,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
     setMobileOpen(false);
     setOpenMenu(null);
     setAdminMenuOpen(false);
+    setOpenAdminMenu(null);
   }, [pathname]);
 
   useEffect(() => {
@@ -208,12 +290,15 @@ export function SiteShell({ children }: { children: ReactNode }) {
     function handleOutsideClick(event: MouseEvent | PointerEvent) {
       if (!headerRef.current?.contains(event.target as Node)) {
         setOpenMenu(null);
+        setOpenAdminMenu(null);
       }
     }
 
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setOpenMenu(null);
+        setOpenAdminMenu(null);
+        setAdminMenuOpen(false);
       }
     }
 
@@ -235,6 +320,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
     setOpenMenu(null);
     setMobileOpen(false);
     setAdminMenuOpen(false);
+    setOpenAdminMenu(null);
     router.push("/");
     router.refresh();
   }
@@ -317,11 +403,13 @@ export function SiteShell({ children }: { children: ReactNode }) {
         ) : null}
         {isAdmin && authUser ? (
           <AdminNavigationRow
-            links={adminAuthLinks}
+            groups={adminNavGroups}
             pathname={pathname}
             displayName={displayName}
             menuOpen={adminMenuOpen}
             setMenuOpen={setAdminMenuOpen}
+            openAdminMenu={openAdminMenu}
+            setOpenAdminMenu={setOpenAdminMenu}
             onLogout={logout}
           />
         ) : null}
@@ -414,92 +502,167 @@ function AuthNavigation({
 }
 
 function AdminNavigationRow({
-  links,
+  groups,
   pathname,
   displayName,
   menuOpen,
   setMenuOpen,
+  openAdminMenu,
+  setOpenAdminMenu,
   onLogout
 }: {
-  links: NavLink[];
+  groups: AdminNavGroup[];
   pathname: string;
   displayName: string;
   menuOpen: boolean;
   setMenuOpen: (open: boolean) => void;
+  openAdminMenu: string | null;
+  setOpenAdminMenu: (menu: string | null) => void;
   onLogout: () => void;
 }) {
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const activeGroup = groups.find((group) => group.items.some((item) => isActive(item.href)));
 
   return (
-    <div className="border-t border-gold-500/20 bg-navy-900/95">
+    <section className="border-t border-gold-500/20 bg-[linear-gradient(180deg,rgba(10,24,51,0.98),rgba(10,24,51,0.92))] shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
       <div className="mx-auto flex max-w-[1440px] flex-col gap-3 px-4 py-3 sm:px-6 lg:px-8">
-        <div className="flex min-w-0 items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[.22em] text-gold-300">AFF ADMINISTRATION</p>
-            <p className="mt-1 truncate text-xs text-ink/62 sm:hidden">Welcome, {displayName}</p>
+        <div className="flex min-w-0 items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="hidden h-10 w-10 shrink-0 place-items-center border border-gold-500/35 bg-navy-950/70 text-gold-300 sm:grid">
+              <GraduationCap size={20} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-[.24em] text-gold-300">AFF ADMINISTRATION</p>
+              <p className="mt-1 truncate text-xs text-ink/62">
+                Enterprise university management{displayName ? ` · ${displayName}` : ""}
+              </p>
+            </div>
           </div>
           <button
             type="button"
             aria-expanded={menuOpen}
             aria-label="Toggle administrator navigation"
             onClick={() => setMenuOpen(!menuOpen)}
-            className="inline-flex shrink-0 items-center gap-2 border border-gold-500/35 px-3 py-2 text-xs font-semibold text-gold-300 transition hover:border-gold-300 hover:text-white sm:hidden"
+            className="inline-flex shrink-0 items-center gap-2 border border-gold-500/35 bg-navy-950/70 px-3 py-2 text-xs font-semibold text-gold-300 transition hover:border-gold-300 hover:bg-navy-800 hover:text-white md:hidden"
           >
             {menuOpen ? <X size={16} /> : <Menu size={16} />}
             Admin Menu
           </button>
         </div>
 
-        <div className="hidden flex-wrap items-center gap-2 sm:flex">
-          {links.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`shrink-0 border px-3 py-2 text-xs font-semibold transition ${
-                isActive(link.href)
-                  ? "border-gold-300 bg-gold-500 text-navy-950"
-                  : "border-gold-500/30 text-gold-300 hover:border-gold-300 hover:text-white"
-              }`}
-            >
-              {link.label}
-            </Link>
-          ))}
+        <div className="hidden items-stretch gap-2 md:flex md:flex-wrap">
+          {groups.map((group) => {
+            const Icon = group.icon;
+            const groupActive = group.items.some((item) => isActive(item.href));
+            const isOpen = openAdminMenu === group.label;
+
+            return (
+              <div key={group.label} className="relative">
+                <button
+                  type="button"
+                  aria-haspopup="menu"
+                  aria-expanded={isOpen}
+                  onClick={() => setOpenAdminMenu(isOpen ? null : group.label)}
+                  onMouseEnter={() => setOpenAdminMenu(group.label)}
+                  className={`group flex h-full min-h-12 items-center gap-2 border px-3 py-2 text-left text-xs font-semibold uppercase tracking-[.08em] transition ${
+                    groupActive || isOpen
+                      ? "border-gold-300 bg-gold-500 text-navy-950 shadow-gold"
+                      : "border-gold-500/24 bg-navy-950/55 text-ink/78 hover:border-gold-300 hover:bg-navy-800 hover:text-white"
+                  }`}
+                >
+                  <Icon size={16} className={groupActive || isOpen ? "text-navy-950" : "text-gold-300 transition group-hover:text-gold-200"} />
+                  <span>{group.label}</span>
+                  <ChevronDown size={13} className={`transition ${isOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {isOpen ? (
+                  <div
+                    className="absolute left-0 top-full z-[99999] w-80 pt-2"
+                    onMouseEnter={() => setOpenAdminMenu(group.label)}
+                    onMouseLeave={() => setOpenAdminMenu(null)}
+                  >
+                    <div className="border border-gold-500/35 bg-navy-950 p-2 shadow-gold">
+                      <div className="border-b border-gold-500/14 px-3 py-2">
+                        <p className="text-xs font-bold uppercase tracking-[.16em] text-gold-300">{group.label}</p>
+                        <p className="mt-1 text-xs text-ink/62">{group.description}</p>
+                      </div>
+                      <div className="grid gap-1 pt-2">
+                        {group.items.map((item) => (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={() => setOpenAdminMenu(null)}
+                            className={`flex items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold transition ${
+                              isActive(item.href)
+                                ? "bg-gold-500 text-navy-950"
+                                : "text-ink/78 hover:bg-navy-800 hover:text-white"
+                            }`}
+                          >
+                            {item.label}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
           <button
             type="button"
             onClick={onLogout}
-            className="ml-auto shrink-0 bg-gold-500 px-3 py-2 text-xs font-bold text-navy-950 transition hover:bg-gold-300"
+            className="ml-auto inline-flex min-h-12 shrink-0 items-center gap-2 bg-gold-500 px-4 py-2 text-xs font-bold uppercase tracking-[.08em] text-navy-950 transition hover:bg-gold-300"
           >
+            <LogOut size={16} />
             Logout
           </button>
         </div>
 
         {menuOpen ? (
-          <div className="grid gap-2 border-t border-gold-500/14 pt-3 sm:hidden">
-            {links.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setMenuOpen(false)}
-                className={`border px-3 py-3 text-sm font-semibold ${
-                  isActive(link.href)
-                    ? "border-gold-300 bg-gold-500 text-navy-950"
-                    : "border-gold-500/24 text-white hover:border-gold-300 hover:text-gold-300"
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
+          <div className="grid gap-3 border-t border-gold-500/14 pt-3 md:hidden">
+            {groups.map((group) => {
+              const Icon = group.icon;
+
+              return (
+                <details key={group.label} className="border border-gold-500/20 bg-navy-950/65" open={activeGroup?.label === group.label}>
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 text-sm font-bold uppercase tracking-[.1em] text-gold-300 [&::-webkit-details-marker]:hidden">
+                    <span className="inline-flex items-center gap-2">
+                      <Icon size={16} />
+                      {group.label}
+                    </span>
+                    <ChevronDown size={15} />
+                  </summary>
+                  <div className="grid gap-1 border-t border-gold-500/14 p-2">
+                    {group.items.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setMenuOpen(false)}
+                        className={`border px-3 py-3 text-sm font-semibold ${
+                          isActive(item.href)
+                            ? "border-gold-300 bg-gold-500 text-navy-950"
+                            : "border-gold-500/16 text-white hover:border-gold-300 hover:text-gold-300"
+                        }`}
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                </details>
+              );
+            })}
             <button
               type="button"
               onClick={onLogout}
-              className="bg-gold-500 px-3 py-3 text-sm font-bold text-navy-950 transition hover:bg-gold-300"
+              className="inline-flex items-center justify-center gap-2 bg-gold-500 px-3 py-3 text-sm font-bold text-navy-950 transition hover:bg-gold-300"
             >
+              <LogOut size={16} />
               Logout
             </button>
           </div>
         ) : null}
       </div>
-    </div>
+    </section>
   );
 }
 

@@ -53,7 +53,7 @@ assert.match(billing, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin"
 assert.match(directoryRoute, /getAffAdminStatus\(\)/, "student directory API must check server-side admin status");
 assert.match(directoryRoute, /status: 403/, "student directory API must deny non-admin requests");
 
-const adminLinksBlock = siteShell.match(/const adminAuthLinks:[\s\S]*?];/)?.[0] ?? "";
+const adminLinksBlock = siteShell.match(/const adminNavGroups:[\s\S]*?const navGroups/)?.[0] ?? "";
 const publicHeaderBlock = siteShell.slice(
   siteShell.indexOf('<div className="mx-auto flex max-w-[1440px]'),
   siteShell.indexOf("{mobileOpen ?")
@@ -68,9 +68,10 @@ assert.match(siteShell, /const authenticatedLinks = isAdmin \? \[\] : studentAut
 assert.match(siteShell, /function AdminNavigationRow/, "administrator navigation must render in a dedicated second row");
 assert.match(siteShell, /AFF ADMINISTRATION/, "dedicated administrator row must be clearly labeled");
 assert.match(siteShell, /Admin Menu/, "administrator navigation must provide a mobile menu");
-assert.match(siteShell, /<AdminNavigationRow[\s\S]*links=\{adminAuthLinks\}/, "administrator links must be passed only to the second row");
+assert.match(siteShell, /const adminNavGroups:[\s\S]*Dashboard[\s\S]*Students[\s\S]*Courses[\s\S]*Media Center[\s\S]*Live Academy[\s\S]*Analytics[\s\S]*Administration/, "administrator navigation must be grouped into enterprise toolbar sections");
+assert.match(siteShell, /<AdminNavigationRow[\s\S]*groups=\{adminNavGroups\}/, "administrator groups must be passed only to the second row");
 assert.match(siteShell, /<AuthNavigation[\s\S]*links=\{authenticatedLinks\}/, "public header auth controls must use the non-admin authenticated links set");
-assert.doesNotMatch(publicHeaderBlock, /adminAuthLinks|AdminNavigationRow/, "administrator navigation must not render inside the public top header row");
+assert.doesNotMatch(publicHeaderBlock, /adminNavGroups|AdminNavigationRow/, "administrator navigation must not render inside the public top header row");
 assert.match(adminProfile, /getAffAdminStatus\(\)/, "admin profile must read administrator role through getAffAdminStatus");
 assert.match(executiveCommandCenter, /getClientAdminStatus\(\)/, "executive command center must use aff_admin_users admin status");
 assert.match(adminRouteAudit, /process\.env\.NODE_ENV === "production"/, "admin route audit must detect production mode");

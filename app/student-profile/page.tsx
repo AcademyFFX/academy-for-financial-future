@@ -100,6 +100,7 @@ export default function StudentProfilePage() {
       const row = (studentResult.data ?? {}) as DbRow;
       const applicationRow = (applicationResult.data ?? {}) as DbRow;
       const profileRow = (profileResult.data ?? {}) as DbRow;
+      if (profileResult.error) throw new Error(`Unable to load saved student profile row: ${profileResult.error.message}`);
       const { data: membershipData } = await supabase.from("student_memberships").select("*").eq("student_id", user.id).maybeSingle();
       const membershipRow = (membershipData ?? {}) as DbRow;
       const internalStudentId = value(row, ["id"]);
@@ -156,8 +157,19 @@ export default function StudentProfilePage() {
     try {
       setMessage("Uploading profile photo...");
       const supabase = createClient();
+      const {
+        data: { user },
+        error: userError
+      } = await supabase.auth.getUser();
+      if (userError) throw new Error(`Unable to verify authenticated student before photo upload: ${userError.message}`);
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+
+      const authenticatedUserId = user.id;
       const safeName = photoFile.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-      const path = `${profile.authUserId}/${Date.now()}-${safeName}`;
+      const path = `${authenticatedUserId}/${Date.now()}-${safeName}`;
       const { error: uploadError } = await supabase.storage.from("student-profile-photos").upload(path, photoFile, {
         cacheControl: "3600",
         upsert: true
@@ -165,23 +177,76 @@ export default function StudentProfilePage() {
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage.from("student-profile-photos").getPublicUrl(path);
-      await supabase
-        .from("student_profiles")
-        .upsert({
-          auth_user_id: profile.authUserId,
-          student_id: profile.studentId,
-          full_name: profile.fullName,
-          email: profile.email,
-          membership_level: profile.membershipLevel,
-          certification_status: profile.certificationStatus,
-          enrollment_status: profile.status,
-          profile_photo_url: data.publicUrl,
-          updated_at: new Date().toISOString()
-        }, { onConflict: "auth_user_id" });
+      if (!data.publicUrl) throw new Error("Profile photo uploaded, but Supabase did not return a public URL.");
 
-      setProfile({ ...profile, profilePhotoUrl: data.publicUrl });
+      const savedAt = new Date().toISOString();
+      const profilePayload = {
+        student_id: profile.studentId,
+        full_name: profile.fullName,
+        email: profile.email,
+        membership_level: profile.membershipLevel,
+        certification_status: profile.certificationStatus,
+        enrollment_status: profile.status,
+        profile_photo_url: data.publicUrl,
+        updated_at: savedAt
+      };
+      const updateResult = await supabase
+        .from("student_profiles")
+        .update(profilePayload)
+        .eq("auth_user_id", authenticatedUserId)
+        .select("auth_user_id, profile_photo_url");
+
+      if (updateResult.error) {
+        throw new Error(`Profile photo URL update failed: ${updateResult.error.message}`);
+      }
+
+      let savedRows = (updateResult.data ?? []) as DbRow[];
+      let repairedMissingProfile = false;
+      if (savedRows.length === 0) {
+        repairedMissingProfile = true;
+        const insertResult = await supabase
+          .from("student_profiles")
+          .insert({
+            auth_user_id: authenticatedUserId,
+            ...profilePayload,
+            created_at: savedAt
+          })
+          .select("auth_user_id, profile_photo_url");
+
+        if (insertResult.error) {
+          throw new Error(`No matching student_profiles row exists for this authenticated student, and the repair insert failed: ${insertResult.error.message}`);
+        }
+
+        savedRows = (insertResult.data ?? []) as DbRow[];
+      }
+
+      if (savedRows.length === 0) {
+        throw new Error("Profile photo URL update affected zero rows and no repaired student profile row could be read.");
+      }
+
+      const savedProfilePhotoUrl = value(savedRows[0], ["profile_photo_url"]);
+      if (!savedProfilePhotoUrl) {
+        throw new Error("Profile photo URL was saved, but the saved student profile row returned an empty profile_photo_url.");
+      }
+
+      const verifyResult = await supabase
+        .from("student_profiles")
+        .select("auth_user_id, profile_photo_url")
+        .eq("auth_user_id", authenticatedUserId)
+        .maybeSingle();
+
+      if (verifyResult.error) {
+        throw new Error(`Unable to read back saved profile photo URL: ${verifyResult.error.message}`);
+      }
+
+      const verifiedUrl = value((verifyResult.data ?? {}) as DbRow, ["profile_photo_url"]);
+      if (!verifiedUrl) {
+        throw new Error("Saved profile photo URL could not be read back from student_profiles.profile_photo_url.");
+      }
+
+      setProfile({ ...profile, authUserId: authenticatedUserId, profilePhotoUrl: verifiedUrl });
       setPhotoFile(null);
-      setMessage("Profile photo updated.");
+      setMessage(repairedMissingProfile ? "Profile photo updated. Missing student profile row was repaired." : "Profile photo updated.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to upload profile photo.");
     }

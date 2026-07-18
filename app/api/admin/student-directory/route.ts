@@ -69,10 +69,27 @@ export async function GET() {
     return NextResponse.json({ error: membershipsError.message, code: membershipsError.code }, { status: 500 });
   }
 
+  const { data: profiles, error: profilesError } = authIds.length
+    ? await adminSupabase
+        .from("student_profiles")
+        .select("auth_user_id, profile_photo_url")
+        .in("auth_user_id", authIds)
+    : { data: [], error: null };
+
+  if (profilesError) {
+    return NextResponse.json({ error: profilesError.message, code: profilesError.code }, { status: 500 });
+  }
+
   const membershipByAuthId = new Map(((memberships ?? []) as DbRow[]).map((membership) => [value(membership, "student_id"), membership]));
+  const profileByAuthId = new Map(((profiles ?? []) as DbRow[]).map((profile) => [value(profile, "auth_user_id"), profile]));
   const directory = ((students ?? []) as DbRow[]).map((student) => {
-    const membership = membershipByAuthId.get(value(student, "auth_user_id")) ?? {};
+    const authUserId = value(student, "auth_user_id");
+    const membership = membershipByAuthId.get(authUserId) ?? {};
+    const studentProfile = profileByAuthId.get(authUserId) ?? {};
+    const profilePhotoUrl = nullableValue(studentProfile, ["profile_photo_url"]) ?? (detectedPhotoColumn ? nullableValue(student, [detectedPhotoColumn]) : null);
+
     return {
+      id: value(student, "id"),
       student_id: value(student, "student_id", "Pending"),
       full_name: value(student, "full_name", "AFF Student"),
       email: value(student, "email"),
@@ -83,7 +100,7 @@ export async function GET() {
       membership_status: value(membership, "membership_status", "Pending Payment"),
       payment_status: value(membership, "payment_status"),
       account_status: value(membership, "account_status"),
-      profile_photo_url: detectedPhotoColumn ? nullableValue(student, [detectedPhotoColumn]) : null
+      profile_photo_url: profilePhotoUrl
     };
   });
 

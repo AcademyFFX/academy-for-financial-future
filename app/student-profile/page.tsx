@@ -82,10 +82,9 @@ export default function StudentProfilePage() {
       }
 
       const email = user.email ?? "";
-      const [studentResult, applicationResult, profileResult, certificatesResult, certificationsResult, progressResult, journalResult, lessonsResult, attendanceResult, assignmentsResult] = await Promise.all([
+      const [studentResult, applicationResult, certificatesResult, certificationsResult, progressResult, journalResult, lessonsResult, attendanceResult, assignmentsResult] = await Promise.all([
         supabase.from("students").select("*").or(`auth_user_id.eq.${user.id},email.eq.${email}`).order("created_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("student_applications").select("*").or(`auth_user_id.eq.${user.id},email.eq.${email}`).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-        supabase.from("student_profiles").select("*").eq("auth_user_id", user.id).maybeSingle(),
         supabase.from("certificates").select("id").eq("student_id", user.id),
         supabase.from("certifications").select("id").eq("student_id", user.id),
         supabase.from("lesson_progress").select("id").eq("student_id", user.id),
@@ -99,8 +98,6 @@ export default function StudentProfilePage() {
 
       const row = (studentResult.data ?? {}) as DbRow;
       const applicationRow = (applicationResult.data ?? {}) as DbRow;
-      const profileRow = (profileResult.data ?? {}) as DbRow;
-      if (profileResult.error) throw new Error(`Unable to load saved student profile row: ${profileResult.error.message}`);
       const { data: membershipData } = await supabase.from("student_memberships").select("*").eq("student_id", user.id).maybeSingle();
       const membershipRow = (membershipData ?? {}) as DbRow;
       const internalStudentId = value(row, ["id"]);
@@ -112,8 +109,8 @@ export default function StudentProfilePage() {
       const earnedCredentialCount = (certificatesResult.data ?? []).length + (certificationsResult.data ?? []).length;
       const membershipState = normalizeMembershipState({
         selected_membership_plan: value(membershipRow, ["selected_membership_plan"], value(applicationRow, ["membership_plan"], "Free Trial")),
-        active_membership_plan: value(membershipRow, ["active_membership_plan", "membership_plan"], value(row, ["membership_plan"], value(profileRow, ["membership_level"], "Free Trial"))),
-        membership_plan: value(membershipRow, ["membership_plan"], value(row, ["membership_plan"], value(profileRow, ["membership_level"], "Free Trial"))),
+        active_membership_plan: value(membershipRow, ["active_membership_plan", "membership_plan"], value(row, ["membership_plan"], "Free Trial")),
+        membership_plan: value(membershipRow, ["membership_plan"], value(row, ["membership_plan"], "Free Trial")),
         payment_status: value(membershipRow, ["payment_status"], "Pending"),
         membership_status: value(membershipRow, ["membership_status"], "Pending Payment"),
         account_status: value(membershipRow, ["account_status"], "Restricted")
@@ -121,16 +118,16 @@ export default function StudentProfilePage() {
       const loadedProfile: StudentProfile = {
         id: value(row, ["id"]),
         authUserId: value(row, ["auth_user_id"], user.id),
-        studentId: value(applicationRow, ["student_id"], value(row, ["student_id"], value(profileRow, ["student_id"], "Not assigned"))),
-        fullName: value(row, ["full_name"], value(applicationRow, ["full_name"], value(profileRow, ["full_name"], user.user_metadata?.full_name as string | undefined ?? email))),
-        email: value(profileRow, ["email"], value(row, ["email"], email)),
+        studentId: value(applicationRow, ["student_id"], value(row, ["student_id"], "Not assigned")),
+        fullName: value(row, ["full_name"], value(applicationRow, ["full_name"], user.user_metadata?.full_name as string | undefined ?? email)),
+        email: value(row, ["email"], email),
         membershipLevel: membershipState.currentPlan,
         membershipStatus: membershipState.membershipStatus,
         enrollmentDate: value(row, ["enrollment_date"], value(enrollmentRow, ["enrolled_at"], value(row, ["created_at"]))),
-        certificationLevel: value(applicationRow, ["program_interest"], value(row, ["certification_level"], value(profileRow, ["program_interest"], "Academy for Financial Future"))),
+        certificationLevel: value(applicationRow, ["program_interest"], value(row, ["certification_level"], "Academy for Financial Future")),
         certificationStatus: earnedCredentialCount > 0 ? "Certified" : "Not Started",
         status: enrollmentStatus,
-        profilePhotoUrl: value(profileRow, ["profile_photo_url"], value(row, ["profile_photo_url"]))
+        profilePhotoUrl: value(row, ["profile_photo_url"])
       };
 
       setProfile(loadedProfile);
@@ -179,20 +176,11 @@ export default function StudentProfilePage() {
       const { data } = supabase.storage.from("student-profile-photos").getPublicUrl(path);
       if (!data.publicUrl) throw new Error("Profile photo uploaded, but Supabase did not return a public URL.");
 
-      const savedAt = new Date().toISOString();
-      const profilePayload = {
-        student_id: profile.studentId,
-        full_name: profile.fullName,
-        email: profile.email,
-        membership_level: profile.membershipLevel,
-        certification_status: profile.certificationStatus,
-        enrollment_status: profile.status,
-        profile_photo_url: data.publicUrl,
-        updated_at: savedAt
-      };
       const updateResult = await supabase
-        .from("student_profiles")
-        .update(profilePayload)
+        .from("students")
+        .update({
+          profile_photo_url: data.publicUrl
+        })
         .eq("auth_user_id", authenticatedUserId)
         .select("auth_user_id, profile_photo_url");
 
@@ -200,37 +188,18 @@ export default function StudentProfilePage() {
         throw new Error(`Profile photo URL update failed: ${updateResult.error.message}`);
       }
 
-      let savedRows = (updateResult.data ?? []) as DbRow[];
-      let repairedMissingProfile = false;
+      const savedRows = (updateResult.data ?? []) as DbRow[];
       if (savedRows.length === 0) {
-        repairedMissingProfile = true;
-        const insertResult = await supabase
-          .from("student_profiles")
-          .insert({
-            auth_user_id: authenticatedUserId,
-            ...profilePayload,
-            created_at: savedAt
-          })
-          .select("auth_user_id, profile_photo_url");
-
-        if (insertResult.error) {
-          throw new Error(`No matching student_profiles row exists for this authenticated student, and the repair insert failed: ${insertResult.error.message}`);
-        }
-
-        savedRows = (insertResult.data ?? []) as DbRow[];
-      }
-
-      if (savedRows.length === 0) {
-        throw new Error("Profile photo URL update affected zero rows and no repaired student profile row could be read.");
+        throw new Error("No matching students row was updated for this authenticated user. Expected public.students.auth_user_id to match auth.uid().");
       }
 
       const savedProfilePhotoUrl = value(savedRows[0], ["profile_photo_url"]);
       if (!savedProfilePhotoUrl) {
-        throw new Error("Profile photo URL was saved, but the saved student profile row returned an empty profile_photo_url.");
+        throw new Error("Profile photo URL was saved, but the saved students row returned an empty profile_photo_url.");
       }
 
       const verifyResult = await supabase
-        .from("student_profiles")
+        .from("students")
         .select("auth_user_id, profile_photo_url")
         .eq("auth_user_id", authenticatedUserId)
         .maybeSingle();
@@ -241,12 +210,12 @@ export default function StudentProfilePage() {
 
       const verifiedUrl = value((verifyResult.data ?? {}) as DbRow, ["profile_photo_url"]);
       if (!verifiedUrl) {
-        throw new Error("Saved profile photo URL could not be read back from student_profiles.profile_photo_url.");
+        throw new Error("Saved profile photo URL could not be read back from students.profile_photo_url.");
       }
 
       setProfile({ ...profile, authUserId: authenticatedUserId, profilePhotoUrl: verifiedUrl });
       setPhotoFile(null);
-      setMessage(repairedMissingProfile ? "Profile photo updated. Missing student profile row was repaired." : "Profile photo updated.");
+      setMessage("Profile photo updated.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to upload profile photo.");
     }

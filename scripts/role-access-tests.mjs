@@ -49,9 +49,13 @@ assert.match(authRole, /\["administrator", "admin"\]\.includes/, "legacy role re
 assert.match(studentDashboard, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin"\)/, "student dashboard must redirect admins before student data fallbacks");
 assert.match(studentProfile, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin\/profile"\)/, "student profile must redirect admins before student data fallbacks");
 assert.match(billing, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin"\)/, "billing must redirect admins before membership fallback creation");
+assert.match(studentProfile, /\.from\("students"\)[\s\S]*profile_photo_url/, "student profile photos must persist to the existing students table");
+assert.doesNotMatch(studentProfile, /\.from\("student_profiles"\)|student_profiles\.profile_photo_url/, "student profile page must not reference the missing student_profiles table for photo persistence");
 
 assert.match(directoryRoute, /getAffAdminStatus\(\)/, "student directory API must check server-side admin status");
 assert.match(directoryRoute, /status: 403/, "student directory API must deny non-admin requests");
+assert.match(directoryRoute, /\.from\("students"\)[\s\S]*profile_photo_url/, "student directory API must read profile photos from the existing students table");
+assert.doesNotMatch(directoryRoute, /\.from\("student_profiles"\)|student_profiles\.profile_photo_url/, "student directory API must not reference the missing student_profiles table for profile photos");
 
 const adminLinksBlock = siteShell.match(/const adminNavGroups:[\s\S]*?const navGroups/)?.[0] ?? "";
 const publicHeaderBlock = siteShell.slice(

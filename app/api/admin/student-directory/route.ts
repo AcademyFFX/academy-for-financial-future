@@ -69,24 +69,11 @@ export async function GET() {
     return NextResponse.json({ error: membershipsError.message, code: membershipsError.code }, { status: 500 });
   }
 
-  const { data: profiles, error: profilesError } = authIds.length
-    ? await adminSupabase
-        .from("student_profiles")
-        .select("auth_user_id, profile_photo_url")
-        .in("auth_user_id", authIds)
-    : { data: [], error: null };
-
-  if (profilesError) {
-    return NextResponse.json({ error: profilesError.message, code: profilesError.code }, { status: 500 });
-  }
-
   const membershipByAuthId = new Map(((memberships ?? []) as DbRow[]).map((membership) => [value(membership, "student_id"), membership]));
-  const profileByAuthId = new Map(((profiles ?? []) as DbRow[]).map((profile) => [value(profile, "auth_user_id"), profile]));
   const directory = ((students ?? []) as DbRow[]).map((student) => {
     const authUserId = value(student, "auth_user_id");
     const membership = membershipByAuthId.get(authUserId) ?? {};
-    const studentProfile = profileByAuthId.get(authUserId) ?? {};
-    const profilePhotoUrl = nullableValue(studentProfile, ["profile_photo_url"]) ?? (detectedPhotoColumn ? nullableValue(student, [detectedPhotoColumn]) : null);
+    const profilePhotoUrl = detectedPhotoColumn ? nullableValue(student, [detectedPhotoColumn]) : null;
 
     return {
       id: value(student, "id"),

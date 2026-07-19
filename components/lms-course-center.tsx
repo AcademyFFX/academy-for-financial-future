@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Award, BookOpen, CheckCircle2, Download, FileText, PlayCircle, ShieldCheck } from "lucide-react";
+import { Award, BookOpen, Download, FileText, PlayCircle, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProgressBar } from "@/components/progress";
 import { getClientAdminStatus } from "@/lib/admin-client";
@@ -33,6 +33,10 @@ function questionsOf(row: DbRow): QuizQuestion[] {
 
 function safeSlug(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function sameText(left: string, right: string) {
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
 }
 
 function isPublished(row: DbRow, keys: string[]) {
@@ -159,6 +163,26 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
   useEffect(() => { loadLms(); }, [loadLms]);
 
   const enrollmentByCourse = useMemo(() => new Map(enrollments.map((row) => [value(row, ["course_id"]), row])), [enrollments]);
+  const enrollmentForCourse = useCallback((course: DbRow) => {
+    const courseId = idOf(course);
+    return enrollments.find((row) => {
+      const enrollmentCourseId = value(row, ["course_id"]);
+      const enrollmentCourseName = value(row, ["course_name", "program_name"]);
+      return Boolean(
+        (enrollmentCourseId && enrollmentCourseId === courseId) ||
+          (enrollmentCourseName &&
+            [
+              value(course, ["course_name", "title"]),
+              value(course, ["academic_division"]),
+              value(course, ["certification_level"]),
+              value(course, ["department_name"]),
+              value(course, ["category", "course_category"])
+            ]
+              .filter(Boolean)
+              .some((candidate) => sameText(candidate, enrollmentCourseName)))
+      );
+    });
+  }, [enrollments]);
   const completedLessonIds = useMemo(() => new Set(progress.map(id => value(id, ["lesson_id"]))), [progress]);
   const publishedCourses = useMemo(() => courses.filter((course) => isPublished(course, ["publication_status", "status"])), [courses]);
   const publishedLessons = useMemo(() => lessons.filter((lesson) => isPublished(lesson, ["publication_status", "status", "lesson_status"])), [lessons]);
@@ -219,28 +243,6 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
     }
   }
 
-  async function completeLesson(course: DbRow, lesson: DbRow) {
-    if (!userId) return;
-    if (!hasPaidAccess) {
-      setMessage("Upgrade to an active paid membership to complete managed course lessons.");
-      return;
-    }
-    const courseId = idOf(course);
-    const lessonId = idOf(lesson);
-    const supabase = createClient();
-    const { error } = await supabase.from("lesson_progress").upsert({ student_id: userId, course_id: courseId, lesson_id: lessonId }, { onConflict: "student_id,course_id,lesson_id" });
-    if (error) { setMessage(error.message); return; }
-    const nextCompleted = new Set([...Array.from(completedLessonIds), lessonId]);
-    const courseLessons = publishedLessons.filter((item) => value(item, ["course_id"]) === courseId);
-    const percent = courseLessons.length ? Math.round((courseLessons.filter((item) => nextCompleted.has(idOf(item))).length / courseLessons.length) * 100) : 0;
-    if (studentDbId) {
-      await supabase.from("enrollments").update({ progress_percentage: percent, completed_at: percent === 100 ? new Date().toISOString() : null }).eq("student_id", Number(studentDbId)).eq("course_id", Number(courseId));
-    }
-    if (percent === 100) await issueCertificate(course);
-    setMessage(percent === 100 ? "Course lessons complete. Certificate eligibility checked." : "Lesson marked complete.");
-    await loadLms();
-  }
-
   async function submitQuiz(course: DbRow, quiz: DbRow) {
     if (!userId) return;
     if (!hasPaidAccess) {
@@ -280,7 +282,7 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
       {publishedCourses.filter(courseMatches).length === 0 ? <p className="terminal-panel p-5 text-ink/68">No published AFF courses found.</p> : null}
       {publishedCourses.filter(courseMatches).map((course) => {
         const courseId = idOf(course);
-        const enrolled = enrollmentByCourse.has(courseId);
+        const enrolled = enrollmentByCourse.has(courseId) || Boolean(enrollmentForCourse(course));
         const percent = coursePercent(courseId);
         const courseModules = modules.filter((module) => value(module, ["course_id"]) === courseId);
         const courseSections = courseModules.length ? courseModules : [{ id: `lessons-${courseId}`, module_title: "Lessons", course_id: courseId }];
@@ -309,7 +311,8 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
                 const moduleLessons = publishedLessons.filter((lesson) => value(lesson, ["course_id"]) === courseId);
                 return <section key={moduleId} className="bg-navy-950 p-5"><h4 className="text-lg font-semibold text-white">{value(module, ["module_title", "asset_title"])}</h4><p className="mt-2 text-sm text-ink/65">{value(module, ["module_description"])}</p><div className="mt-4 grid gap-3">{moduleLessons.map((lesson) => {
                   const lessonId = idOf(lesson); const done = completedLessonIds.has(lessonId);
-                  return <article key={lessonId} className="border border-gold-500/18 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="font-semibold text-white">{value(lesson, ["lesson_title", "title"])}</p><p className="mt-1 text-sm text-ink/65">{value(lesson, ["description"])}</p></div><button className="inline-flex items-center gap-2 border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300 disabled:opacity-60" disabled={done} onClick={() => completeLesson(course, lesson)}><CheckCircle2 size={15} /> {done ? "Complete" : "Mark Complete"}</button></div><div className="mt-3 flex flex-wrap gap-2">{value(lesson, ["video_url"]) ? <a className="inline-flex items-center gap-2 text-sm text-gold-300" href={value(lesson, ["video_url"])} target="_blank" rel="noreferrer"><PlayCircle size={15} /> Video</a> : null}{value(lesson, ["pdf_notes_url"]) ? <a className="inline-flex items-center gap-2 text-sm text-gold-300" href={value(lesson, ["pdf_notes_url"])} target="_blank" rel="noreferrer"><Download size={15} /> PDF Notes</a> : null}</div></article>;
+                  const lessonHref = `/student-courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}`;
+                  return <article key={lessonId} className="border border-gold-500/18 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><Link href={lessonHref} className="font-semibold text-white transition hover:text-gold-300">{value(lesson, ["lesson_title", "title"])}</Link><p className="mt-1 text-sm text-ink/65">{value(lesson, ["description"])}</p></div><Link className="inline-flex items-center justify-center gap-2 border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300 transition hover:border-gold-300 hover:text-white" href={lessonHref}><PlayCircle size={15} /> {done ? "Review Lesson" : "Open Lesson"}</Link></div><div className="mt-3 flex flex-wrap gap-2">{done ? <span className="inline-flex items-center gap-2 text-sm text-gold-300">Complete</span> : null}{value(lesson, ["video_url"]) ? <a className="inline-flex items-center gap-2 text-sm text-gold-300" href={value(lesson, ["video_url"])} target="_blank" rel="noreferrer"><PlayCircle size={15} /> Video</a> : null}{value(lesson, ["pdf_notes_url"]) ? <a className="inline-flex items-center gap-2 text-sm text-gold-300" href={value(lesson, ["pdf_notes_url"])} target="_blank" rel="noreferrer"><Download size={15} /> PDF Notes</a> : null}</div></article>;
                 })}</div></section>;
               })}
               {homework.filter((item) => value(item, ["course_id"]) === courseId).map((item) => { const payload = parseAssetPayload(item); return <article key={idOf(item)} className="bg-navy-950 p-5"><p className="text-xs uppercase tracking-[.2em] text-gold-300">Homework · Due in {String(payload?.dueDays ?? "7")} days</p><h4 className="mt-2 font-semibold text-white">{value(item, ["asset_title"])}</h4><p className="mt-2 text-sm text-ink/68">{payload?.instructions ?? ""}</p>{value(item, ["url", "public_url"]) && value(item, ["url", "public_url"]) !== "#" ? <a className="mt-3 inline-flex items-center gap-2 text-sm text-gold-300" href={value(item, ["url", "public_url"])}><FileText size={15} /> Assignment File</a> : null}</article>; })}

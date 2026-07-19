@@ -37,6 +37,7 @@ type CourseCard = {
   completedLessons: number;
   totalLessons: number;
   nextLessonTitle: string;
+  nextLessonId: string;
   certificationStatus: string;
   continueHref: string;
   hasLessons: boolean;
@@ -107,7 +108,18 @@ function courseMatchesEnrollment(course: DbRow, enrollment: DbRow) {
   const enrollmentCourseId = value(enrollment, ["course_id"]);
   if (enrollmentCourseId && idOf(course) === enrollmentCourseId) return true;
   const enrollmentCourseName = value(enrollment, ["course_name", "program_name"]);
-  return Boolean(enrollmentCourseName && sameText(courseTitle(course), enrollmentCourseName));
+  return Boolean(
+    enrollmentCourseName &&
+      [
+        courseTitle(course),
+        value(course, ["academic_division"]),
+        value(course, ["certification_level"]),
+        value(course, ["department_name"]),
+        value(course, ["category", "course_category"])
+      ]
+        .filter(Boolean)
+        .some((candidate) => sameText(candidate, enrollmentCourseName))
+  );
 }
 
 function lessonsForCourse(lessons: DbRow[], courseId: string) {
@@ -145,7 +157,7 @@ function buildCards({
     const course = courses.find((item) => courseMatchesEnrollment(item, enrollment)) ?? null;
     if (!course || !isPublishedCourse(course)) return [];
     const courseId = course ? idOf(course) : value(enrollment, ["course_id"], `pending-${index}`);
-    const title = courseTitle(course, value(enrollment, ["course_name", "program_name"], "Academy Course"));
+    const title = value(enrollment, ["course_name", "program_name"], courseTitle(course, "Academy Course"));
     const courseLessons = course ? lessonsForCourse(lessons, courseId) : [];
     const lessonIds = new Set(courseLessons.map((lesson) => idOf(lesson)));
     const completedLessonIds = new Set(
@@ -160,6 +172,7 @@ function buildCards({
     const certificate = certificateForCourse(certificates, course, title, courseId);
     const certificationStatus = certificate ? "Certified" : progressPercentage >= 100 && totalLessons > 0 ? "Eligible" : "In Progress";
     const key = courseLinkKey(course, courseId, title);
+    const nextLessonId = nextLesson ? idOf(nextLesson) : "";
 
     return [{
       id: value(enrollment, ["id"], `${courseId}-${index}`),
@@ -174,8 +187,9 @@ function buildCards({
       completedLessons,
       totalLessons,
       nextLessonTitle: nextLesson ? value(nextLesson, ["lesson_title", "title"], "Next lesson") : "Course materials are being prepared.",
+      nextLessonId,
       certificationStatus,
-      continueHref: `/courses/managed/${encodeURIComponent(key)}`,
+      continueHref: nextLessonId ? `/student-courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(nextLessonId)}` : `/courses/managed/${encodeURIComponent(key)}`,
       hasLessons: totalLessons > 0
     }];
   });

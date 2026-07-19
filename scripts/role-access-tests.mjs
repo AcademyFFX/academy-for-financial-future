@@ -8,6 +8,7 @@ function read(path) {
 const middleware = read("middleware.ts");
 const studentDashboard = read("app/student-dashboard/page.tsx");
 const studentCourses = read("app/student-courses/page.tsx");
+const studentLessonViewer = read("app/student-courses/[courseId]/lessons/[lessonId]/page.tsx");
 const studentProfile = read("app/student-profile/page.tsx");
 const billing = read("app/billing/page.tsx");
 const siteShell = read("components/site-shell.tsx");
@@ -35,6 +36,7 @@ assert.match(middleware, /\["\/courses", "\/admin\/course-management"\]/, "admin
 assert.match(middleware, /\["\/profile", "\/admin\/profile"\]/, "administrator /profile must redirect to /admin/profile");
 assert.match(middleware, /\["\/my-courses", "\/admin\/course-management"\]/, "administrator /my-courses must redirect to /admin/course-management");
 assert.match(middleware, /\["\/student-courses", "\/admin\/course-management"\]/, "administrator /student-courses must redirect to /admin/course-management");
+assert.match(middleware, /isStudentLessonPreview/, "middleware must allow administrators to preview individual student lesson pages");
 assert.match(middleware, /getAffAdminStatusFromSupabase\(supabase\)/, "middleware must resolve administrator role through the shared admin status helper");
 assert.match(adminStatus, /\.from\("aff_admin_users"\)/, "shared admin status helper must query aff_admin_users");
 assert.match(adminStatus, /\.eq\("user_id", userId\)/, "shared admin status helper must match by user_id first");
@@ -55,6 +57,11 @@ assert.match(studentCourses, /\.from\("enrollments"\)[\s\S]*\.eq\("student_id", 
 assert.match(studentCourses, /\.from\("lesson_progress"\)[\s\S]*\.eq\("student_id", user\.id\)/, "student courses must scope lesson progress to the authenticated user");
 assert.match(studentCourses, /\.from\("certificates"\)[\s\S]*\.eq\("student_id", user\.id\)/, "student courses must scope certificate records to the authenticated user");
 assert.doesNotMatch(studentCourses, /SERVICE_ROLE|service_role|hardcoded/i, "student courses must not expose service-role access or hardcoded student data");
+assert.match(studentLessonViewer, /\.from\("students"\)[\s\S]*\.eq\("auth_user_id", user\.id\)/, "student lesson viewer must locate students by auth_user_id");
+assert.match(studentLessonViewer, /\.from\("enrollments"\)[\s\S]*\.eq\("student_id", studentId\)/, "student lesson viewer must verify enrollment through internal students.id");
+assert.match(studentLessonViewer, /\.from\("lesson_progress"\)[\s\S]*upsert/, "student lesson viewer must persist completion through lesson_progress upsert");
+assert.match(studentLessonViewer, /localStorage/, "student lesson viewer must clearly use device-local notes when no lesson notes table exists");
+assert.doesNotMatch(studentLessonViewer, /SERVICE_ROLE|service_role/i, "student lesson viewer must not expose service-role access");
 assert.match(studentProfile, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin\/profile"\)/, "student profile must redirect admins before student data fallbacks");
 assert.match(billing, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin"\)/, "billing must redirect admins before membership fallback creation");
 assert.match(studentProfile, /\.from\("students"\)[\s\S]*profile_photo_url/, "student profile photos must persist to the existing students table");

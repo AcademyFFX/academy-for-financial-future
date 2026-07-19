@@ -131,6 +131,10 @@ function value(row: DbRow, keys: string[], fallback = "") {
   return fallback;
 }
 
+function sameText(left: string, right: string) {
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
 function numberValue(row: DbRow, keys: string[], fallback = 0) {
   const raw = value(row, keys);
   const parsed = Number(raw);
@@ -303,6 +307,18 @@ export default function AdminPage() {
 
     const now = new Date().toISOString();
     const courseName = application.programInterest || "Academy for Financial Future";
+    const { data: courseRows } = await supabase.from("courses").select("*");
+    const matchingCourse = ((courseRows ?? []) as DbRow[]).find((course) =>
+      [
+        value(course, ["course_name", "title"]),
+        value(course, ["academic_division"]),
+        value(course, ["certification_level"]),
+        value(course, ["department_name"]),
+        value(course, ["category", "course_category"])
+      ]
+        .filter(Boolean)
+        .some((candidate) => sameText(candidate, courseName))
+    );
     const existingResult = await supabase
       .from("enrollments")
       .select("*")
@@ -317,7 +333,7 @@ export default function AdminPage() {
 
     const payload = {
       student_id: Number(internalStudentId),
-      course_id: null,
+      course_id: matchingCourse ? Number(value(matchingCourse, ["id"])) : null,
       course_name: courseName,
       enrolled_at: now,
       enrollment_status: "Active",

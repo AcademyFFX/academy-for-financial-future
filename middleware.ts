@@ -88,8 +88,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  const isStudentLessonPreview = /^\/student-courses\/[^/]+\/lessons\/[^/]+/.test(request.nextUrl.pathname);
   const adminRedirect = adminRedirects.find(([route]) => request.nextUrl.pathname === route || request.nextUrl.pathname.startsWith(`${route}/`));
-  if (isAdmin && adminRedirect) {
+  if (isAdmin && adminRedirect && !isStudentLessonPreview) {
     const url = request.nextUrl.clone();
     url.pathname = adminRedirect[1];
     url.searchParams.delete("next");

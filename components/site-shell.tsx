@@ -41,7 +41,7 @@ type AdminNavGroup = NavGroup & {
 
 const studentAuthLinks: NavLink[] = [
   { href: "/student-dashboard", label: "Dashboard" },
-  { href: "/courses", label: "My Courses" },
+  { href: "/student-courses", label: "My Courses" },
   { href: "/student-profile", label: "Profile" },
   { href: "/billing", label: "Billing" }
 ];

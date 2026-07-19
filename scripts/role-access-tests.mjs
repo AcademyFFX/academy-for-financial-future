@@ -7,6 +7,7 @@ function read(path) {
 
 const middleware = read("middleware.ts");
 const studentDashboard = read("app/student-dashboard/page.tsx");
+const studentCourses = read("app/student-courses/page.tsx");
 const studentProfile = read("app/student-profile/page.tsx");
 const billing = read("app/billing/page.tsx");
 const siteShell = read("components/site-shell.tsx");
@@ -33,6 +34,7 @@ assert.match(middleware, /\["\/billing", "\/admin"\]/, "administrator /billing m
 assert.match(middleware, /\["\/courses", "\/admin\/course-management"\]/, "administrator /courses must redirect to /admin/course-management");
 assert.match(middleware, /\["\/profile", "\/admin\/profile"\]/, "administrator /profile must redirect to /admin/profile");
 assert.match(middleware, /\["\/my-courses", "\/admin\/course-management"\]/, "administrator /my-courses must redirect to /admin/course-management");
+assert.match(middleware, /\["\/student-courses", "\/admin\/course-management"\]/, "administrator /student-courses must redirect to /admin/course-management");
 assert.match(middleware, /getAffAdminStatusFromSupabase\(supabase\)/, "middleware must resolve administrator role through the shared admin status helper");
 assert.match(adminStatus, /\.from\("aff_admin_users"\)/, "shared admin status helper must query aff_admin_users");
 assert.match(adminStatus, /\.eq\("user_id", userId\)/, "shared admin status helper must match by user_id first");
@@ -47,6 +49,12 @@ assert.match(adminServer, /getAffAdminStatusFromSupabase\(createSupabaseServerCl
 assert.match(authRole, /\["administrator", "admin"\]\.includes/, "legacy role resolver must accept administrator/admin roles");
 
 assert.match(studentDashboard, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin"\)/, "student dashboard must redirect admins before student data fallbacks");
+assert.match(studentCourses, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin"\)/, "student courses must redirect admins before loading enrollments");
+assert.match(studentCourses, /\.from\("students"\)[\s\S]*\.eq\("auth_user_id", user\.id\)/, "student courses must locate the student through students.auth_user_id");
+assert.match(studentCourses, /\.from\("enrollments"\)[\s\S]*\.eq\("student_id", studentId\)/, "student courses must load enrollments through the internal students.id");
+assert.match(studentCourses, /\.from\("lesson_progress"\)[\s\S]*\.eq\("student_id", user\.id\)/, "student courses must scope lesson progress to the authenticated user");
+assert.match(studentCourses, /\.from\("certificates"\)[\s\S]*\.eq\("student_id", user\.id\)/, "student courses must scope certificate records to the authenticated user");
+assert.doesNotMatch(studentCourses, /SERVICE_ROLE|service_role|hardcoded/i, "student courses must not expose service-role access or hardcoded student data");
 assert.match(studentProfile, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin\/profile"\)/, "student profile must redirect admins before student data fallbacks");
 assert.match(billing, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin"\)/, "billing must redirect admins before membership fallback creation");
 assert.match(studentProfile, /\.from\("students"\)[\s\S]*profile_photo_url/, "student profile photos must persist to the existing students table");
@@ -67,6 +75,7 @@ const publicHeaderBlock = siteShell.slice(
 assert.doesNotMatch(adminLinksBlock, /label: "Profile"/, "admin auth links must not use student profile label");
 assert.doesNotMatch(adminLinksBlock, /label: "Billing"/, "admin auth links must not expose student billing");
 assert.doesNotMatch(adminLinksBlock, /label: "My Courses"/, "admin auth links must not expose student courses");
+assert.match(siteShell, /href: "\/student-courses", label: "My Courses"/, "student My Courses navigation must use the protected student courses dashboard");
 assert.match(siteShell, /label: "Admin Profile"/, "admin navigation must include Admin Profile");
 assert.match(siteShell, /href: "\/admin\/command-center", label: "Command Center"/, "admin navigation must include Admin Command Center");
 assert.doesNotMatch(siteShell, /visibleNavGroups/, "public top navigation must not be replaced with administrator links");

@@ -110,6 +110,7 @@ type DatasetKey =
 
 const dashboardLinks = [
   { href: "/student-profile", label: "Student Profile", icon: User },
+  { href: "/student-courses", label: "My Courses", icon: BookOpenCheck },
   { href: "/mobile-app", label: "AFF Mobile App Platform", icon: TabletSmartphone },
   { href: "/aff-os", label: "AFF Operating System", icon: Network },
   { href: "/mobile-super-app", label: "AFF Mobile Super App", icon: TabletSmartphone },

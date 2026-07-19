@@ -35,6 +35,12 @@ function safeSlug(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
+function isPublished(row: DbRow, keys: string[]) {
+  const status = value(row, keys);
+  if (!status) return true;
+  return status.trim().toLowerCase() === "published";
+}
+
 function parseAssetPayload(row: DbRow) {
   const raw = value(row, ["signed_url"]);
   if (!raw || raw === "#") return null;
@@ -154,9 +160,11 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
 
   const enrollmentByCourse = useMemo(() => new Map(enrollments.map((row) => [value(row, ["course_id"]), row])), [enrollments]);
   const completedLessonIds = useMemo(() => new Set(progress.map(id => value(id, ["lesson_id"]))), [progress]);
+  const publishedCourses = useMemo(() => courses.filter((course) => isPublished(course, ["publication_status", "status"])), [courses]);
+  const publishedLessons = useMemo(() => lessons.filter((lesson) => isPublished(lesson, ["publication_status", "status", "lesson_status"])), [lessons]);
 
   function coursePercent(courseId: string) {
-    const courseLessons = lessons.filter((lesson) => value(lesson, ["course_id"]) === courseId);
+    const courseLessons = publishedLessons.filter((lesson) => value(lesson, ["course_id"]) === courseId);
     if (!courseLessons.length) return 0;
     return Math.round((courseLessons.filter((lesson) => completedLessonIds.has(idOf(lesson))).length / courseLessons.length) * 100);
   }
@@ -223,7 +231,7 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
     const { error } = await supabase.from("lesson_progress").upsert({ student_id: userId, course_id: courseId, lesson_id: lessonId }, { onConflict: "student_id,course_id,lesson_id" });
     if (error) { setMessage(error.message); return; }
     const nextCompleted = new Set([...Array.from(completedLessonIds), lessonId]);
-    const courseLessons = lessons.filter((item) => value(item, ["course_id"]) === courseId);
+    const courseLessons = publishedLessons.filter((item) => value(item, ["course_id"]) === courseId);
     const percent = courseLessons.length ? Math.round((courseLessons.filter((item) => nextCompleted.has(idOf(item))).length / courseLessons.length) * 100) : 0;
     if (studentDbId) {
       await supabase.from("enrollments").update({ progress_percentage: percent, completed_at: percent === 100 ? new Date().toISOString() : null }).eq("student_id", Number(studentDbId)).eq("course_id", Number(courseId));
@@ -269,8 +277,8 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
         <div className="text-sm text-ink/70">{enrollments.length} enrolled · {certificates.length} certificates</div>
       </div>
 
-      {courses.filter(courseMatches).length === 0 ? <p className="terminal-panel p-5 text-ink/68">No published AFF courses found.</p> : null}
-      {courses.filter(courseMatches).map((course) => {
+      {publishedCourses.filter(courseMatches).length === 0 ? <p className="terminal-panel p-5 text-ink/68">No published AFF courses found.</p> : null}
+      {publishedCourses.filter(courseMatches).map((course) => {
         const courseId = idOf(course);
         const enrolled = enrollmentByCourse.has(courseId);
         const percent = coursePercent(courseId);
@@ -298,7 +306,7 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
             {enrolled ? <div className="grid gap-px bg-gold-500/14">
               {courseSections.map((module) => {
                 const moduleId = idOf(module);
-                const moduleLessons = lessons.filter((lesson) => value(lesson, ["course_id"]) === courseId);
+                const moduleLessons = publishedLessons.filter((lesson) => value(lesson, ["course_id"]) === courseId);
                 return <section key={moduleId} className="bg-navy-950 p-5"><h4 className="text-lg font-semibold text-white">{value(module, ["module_title", "asset_title"])}</h4><p className="mt-2 text-sm text-ink/65">{value(module, ["module_description"])}</p><div className="mt-4 grid gap-3">{moduleLessons.map((lesson) => {
                   const lessonId = idOf(lesson); const done = completedLessonIds.has(lessonId);
                   return <article key={lessonId} className="border border-gold-500/18 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="font-semibold text-white">{value(lesson, ["lesson_title", "title"])}</p><p className="mt-1 text-sm text-ink/65">{value(lesson, ["description"])}</p></div><button className="inline-flex items-center gap-2 border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300 disabled:opacity-60" disabled={done} onClick={() => completeLesson(course, lesson)}><CheckCircle2 size={15} /> {done ? "Complete" : "Mark Complete"}</button></div><div className="mt-3 flex flex-wrap gap-2">{value(lesson, ["video_url"]) ? <a className="inline-flex items-center gap-2 text-sm text-gold-300" href={value(lesson, ["video_url"])} target="_blank" rel="noreferrer"><PlayCircle size={15} /> Video</a> : null}{value(lesson, ["pdf_notes_url"]) ? <a className="inline-flex items-center gap-2 text-sm text-gold-300" href={value(lesson, ["pdf_notes_url"])} target="_blank" rel="noreferrer"><Download size={15} /> PDF Notes</a> : null}</div></article>;

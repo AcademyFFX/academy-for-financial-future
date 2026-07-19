@@ -9,9 +9,9 @@ export default function AdminCourseManagementPage() {
   return (
     <>
       <PageHeader
-        eyebrow="AFF Course Management System"
-        title="Build courses, modules, lessons, resources, homework, quizzes, and completion pathways."
-        text="Administrator tools publish Supabase-backed learning experiences to the Student Dashboard, Course Library, and AFF Global University."
+        eyebrow="AFF COURSE MANAGEMENT SYSTEM"
+        title="Build and publish Academy learning experiences."
+        text="Create courses, organize modules, publish lessons, attach resources, and prepare students for assessment and certification."
       />
       <Section>
         <SectionInner>

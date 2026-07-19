@@ -76,6 +76,12 @@ function isPublishedLesson(row: DbRow) {
   return ["published", "active", "available"].includes(status.trim().toLowerCase());
 }
 
+function isPublishedCourse(row: DbRow) {
+  const status = value(row, ["publication_status", "status"]);
+  if (!status) return true;
+  return status.trim().toLowerCase() === "published";
+}
+
 function lessonOrder(row: DbRow) {
   const order = Number(value(row, ["lesson_order", "order_index", "sort_order"], "0"));
   return Number.isFinite(order) ? order : 0;
@@ -135,8 +141,9 @@ function buildCards({
   progressRows: DbRow[];
   certificates: DbRow[];
 }) {
-  return enrollments.map((enrollment, index): CourseCard => {
+  return enrollments.flatMap((enrollment, index): CourseCard[] => {
     const course = courses.find((item) => courseMatchesEnrollment(item, enrollment)) ?? null;
+    if (!course || !isPublishedCourse(course)) return [];
     const courseId = course ? idOf(course) : value(enrollment, ["course_id"], `pending-${index}`);
     const title = courseTitle(course, value(enrollment, ["course_name", "program_name"], "Academy Course"));
     const courseLessons = course ? lessonsForCourse(lessons, courseId) : [];
@@ -154,7 +161,7 @@ function buildCards({
     const certificationStatus = certificate ? "Certified" : progressPercentage >= 100 && totalLessons > 0 ? "Eligible" : "In Progress";
     const key = courseLinkKey(course, courseId, title);
 
-    return {
+    return [{
       id: value(enrollment, ["id"], `${courseId}-${index}`),
       key,
       title,
@@ -170,7 +177,7 @@ function buildCards({
       certificationStatus,
       continueHref: `/courses/managed/${encodeURIComponent(key)}`,
       hasLessons: totalLessons > 0
-    };
+    }];
   });
 }
 

@@ -36,7 +36,7 @@ import { getClientAdminStatus } from "@/lib/admin-client";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
-type NotesMode = "server" | "local" | "disabled";
+type NotesMode = "server" | "offline" | "disabled";
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 type LessonState = {
@@ -54,6 +54,7 @@ type LessonState = {
   notesMode: NotesMode;
   noteUpdatedAt: string;
   notesError: string;
+  localNoteMigrated: boolean;
 };
 
 type ResourceGroup = {
@@ -261,6 +262,15 @@ function formatDateTime(raw: string) {
   return date.toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function isNoRowsError(error: { code?: string; message?: string } | null | undefined) {
+  return error?.code === "PGRST116" || /0 rows|no rows/i.test(error?.message ?? "");
+}
+
+function noteDiagnostic(event: string, detail: Record<string, unknown>) {
+  if (process.env.NODE_ENV === "production") return;
+  console.info("[AFF lesson notes]", event, detail);
+}
+
 function splitRichText(text: string) {
   return text.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
 }
@@ -278,7 +288,15 @@ export default function StudentLessonViewerPage() {
   const [notesStatusMessage, setNotesStatusMessage] = useState("");
   const [toolsOpen, setToolsOpen] = useState(false);
   const lastSavedText = useRef("");
+  const notesRef = useRef("");
+  const savingRef = useRef(false);
+  const pendingSaveRef = useRef(false);
+  const noteLoadReadyRef = useRef(false);
   const notesKey = state ? `aff:lesson-notes:${idOf(state.course)}:${idOf(state.lesson)}` : "";
+
+  useEffect(() => {
+    notesRef.current = notes;
+  }, [notes]);
 
   const loadLesson = useCallback(async () => {
     setLoading(true);
@@ -286,6 +304,7 @@ export default function StudentLessonViewerPage() {
     setMessage("");
     setNotesStatus("idle");
     setNotesStatusMessage("");
+    noteLoadReadyRef.current = false;
 
     try {
       const supabase = createClient();
@@ -378,27 +397,84 @@ export default function StudentLessonViewerPage() {
       let noteText = "";
       let noteUpdatedAt = "";
       let notesError = "";
+      let localNoteMigrated = false;
       if (!isAdmin) {
+        const numericCourseId = Number(idOf(course));
+        const numericLessonId = Number(idOf(lesson));
+        noteDiagnostic("load", {
+          hasAuthenticatedUserId: Boolean(user.id),
+          courseId: numericCourseId,
+          lessonId: numericLessonId
+        });
         const noteResult = await supabase
           .from("lesson_notes")
-          .select("id,note_text,updated_at")
+          .select("id,note_text,created_at,updated_at")
           .eq("auth_user_id", user.id)
-          .eq("course_id", Number(idOf(course)))
-          .eq("lesson_id", Number(idOf(lesson)))
+          .eq("course_id", numericCourseId)
+          .eq("lesson_id", numericLessonId)
           .maybeSingle();
-        if (noteResult.error) {
-          notesMode = "local";
-          notesError = `Lesson notes database is not available yet: ${noteResult.error.message}`;
-          noteText = window.localStorage.getItem(`aff:lesson-notes:${idOf(course)}:${idOf(lesson)}`) ?? "";
+
+        if (noteResult.error && !isNoRowsError(noteResult.error)) {
+          notesMode = "offline";
+          notesError = `Unable to connect lesson notes to your AFF account: ${noteResult.error.message}`;
+          noteDiagnostic("load-error", {
+            hasAuthenticatedUserId: Boolean(user.id),
+            courseId: numericCourseId,
+            lessonId: numericLessonId,
+            code: noteResult.error.code,
+            message: noteResult.error.message
+          });
         } else {
           noteText = value(noteResult.data as DbRow | null, ["note_text"]);
           noteUpdatedAt = value(noteResult.data as DbRow | null, ["updated_at"]);
+          const localKey = `aff:lesson-notes:${idOf(course)}:${idOf(lesson)}`;
+          const localNote = window.localStorage.getItem(localKey) ?? "";
+          if (!noteText.trim() && localNote.trim()) {
+            setNotesStatus("saving");
+            setNotesStatusMessage("Moving older device note to your AFF account...");
+            const migratedAt = new Date().toISOString();
+            const { data: migratedNote, error: migrationError } = await supabase
+              .from("lesson_notes")
+              .upsert(
+                {
+                  auth_user_id: user.id,
+                  course_id: numericCourseId,
+                  lesson_id: numericLessonId,
+                  note_text: localNote,
+                  updated_at: migratedAt
+                },
+                { onConflict: "auth_user_id,course_id,lesson_id" }
+              )
+              .select("id,note_text,created_at,updated_at")
+              .single();
+            if (migrationError) {
+              notesMode = "offline";
+              notesError = `Older device note found, but it could not be moved to your AFF account: ${migrationError.message}`;
+              noteDiagnostic("local-migration-error", {
+                hasAuthenticatedUserId: Boolean(user.id),
+                courseId: numericCourseId,
+                lessonId: numericLessonId,
+                code: migrationError.code,
+                message: migrationError.message
+              });
+              noteText = localNote;
+            } else {
+              noteText = value(migratedNote as DbRow, ["note_text"]);
+              noteUpdatedAt = value(migratedNote as DbRow, ["updated_at"], migratedAt);
+              localNoteMigrated = true;
+              window.localStorage.removeItem(localKey);
+              setNotesStatus("saved");
+              setNotesStatusMessage("Older device note moved and saved securely to your AFF account.");
+            }
+          }
         }
       }
 
       lastSavedText.current = noteText;
       setNotes(noteText);
+      notesRef.current = noteText;
       setNotesDirty(false);
+      noteLoadReadyRef.current = true;
       setState({
         course,
         lesson,
@@ -413,7 +489,8 @@ export default function StudentLessonViewerPage() {
         isAdmin,
         notesMode,
         noteUpdatedAt,
-        notesError
+        notesError,
+        localNoteMigrated
       });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to load this lesson.");
@@ -426,42 +503,71 @@ export default function StudentLessonViewerPage() {
     loadLesson();
   }, [loadLesson]);
 
-  const saveNotes = useCallback(async (nextNotes: string) => {
-    if (!state || state.isAdmin || !notesDirty || nextNotes === lastSavedText.current) return;
-    setNotesStatus("saving");
-    setNotesStatusMessage("Saving...");
-    if (state.notesMode === "local") {
-      window.localStorage.setItem(notesKey, nextNotes);
-      lastSavedText.current = nextNotes;
-      setNotesDirty(false);
-      setNotesStatus("saved");
-      setNotesStatusMessage("Saved on this device only.");
+  const saveNotes = useCallback(async (nextNotes: string, options: { force?: boolean } = {}) => {
+    if (!state || state.isAdmin || !noteLoadReadyRef.current) return;
+    if (!options.force && (!notesDirty || nextNotes === lastSavedText.current)) return;
+    if (savingRef.current) {
+      pendingSaveRef.current = true;
       return;
     }
-    if (state.notesMode !== "server") return;
+    if (state.notesMode !== "server") {
+      if (notesKey) window.localStorage.setItem(notesKey, nextNotes);
+      setNotesStatus("error");
+      setNotesStatusMessage("Offline copy only — reconnect to sync with your AFF account.");
+      return;
+    }
+
+    savingRef.current = true;
+    pendingSaveRef.current = false;
+    const textBeingSaved = nextNotes;
+    setNotesStatus("saving");
+    setNotesStatusMessage("Saving...");
     try {
       const supabase = createClient();
+      const numericCourseId = Number(idOf(state.course));
+      const numericLessonId = Number(idOf(state.lesson));
       const payload = {
         auth_user_id: state.userId,
-        course_id: Number(idOf(state.course)),
-        lesson_id: Number(idOf(state.lesson)),
-        note_text: nextNotes,
+        course_id: numericCourseId,
+        lesson_id: numericLessonId,
+        note_text: textBeingSaved,
         updated_at: new Date().toISOString()
       };
+      noteDiagnostic("upsert", {
+        hasAuthenticatedUserId: Boolean(state.userId),
+        courseId: numericCourseId,
+        lessonId: numericLessonId
+      });
       const { data, error: saveError } = await supabase
         .from("lesson_notes")
         .upsert(payload, { onConflict: "auth_user_id,course_id,lesson_id" })
-        .select("note_text,updated_at")
+        .select("id,note_text,updated_at")
         .single();
       if (saveError) throw saveError;
-      lastSavedText.current = value(data as DbRow, ["note_text"]);
-      setNotesDirty(false);
+      const savedText = value(data as DbRow, ["note_text"]);
+      if (savedText !== textBeingSaved) throw new Error("Supabase returned a different note value than the text that was saved.");
+      lastSavedText.current = savedText;
+      setNotesDirty(notesRef.current !== savedText);
       setState((current) => current ? { ...current, noteUpdatedAt: value(data as DbRow, ["updated_at"], new Date().toISOString()) } : current);
       setNotesStatus("saved");
-      setNotesStatusMessage("Saved");
+      setNotesStatusMessage("Saved securely to your AFF account.");
+      if (notesKey) window.localStorage.removeItem(notesKey);
     } catch (saveError) {
+      noteDiagnostic("upsert-error", {
+        hasAuthenticatedUserId: Boolean(state.userId),
+        courseId: Number(idOf(state.course)),
+        lessonId: Number(idOf(state.lesson)),
+        code: typeof saveError === "object" && saveError && "code" in saveError ? String(saveError.code) : "",
+        message: saveError instanceof Error ? saveError.message : typeof saveError === "object" && saveError && "message" in saveError ? String(saveError.message) : "Unknown note save error"
+      });
       setNotesStatus("error");
-      setNotesStatusMessage(saveError instanceof Error ? `Note save failed: ${saveError.message}` : "Note save failed.");
+      setNotesStatusMessage(saveError instanceof Error ? `Save failed — Retry: ${saveError.message}` : "Save failed — Retry.");
+    } finally {
+      savingRef.current = false;
+      if (pendingSaveRef.current && notesRef.current !== lastSavedText.current) {
+        pendingSaveRef.current = false;
+        void saveNotes(notesRef.current, { force: true });
+      }
     }
   }, [notesDirty, notesKey, state]);
 
@@ -539,27 +645,37 @@ export default function StudentLessonViewerPage() {
   async function clearNotes() {
     if (!state || state.isAdmin) return;
     if (!window.confirm("Clear your private notes for this lesson?")) return;
-    if (state.notesMode === "server") {
-      const supabase = createClient();
-      const { error: deleteError } = await supabase
-        .from("lesson_notes")
-        .delete()
-        .eq("auth_user_id", state.userId)
-        .eq("course_id", Number(idOf(state.course)))
-        .eq("lesson_id", Number(idOf(state.lesson)));
-      if (deleteError) {
-        setNotesStatus("error");
-        setNotesStatusMessage(`Unable to clear notes: ${deleteError.message}`);
-        return;
-      }
-    } else if (notesKey) {
-      window.localStorage.removeItem(notesKey);
+    if (state.notesMode !== "server") {
+      setNotesStatus("error");
+      setNotesStatusMessage("Offline copy only — reconnect to sync with your AFF account.");
+      return;
     }
+    const supabase = createClient();
+    const { error: deleteError } = await supabase
+      .from("lesson_notes")
+      .delete()
+      .eq("auth_user_id", state.userId)
+      .eq("course_id", Number(idOf(state.course)))
+      .eq("lesson_id", Number(idOf(state.lesson)));
+    if (deleteError) {
+      noteDiagnostic("delete-error", {
+        hasAuthenticatedUserId: Boolean(state.userId),
+        courseId: Number(idOf(state.course)),
+        lessonId: Number(idOf(state.lesson)),
+        code: deleteError.code,
+        message: deleteError.message
+      });
+      setNotesStatus("error");
+      setNotesStatusMessage(`Save failed — Retry: ${deleteError.message}`);
+      return;
+    }
+    if (notesKey) window.localStorage.removeItem(notesKey);
     setNotes("");
+    notesRef.current = "";
     lastSavedText.current = "";
     setNotesDirty(false);
     setNotesStatus("saved");
-    setNotesStatusMessage("Notes cleared.");
+    setNotesStatusMessage("Notes cleared and saved securely to your AFF account.");
   }
 
   function downloadNotes() {
@@ -760,19 +876,20 @@ export default function StudentLessonViewerPage() {
                 </p>
                 <span className="text-xs text-ink/55">{notes.length} characters</span>
               </div>
-              <p className="mt-3 text-xs leading-6 text-ink/62">These notes are private to your student account.</p>
+              <p className="mt-3 text-xs leading-6 text-ink/62">These notes are private and securely saved to your AFF account.</p>
               {state.notesError ? <p className="mt-3 border border-gold-500/20 bg-navy-950 p-3 text-xs leading-6 text-gold-200">{state.notesError}</p> : null}
+              {state.localNoteMigrated ? <p className="mt-3 border border-gold-500/20 bg-gold-500/10 p-3 text-xs leading-6 text-gold-100">An older device note was found and moved to your AFF account.</p> : null}
               {state.isAdmin ? (
-                <p className="mt-4 text-sm text-ink/65">Administrators can preview lessons, but private student notes are disabled in preview mode.</p>
+                <p className="mt-4 text-sm text-ink/65">Student private notes are unavailable in administrator preview.</p>
               ) : (
                 <>
                   <textarea className="field mt-4 min-h-48" value={notes} onChange={(event) => { setNotes(event.target.value); setNotesDirty(true); }} placeholder="Capture private lesson notes, questions, and study reminders." />
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-ink/60">
                     <span className={notesStatus === "error" ? "text-red-200" : notesStatus === "saved" ? "text-gold-300" : "text-ink/60"}>{notesStatusMessage || (state.noteUpdatedAt ? `Last saved ${formatDateTime(state.noteUpdatedAt)}` : "Autosave ready")}</span>
-                    {notesStatus === "error" ? <button type="button" onClick={() => void saveNotes(notes)} className="text-gold-300 underline">Retry</button> : null}
+                    {notesStatus === "error" && state.notesMode === "server" ? <button type="button" onClick={() => void saveNotes(notes, { force: true })} className="text-gold-300 underline">Retry</button> : null}
                   </div>
                   <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                    <button type="button" onClick={() => void saveNotes(notes)} className="inline-flex min-h-10 items-center justify-center gap-2 bg-gold-500 px-3 py-2 text-xs font-bold text-navy-950"><Save size={14} /> Save</button>
+                    <button type="button" onClick={() => void saveNotes(notes, { force: true })} className="inline-flex min-h-10 items-center justify-center gap-2 bg-gold-500 px-3 py-2 text-xs font-bold text-navy-950"><Save size={14} /> Save Notes</button>
                     <button type="button" onClick={downloadNotes} className="inline-flex min-h-10 items-center justify-center gap-2 border border-gold-500/35 px-3 py-2 text-xs font-semibold text-gold-300"><Download size={14} /> TXT</button>
                     <button type="button" onClick={() => void clearNotes()} className="inline-flex min-h-10 items-center justify-center gap-2 border border-red-300/35 px-3 py-2 text-xs font-semibold text-red-100"><Trash2 size={14} /> Clear</button>
                   </div>

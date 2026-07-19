@@ -60,7 +60,12 @@ assert.doesNotMatch(studentCourses, /SERVICE_ROLE|service_role|hardcoded/i, "stu
 assert.match(studentLessonViewer, /\.from\("students"\)[\s\S]*\.eq\("auth_user_id", user\.id\)/, "student lesson viewer must locate students by auth_user_id");
 assert.match(studentLessonViewer, /\.from\("enrollments"\)[\s\S]*\.eq\("student_id", studentId\)/, "student lesson viewer must verify enrollment through internal students.id");
 assert.match(studentLessonViewer, /\.from\("lesson_progress"\)[\s\S]*upsert/, "student lesson viewer must persist completion through lesson_progress upsert");
-assert.match(studentLessonViewer, /localStorage/, "student lesson viewer must clearly use device-local notes when no lesson notes table exists");
+assert.match(studentLessonViewer, /\.from\("lesson_notes"\)[\s\S]*\.eq\("auth_user_id", user\.id\)[\s\S]*\.eq\("course_id", numericCourseId\)[\s\S]*\.eq\("lesson_id", numericLessonId\)[\s\S]*\.maybeSingle\(\)/, "student lesson viewer must load the authenticated student's cloud lesson note");
+assert.match(studentLessonViewer, /\.from\("lesson_notes"\)[\s\S]*\.upsert\([\s\S]*onConflict: "auth_user_id,course_id,lesson_id"/, "student lesson viewer must upsert notes through the lesson_notes composite key");
+assert.match(studentLessonViewer, /savedText !== textBeingSaved/, "student lesson viewer must verify the returned Supabase note before showing success");
+assert.match(studentLessonViewer, /if \(!noteText\.trim\(\) && localNote\.trim\(\)\)/, "local note migration must not overwrite an existing cloud note");
+assert.match(studentLessonViewer, /Student private notes are unavailable in administrator preview/, "administrator preview must not create or edit private student notes");
+assert.match(studentLessonViewer, /Offline copy only — reconnect to sync with your AFF account/, "offline fallback must not claim cloud persistence");
 assert.doesNotMatch(studentLessonViewer, /SERVICE_ROLE|service_role/i, "student lesson viewer must not expose service-role access");
 assert.match(studentProfile, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin\/profile"\)/, "student profile must redirect admins before student data fallbacks");
 assert.match(billing, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin"\)/, "billing must redirect admins before membership fallback creation");

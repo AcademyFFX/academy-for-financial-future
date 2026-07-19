@@ -174,35 +174,55 @@ export default function StudentProfilePage() {
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage.from("student-profile-photos").getPublicUrl(path);
-      if (!data.publicUrl) throw new Error("Profile photo uploaded, but Supabase did not return a public URL.");
+      const publicUrl = data.publicUrl;
+      if (!publicUrl) throw new Error("Profile photo uploaded, but Supabase did not return a public URL.");
+
+      console.info("AFF profile photo upload diagnostics", {
+        authenticatedUserId,
+        storagePath: path,
+        publicUrl
+      });
 
       const updateResult = await supabase
         .from("students")
         .update({
-          profile_photo_url: data.publicUrl
+          profile_photo_url: publicUrl
         })
         .eq("auth_user_id", authenticatedUserId)
-        .select("auth_user_id, profile_photo_url");
+        .select("id, student_id, auth_user_id, profile_photo_url")
+        .single();
+
+      console.info("AFF profile photo students update result", {
+        authenticatedUserId,
+        storagePath: path,
+        publicUrl,
+        updateData: updateResult.data,
+        updateError: updateResult.error
+      });
 
       if (updateResult.error) {
-        throw new Error(`Profile photo URL update failed: ${updateResult.error.message}`);
+        throw new Error(`Profile photo URL update failed for public.students.auth_user_id = ${authenticatedUserId}: ${updateResult.error.message}`);
       }
 
-      const savedRows = (updateResult.data ?? []) as DbRow[];
-      if (savedRows.length === 0) {
-        throw new Error("No matching students row was updated for this authenticated user. Expected public.students.auth_user_id to match auth.uid().");
-      }
-
-      const savedProfilePhotoUrl = value(savedRows[0], ["profile_photo_url"]);
+      const savedRow = (updateResult.data ?? {}) as DbRow;
+      const savedProfilePhotoUrl = value(savedRow, ["profile_photo_url"]);
       if (!savedProfilePhotoUrl) {
         throw new Error("Profile photo URL was saved, but the saved students row returned an empty profile_photo_url.");
       }
 
       const verifyResult = await supabase
         .from("students")
-        .select("auth_user_id, profile_photo_url")
+        .select("id, student_id, auth_user_id, profile_photo_url")
         .eq("auth_user_id", authenticatedUserId)
-        .maybeSingle();
+        .single();
+
+      console.info("AFF profile photo students verification result", {
+        authenticatedUserId,
+        storagePath: path,
+        publicUrl,
+        verificationData: verifyResult.data,
+        verificationError: verifyResult.error
+      });
 
       if (verifyResult.error) {
         throw new Error(`Unable to read back saved profile photo URL: ${verifyResult.error.message}`);
@@ -212,10 +232,13 @@ export default function StudentProfilePage() {
       if (!verifiedUrl) {
         throw new Error("Saved profile photo URL could not be read back from students.profile_photo_url.");
       }
+      if (verifiedUrl !== publicUrl) {
+        throw new Error("Saved profile photo URL does not match the generated Supabase Storage public URL.");
+      }
 
       setProfile({ ...profile, authUserId: authenticatedUserId, profilePhotoUrl: verifiedUrl });
       setPhotoFile(null);
-      setMessage("Profile photo updated.");
+      setMessage("Profile photo updated successfully.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to upload profile photo.");
     }

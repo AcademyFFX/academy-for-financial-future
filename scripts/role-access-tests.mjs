@@ -50,6 +50,8 @@ assert.match(studentDashboard, /getClientAdminStatus\(\)[\s\S]*router\.replace\(
 assert.match(studentProfile, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin\/profile"\)/, "student profile must redirect admins before student data fallbacks");
 assert.match(billing, /getClientAdminStatus\(\)[\s\S]*router\.replace\("\/admin"\)/, "billing must redirect admins before membership fallback creation");
 assert.match(studentProfile, /\.from\("students"\)[\s\S]*profile_photo_url/, "student profile photos must persist to the existing students table");
+assert.match(studentProfile, /\.eq\("auth_user_id", authenticatedUserId\)[\s\S]*\.select\("id, student_id, auth_user_id, profile_photo_url"\)[\s\S]*\.single\(\)/, "student profile photo update must match auth_user_id, return the saved students row, and require a single row");
+assert.match(studentProfile, /verifiedUrl !== publicUrl/, "student profile photo upload must verify the saved URL equals the generated Storage URL");
 assert.doesNotMatch(studentProfile, /\.from\("student_profiles"\)|student_profiles\.profile_photo_url/, "student profile page must not reference the missing student_profiles table for photo persistence");
 
 assert.match(directoryRoute, /getAffAdminStatus\(\)/, "student directory API must check server-side admin status");

@@ -60,6 +60,14 @@ assert.doesNotMatch(studentCourses, /SERVICE_ROLE|service_role|hardcoded/i, "stu
 assert.match(studentLessonViewer, /\.from\("students"\)[\s\S]*\.eq\("auth_user_id", user\.id\)/, "student lesson viewer must locate students by auth_user_id");
 assert.match(studentLessonViewer, /\.from\("enrollments"\)[\s\S]*\.eq\("student_id", studentId\)/, "student lesson viewer must verify enrollment through internal students.id");
 assert.match(studentLessonViewer, /\.from\("lesson_progress"\)[\s\S]*upsert/, "student lesson viewer must persist completion through lesson_progress upsert");
+assert.match(studentLessonViewer, /youtubeEmbedUrl/, "student lesson viewer must parse YouTube classroom URLs");
+assert.match(studentLessonViewer, /vimeoEmbedUrl/, "student lesson viewer must parse Vimeo classroom URLs");
+assert.match(studentLessonViewer, /isDirectVideo\(url\)/, "student lesson viewer must detect MP4/uploaded classroom video URLs");
+assert.match(studentLessonViewer, /Lesson media is being prepared by the Academy\./, "student lesson viewer must preserve the no-media placeholder");
+assert.match(studentLessonViewer, /\.from\("video_progress"\)[\s\S]*\.eq\("auth_user_id", user\.id\)[\s\S]*\.eq\("course_id", Number\(idOf\(course\)\)\)[\s\S]*\.eq\("lesson_id", Number\(idOf\(lesson\)\)\)/, "student lesson viewer must load playback progress for only the authenticated student");
+assert.match(studentLessonViewer, /\.from\("video_progress"\)[\s\S]*\.upsert\([\s\S]*onConflict: "auth_user_id,course_id,lesson_id"/, "student lesson viewer must upsert playback progress through the video_progress composite key");
+assert.match(studentLessonViewer, /state\.isAdmin[\s\S]*return/, "administrator preview must not write playback progress");
+assert.match(studentLessonViewer, /Lesson video is temporarily unavailable\./, "invalid media URLs must not crash the lesson page");
 assert.match(studentLessonViewer, /\.from\("lesson_notes"\)[\s\S]*\.eq\("auth_user_id", user\.id\)[\s\S]*\.eq\("course_id", numericCourseId\)[\s\S]*\.eq\("lesson_id", numericLessonId\)[\s\S]*\.maybeSingle\(\)/, "student lesson viewer must load the authenticated student's cloud lesson note");
 assert.match(studentLessonViewer, /\.from\("lesson_notes"\)[\s\S]*\.upsert\([\s\S]*onConflict: "auth_user_id,course_id,lesson_id"/, "student lesson viewer must upsert notes through the lesson_notes composite key");
 assert.match(studentLessonViewer, /savedText !== textBeingSaved/, "student lesson viewer must verify the returned Supabase note before showing success");

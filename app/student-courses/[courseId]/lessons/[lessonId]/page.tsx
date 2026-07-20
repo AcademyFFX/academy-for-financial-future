@@ -38,6 +38,22 @@ import { createClient } from "@/lib/supabase";
 type DbRow = Record<string, unknown>;
 type NotesMode = "server" | "offline" | "disabled";
 type SaveStatus = "idle" | "saving" | "saved" | "error";
+type VideoProvider = "youtube" | "vimeo" | "mp4" | "uploaded_video" | "bunny" | "embed" | "none" | "invalid";
+
+type VideoSource = {
+  provider: VideoProvider;
+  url: string;
+  embedUrl: string;
+  title: string;
+  thumbnailUrl: string;
+  durationSeconds: number;
+  unavailableReason: string;
+};
+
+type ChapterMarker = {
+  time: number;
+  title: string;
+};
 
 type LessonState = {
   course: DbRow;
@@ -48,6 +64,7 @@ type LessonState = {
   assignments: DbRow[];
   submissions: DbRow[];
   progressRows: DbRow[];
+  videoProgress: DbRow | null;
   studentName: string;
   userId: string;
   isAdmin: boolean;
@@ -140,7 +157,7 @@ function safeUrl(rawUrl: string) {
 }
 
 function mediaUrlForLesson(lesson: DbRow, assets: DbRow[]) {
-  const direct = safeUrl(value(lesson, ["video_url", "media_url", "video", "embed_url"]));
+  const direct = safeUrl(value(lesson, ["video_url", "media_url", "youtube_url", "vimeo_url", "video", "embed_url"]));
   if (direct) return direct;
   const asset = assets.find((item) => {
     const type = resourceType(item).toLowerCase();
@@ -150,29 +167,72 @@ function mediaUrlForLesson(lesson: DbRow, assets: DbRow[]) {
 }
 
 function posterForLesson(lesson: DbRow, assets: DbRow[]) {
-  const direct = safeUrl(value(lesson, ["thumbnail_url", "poster_url", "image_url"]));
+  const direct = safeUrl(value(lesson, ["video_thumbnail_url", "thumbnail_url", "poster_url", "image_url"]));
   if (direct) return direct;
   const asset = assets.find((item) => ["image", "course thumbnail"].includes(resourceType(item).toLowerCase()) && safeUrl(resourceUrl(item)));
   return asset ? safeUrl(resourceUrl(asset)) : "";
 }
 
-function videoEmbedUrl(rawUrl: string) {
-  if (!rawUrl) return "";
+function normalizedProvider(raw: string): VideoProvider {
+  const provider = raw.trim().toLowerCase().replace(/\s+/g, "_");
+  if (provider.includes("youtube")) return "youtube";
+  if (provider.includes("vimeo")) return "vimeo";
+  if (provider.includes("supabase") || provider.includes("storage") || provider.includes("uploaded")) return "uploaded_video";
+  if (provider.includes("bunny")) return "bunny";
+  if (provider.includes("mp4")) return "mp4";
+  if (provider.includes("embed")) return "embed";
+  if (provider.includes("none") || provider.includes("text-only")) return "none";
+  return "none";
+}
+
+function youtubeEmbedUrl(url: URL) {
+  if (url.hostname.includes("youtube.com")) {
+    const id = url.searchParams.get("v") || url.pathname.split("/").filter(Boolean).pop() || "";
+    return id ? `https://www.youtube.com/embed/${id}` : "";
+  }
+  if (url.hostname.includes("youtu.be")) {
+    const id = url.pathname.split("/").filter(Boolean)[0] ?? "";
+    return id ? `https://www.youtube.com/embed/${id}` : "";
+  }
+  return "";
+}
+
+function vimeoEmbedUrl(url: URL) {
+  const id = url.pathname.split("/").filter(Boolean).reverse().find((part) => /^\d+$/.test(part)) ?? "";
+  return id ? `https://player.vimeo.com/video/${id}` : "";
+}
+
+function detectVideoSource(lesson: DbRow, assets: DbRow[]): VideoSource {
+  const rawUrl = mediaUrlForLesson(lesson, assets);
+  const url = safeUrl(rawUrl);
+  const declaredProvider = normalizedProvider(value(lesson, ["video_provider", "video_type"]));
+  const title = value(lesson, ["video_title"], lessonTitle(lesson));
+  const thumbnailUrl = posterForLesson(lesson, assets);
+  const durationSeconds = Number(value(lesson, ["video_duration_seconds"], "0")) || 0;
+
+  if (!url) {
+    return { provider: "none", url: "", embedUrl: "", title, thumbnailUrl, durationSeconds, unavailableReason: "" };
+  }
+
   try {
-    const url = new URL(rawUrl);
-    if (url.hostname.includes("youtube.com")) {
-      const id = url.searchParams.get("v");
-      return id ? `https://www.youtube.com/embed/${id}` : rawUrl;
+    const parsed = new URL(url);
+    if (declaredProvider === "youtube" || parsed.hostname.includes("youtube.com") || parsed.hostname.includes("youtu.be")) {
+      const embedUrl = youtubeEmbedUrl(parsed);
+      return { provider: embedUrl ? "youtube" : "invalid", url, embedUrl, title, thumbnailUrl, durationSeconds, unavailableReason: embedUrl ? "" : "Lesson video is temporarily unavailable." };
     }
-    if (url.hostname.includes("youtu.be")) return `https://www.youtube.com/embed/${url.pathname.replace("/", "")}`;
-    if (url.hostname.includes("vimeo.com")) {
-      const id = url.pathname.split("/").filter(Boolean).pop();
-      return id ? `https://player.vimeo.com/video/${id}` : rawUrl;
+    if (declaredProvider === "vimeo" || parsed.hostname.includes("vimeo.com")) {
+      const embedUrl = vimeoEmbedUrl(parsed);
+      return { provider: embedUrl ? "vimeo" : "invalid", url, embedUrl, title, thumbnailUrl, durationSeconds, unavailableReason: embedUrl ? "" : "Lesson video is temporarily unavailable." };
     }
-    if (url.hostname.includes("iframe.mediadelivery.net") || url.hostname.includes("bunnycdn.com")) return rawUrl;
-    return rawUrl;
+    if (isDirectVideo(url) || declaredProvider === "mp4" || declaredProvider === "uploaded_video") {
+      return { provider: declaredProvider === "uploaded_video" ? "uploaded_video" : "mp4", url, embedUrl: "", title, thumbnailUrl, durationSeconds, unavailableReason: "" };
+    }
+    if (declaredProvider === "bunny" || parsed.hostname.includes("iframe.mediadelivery.net") || parsed.hostname.includes("bunnycdn.com")) {
+      return { provider: "bunny", url, embedUrl: url, title, thumbnailUrl, durationSeconds, unavailableReason: "" };
+    }
+    return { provider: "embed", url, embedUrl: url, title, thumbnailUrl, durationSeconds, unavailableReason: "" };
   } catch {
-    return "";
+    return { provider: "invalid", url: "", embedUrl: "", title, thumbnailUrl, durationSeconds, unavailableReason: "Lesson video is temporarily unavailable." };
   }
 }
 
@@ -262,6 +322,15 @@ function formatDateTime(raw: string) {
   return date.toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function formatTime(seconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(seconds || 0));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const remaining = safeSeconds % 60;
+  if (hours) return `${hours}:${String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}`;
+  return `${minutes}:${String(remaining).padStart(2, "0")}`;
+}
+
 function isNoRowsError(error: { code?: string; message?: string } | null | undefined) {
   return error?.code === "PGRST116" || /0 rows|no rows/i.test(error?.message ?? "");
 }
@@ -273,6 +342,40 @@ function noteDiagnostic(event: string, detail: Record<string, unknown>) {
 
 function splitRichText(text: string) {
   return text.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+}
+
+function parseObjectiveList(raw: string) {
+  if (!raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) return parsed.map((item) => String(item).trim()).filter(Boolean);
+  } catch {
+    // Plain text objectives are common in the existing lesson editor.
+  }
+  return raw
+    .split(/\n|;/)
+    .map((line) => line.replace(/^[-*•\d.]+\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function parseChapterMarkers(raw: unknown): ChapterMarker[] {
+  if (!raw) return [];
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        const row = item as DbRow;
+        return {
+          time: Number(value(row, ["time", "seconds", "start"], "0")),
+          title: value(row, ["title", "label", "name"], "Chapter")
+        };
+      })
+      .filter((item) => Number.isFinite(item.time) && item.time >= 0 && item.title)
+      .sort((left, right) => left.time - right.time);
+  } catch {
+    return [];
+  }
 }
 
 export default function StudentLessonViewerPage() {
@@ -287,11 +390,17 @@ export default function StudentLessonViewerPage() {
   const [notesStatus, setNotesStatus] = useState<SaveStatus>("idle");
   const [notesStatusMessage, setNotesStatusMessage] = useState("");
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [videoProgress, setVideoProgress] = useState<DbRow | null>(null);
+  const [videoMessage, setVideoMessage] = useState("");
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [transcriptSearch, setTranscriptSearch] = useState("");
   const lastSavedText = useRef("");
   const notesRef = useRef("");
   const savingRef = useRef(false);
   const pendingSaveRef = useRef(false);
   const noteLoadReadyRef = useRef(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const lastVideoSaveRef = useRef(0);
   const notesKey = state ? `aff:lesson-notes:${idOf(state.course)}:${idOf(state.lesson)}` : "";
 
   useEffect(() => {
@@ -392,6 +501,24 @@ export default function StudentLessonViewerPage() {
         ? assets.filter((asset) => resourceGroupFor(asset) === "Homework Files")
         : ((assignmentResult.data ?? []) as DbRow[]).filter((assignment) => assignmentMatchesLesson(assignment, course, lesson));
       const submissions = homeworkResult.error ? [] : ((homeworkResult.data ?? []) as DbRow[]).filter((submission) => assignmentMatchesLesson(submission, course, lesson));
+      let loadedVideoProgress: DbRow | null = null;
+      if (!isAdmin) {
+        const videoResult = await supabase
+          .from("video_progress")
+          .select("id,watched_seconds,duration_seconds,percent_watched,completed,last_watched_at,updated_at")
+          .eq("auth_user_id", user.id)
+          .eq("course_id", Number(idOf(course)))
+          .eq("lesson_id", Number(idOf(lesson)))
+          .maybeSingle();
+        if (videoResult.error && !isNoRowsError(videoResult.error)) {
+          setVideoMessage(`Playback resume is unavailable: ${videoResult.error.message}`);
+        } else {
+          loadedVideoProgress = (videoResult.data ?? null) as DbRow | null;
+          setVideoMessage("");
+        }
+      } else {
+        setVideoMessage("Administrator preview does not create playback progress.");
+      }
 
       let notesMode: NotesMode = isAdmin ? "disabled" : "server";
       let noteText = "";
@@ -475,6 +602,7 @@ export default function StudentLessonViewerPage() {
       notesRef.current = noteText;
       setNotesDirty(false);
       noteLoadReadyRef.current = true;
+      setVideoProgress(loadedVideoProgress);
       setState({
         course,
         lesson,
@@ -484,6 +612,7 @@ export default function StudentLessonViewerPage() {
         assignments,
         submissions,
         progressRows: (progressResult.data ?? []) as DbRow[],
+        videoProgress: loadedVideoProgress,
         studentName,
         userId: user.id,
         isAdmin,
@@ -691,6 +820,64 @@ export default function StudentLessonViewerPage() {
     URL.revokeObjectURL(url);
   }
 
+  async function saveVideoProgress(currentTime: number, duration: number, completedVideo = false) {
+    if (!state || state.isAdmin) return;
+    const safeDuration = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : Number(value(videoProgress, ["duration_seconds"], "0")) || 0;
+    const watchedSeconds = Math.max(0, Math.round(currentTime || 0));
+    const percentWatched = safeDuration ? Math.min(100, Math.round((watchedSeconds / safeDuration) * 100)) : 0;
+    const now = new Date().toISOString();
+    const supabase = createClient();
+    const payload = {
+      auth_user_id: state.userId,
+      course_id: Number(idOf(state.course)),
+      lesson_id: Number(idOf(state.lesson)),
+      watched_seconds: watchedSeconds,
+      duration_seconds: safeDuration,
+      percent_watched: completedVideo ? 100 : percentWatched,
+      completed: completedVideo || percentWatched >= 98,
+      last_watched_at: now,
+      updated_at: now
+    };
+    const { data, error: progressError } = await supabase
+      .from("video_progress")
+      .upsert(payload, { onConflict: "auth_user_id,course_id,lesson_id" })
+      .select("id,watched_seconds,duration_seconds,percent_watched,completed,last_watched_at,updated_at")
+      .single();
+    if (progressError) {
+      setVideoMessage(`Playback progress could not be saved: ${progressError.message}`);
+      return;
+    }
+    const row = (data ?? payload) as DbRow;
+    setVideoProgress(row);
+    setState((current) => current ? { ...current, videoProgress: row } : current);
+    setVideoMessage(completedVideo ? "Video completed" : "Playback progress saved.");
+  }
+
+  function handleVideoMetadata() {
+    const video = videoRef.current;
+    if (!video || !videoProgress) return;
+    const watchedSeconds = Number(value(videoProgress, ["watched_seconds"], "0"));
+    if (watchedSeconds > 0 && watchedSeconds < video.duration - 2) {
+      video.currentTime = watchedSeconds;
+      setVideoMessage(`Resume from ${formatTime(watchedSeconds)}`);
+    }
+  }
+
+  function handleVideoTimeUpdate() {
+    const video = videoRef.current;
+    if (!video || state?.isAdmin) return;
+    const now = Date.now();
+    if (now - lastVideoSaveRef.current < 12000) return;
+    lastVideoSaveRef.current = now;
+    void saveVideoProgress(video.currentTime, video.duration);
+  }
+
+  function seekNativeVideo(seconds: number) {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = seconds;
+    videoRef.current.focus();
+  }
+
   if (loading) {
     return (
       <Section>
@@ -730,9 +917,9 @@ export default function StudentLessonViewerPage() {
     );
   }
 
-  const mediaUrl = mediaUrlForLesson(state.lesson, state.assets);
-  const posterUrl = posterForLesson(state.lesson, state.assets);
-  const embedUrl = videoEmbedUrl(mediaUrl);
+  const videoSource = detectVideoSource(state.lesson, state.assets);
+  const hasVideo = videoSource.provider !== "none" && videoSource.provider !== "invalid";
+  const canSeekChapters = videoSource.provider === "mp4" || videoSource.provider === "uploaded_video";
   const pdfUrl = safeUrl(value(state.lesson, ["pdf_notes_url"]));
   const resources = state.assets.filter((asset) => resourceType(asset) !== "Quiz" && safeUrl(resourceUrl(asset)));
   const resourceGroups: ResourceGroup[] = ["Lesson Materials", "Workbook", "Instructor Resources", "Homework Files", "Supplemental Learning"]
@@ -741,12 +928,21 @@ export default function StudentLessonViewerPage() {
   const overview = value(state.lesson, ["lesson_summary", "overview", "description"]);
   const fullText = value(state.lesson, ["full_content", "content", "lesson_content"]);
   const objectives = value(state.lesson, ["learning_objectives", "objectives"]);
+  const objectiveItems = parseObjectiveList(objectives);
   const keyConcepts = value(state.lesson, ["key_concepts", "concepts"]);
   const takeaways = value(state.lesson, ["key_takeaways", "takeaways"]);
   const vocabulary = value(state.lesson, ["vocabulary"]);
   const instructorNotes = value(state.lesson, ["instructor_notes"]);
   const exercise = value(state.lesson, ["practical_exercise", "exercise"]);
-  const transcript = value(state.lesson, ["transcript"]);
+  const transcript = value(state.lesson, ["transcript_text", "transcript"]);
+  const chapterMarkers = parseChapterMarkers(state.lesson.chapter_markers);
+  const watchedSeconds = Number(value(videoProgress ?? state.videoProgress, ["watched_seconds"], "0"));
+  const durationSeconds = Number(value(videoProgress ?? state.videoProgress, ["duration_seconds"], String(videoSource.durationSeconds || 0)));
+  const watchedPercent = Number(value(videoProgress ?? state.videoProgress, ["percent_watched"], "0"));
+  const videoCompleted = value(videoProgress ?? state.videoProgress, ["completed"]) === "true";
+  const transcriptBlocks = transcriptSearch.trim()
+    ? splitRichText(transcript).filter((block) => block.toLowerCase().includes(transcriptSearch.trim().toLowerCase()))
+    : splitRichText(transcript);
   const returnHref = `/courses/managed/${encodeURIComponent(value(state.course, ["course_code"], safeSlug(courseTitle(state.course))))}`;
   const currentSubmission = state.submissions[0] ?? null;
   const hasAssessment = state.assets.some((asset) => resourceType(asset) === "Quiz");
@@ -790,21 +986,66 @@ export default function StudentLessonViewerPage() {
         <SectionInner className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
           <main className="grid min-w-0 gap-6">
             <section className="terminal-panel overflow-hidden">
+              <div className="border-b border-gold-500/16 bg-navy-950 px-5 py-4">
+                <p className="text-xs uppercase tracking-[.22em] text-gold-300">Professional Video Classroom</p>
+                <h2 className="mt-2 text-xl font-semibold text-white">{videoSource.title}</h2>
+              </div>
               <div className="aspect-video bg-navy-950">
-                {mediaUrl ? (
-                  isDirectVideo(mediaUrl) ? (
-                    <video className="h-full w-full" controls preload="metadata" poster={posterUrl || undefined} aria-label={`${lessonTitle(state.lesson)} video classroom`}>
-                      <source src={mediaUrl} />
-                    </video>
-                  ) : embedUrl ? (
-                    <iframe className="h-full w-full" src={embedUrl} title={lessonTitle(state.lesson)} allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen />
-                  ) : (
-                    <MediaPlaceholder message="This video URL is not available for classroom playback." />
-                  )
+                {videoSource.provider === "mp4" || videoSource.provider === "uploaded_video" ? (
+                  <video
+                    ref={videoRef}
+                    className="h-full w-full"
+                    controls
+                    preload="metadata"
+                    poster={videoSource.thumbnailUrl || undefined}
+                    aria-label={`${lessonTitle(state.lesson)} video classroom`}
+                    onLoadedMetadata={handleVideoMetadata}
+                    onTimeUpdate={handleVideoTimeUpdate}
+                    onPause={(event) => void saveVideoProgress(event.currentTarget.currentTime, event.currentTarget.duration)}
+                    onEnded={(event) => void saveVideoProgress(event.currentTarget.duration, event.currentTarget.duration, true)}
+                  >
+                    <source src={videoSource.url} />
+                  </video>
+                ) : videoSource.provider === "youtube" || videoSource.provider === "vimeo" || videoSource.provider === "bunny" || videoSource.provider === "embed" ? (
+                  <iframe className="h-full w-full" src={videoSource.embedUrl} title={lessonTitle(state.lesson)} allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen />
+                ) : videoSource.provider === "invalid" ? (
+                  <MediaPlaceholder message="Lesson video is temporarily unavailable." />
                 ) : (
                   <MediaPlaceholder message="Lesson media is being prepared by the Academy." />
                 )}
               </div>
+              <div className="grid gap-4 border-t border-gold-500/16 bg-navy-950/70 p-5 md:grid-cols-4">
+                <InfoPill label="Watched" value={`${Math.round(watchedPercent)}%`} />
+                <InfoPill label="Last Position" value={watchedSeconds ? formatTime(watchedSeconds) : "Not started"} />
+                <InfoPill label="Duration" value={durationSeconds || videoSource.durationSeconds ? formatTime(durationSeconds || videoSource.durationSeconds) : "Not available"} />
+                <InfoPill label="Resume Status" value={videoCompleted ? "Video completed" : videoMessage || (watchedSeconds ? `Resume from ${formatTime(watchedSeconds)}` : "Ready")} />
+              </div>
+              {watchedSeconds > 0 && (videoSource.provider === "mp4" || videoSource.provider === "uploaded_video") ? (
+                <div className="flex flex-wrap gap-3 border-t border-gold-500/12 bg-navy-950/80 p-5">
+                  <button type="button" onClick={() => seekNativeVideo(watchedSeconds)} className="inline-flex min-h-10 items-center gap-2 border border-gold-500/35 px-4 py-2 text-sm font-semibold text-gold-300">
+                    <PlayCircle size={15} /> Resume from {formatTime(watchedSeconds)}
+                  </button>
+                  <button type="button" onClick={() => seekNativeVideo(0)} className="inline-flex min-h-10 items-center gap-2 border border-gold-500/20 px-4 py-2 text-sm font-semibold text-ink/75">
+                    Start from beginning
+                  </button>
+                </div>
+              ) : null}
+              {chapterMarkers.length ? (
+                <div className="border-t border-gold-500/12 bg-navy-950/80 p-5">
+                  <p className="text-xs uppercase tracking-[.2em] text-gold-300">Chapter Markers</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {chapterMarkers.map((chapter) => canSeekChapters ? (
+                      <button key={`${chapter.time}-${chapter.title}`} type="button" onClick={() => seekNativeVideo(chapter.time)} className="inline-flex min-h-10 items-center gap-2 border border-gold-500/35 px-3 py-2 text-xs font-semibold text-gold-300">
+                        {formatTime(chapter.time)} · {chapter.title}
+                      </button>
+                    ) : (
+                      <span key={`${chapter.time}-${chapter.title}`} className="inline-flex min-h-10 items-center gap-2 border border-gold-500/16 px-3 py-2 text-xs text-ink/70">
+                        {formatTime(chapter.time)} · {chapter.title}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </section>
 
             <section className="terminal-panel p-6">
@@ -827,14 +1068,38 @@ export default function StudentLessonViewerPage() {
             </section>
 
             <ContentSection title="Lesson Overview" body={overview} />
-            <ContentSection title="Learning Objectives" body={objectives} />
+            <LearningObjectivesPanel objectives={objectiveItems} />
             <ContentSection title="Main Lesson Content" body={fullText} />
             <ContentSection title="Key Concepts" body={keyConcepts} />
             <ContentSection title="Key Takeaways" body={takeaways} />
             <ContentSection title="Vocabulary" body={vocabulary} />
             <ContentSection title="Instructor Notes" body={instructorNotes} />
             <ContentSection title="Practical Exercise" body={exercise} />
-            <ContentSection title="Transcript" body={transcript} />
+            {(hasVideo || transcript) ? (
+              <section className="terminal-panel p-6">
+                <button type="button" onClick={() => setTranscriptOpen((current) => !current)} className="flex w-full items-center justify-between gap-4 text-left">
+                  <span>
+                    <span className="block text-xs uppercase tracking-[.2em] text-gold-300">Lesson Transcript</span>
+                    <span className="mt-2 block text-sm text-ink/62">{transcript ? "Search and review the spoken lesson text." : "Transcript coming soon"}</span>
+                  </span>
+                  <span className="text-sm font-semibold text-gold-300">{transcriptOpen ? "Hide" : "Show"}</span>
+                </button>
+                {transcriptOpen ? (
+                  <div className="mt-5">
+                    {transcript ? (
+                      <>
+                        <input className="field" placeholder="Search transcript" value={transcriptSearch} onChange={(event) => setTranscriptSearch(event.target.value)} aria-label="Search lesson transcript" />
+                        <div className="mt-4 grid max-h-96 gap-4 overflow-auto pr-2 text-sm leading-7 text-ink/76" tabIndex={0}>
+                          {transcriptBlocks.length ? transcriptBlocks.map((block, index) => <TextBlock key={`transcript-${index}`} text={block} />) : <p>No transcript matches your search.</p>}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm text-ink/70">Transcript coming soon</p>
+                    )}
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
 
             <section className="terminal-panel p-6">
               <p className="text-xs uppercase tracking-[.22em] text-gold-300">Homework</p>
@@ -946,6 +1211,23 @@ function ContentSection({ title, body }: { title: string; body: string }) {
       <div className="mt-4 grid gap-4 text-sm leading-7 text-ink/76">
         {splitRichText(body).map((block, index) => (
           <TextBlock key={`${title}-${index}`} text={block} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function LearningObjectivesPanel({ objectives }: { objectives: string[] }) {
+  if (!objectives.length) return null;
+  return (
+    <section className="terminal-panel p-6">
+      <p className="text-xs uppercase tracking-[.2em] text-gold-300">Learning Objectives</p>
+      <div className="mt-4 grid gap-3">
+        {objectives.map((objective, index) => (
+          <div key={`${objective}-${index}`} className="flex items-start gap-3 border border-gold-500/14 bg-navy-950/60 p-3 text-sm leading-6 text-ink/78">
+            <CheckCircle2 className="mt-1 shrink-0 text-gold-300" size={16} />
+            <span>{objective}</span>
+          </div>
         ))}
       </div>
     </section>

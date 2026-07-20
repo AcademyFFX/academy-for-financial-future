@@ -131,9 +131,16 @@ const emptyLessonForm = {
   summary: "",
   fullContent: "",
   videoType: "Text-only lesson",
+  videoProvider: "none",
   videoUrl: "",
+  videoTitle: "",
+  videoDurationSeconds: "",
+  videoThumbnailUrl: "",
   pdfUrl: "",
+  learningObjectives: "",
   transcript: "",
+  transcriptText: "",
+  chapterMarkers: "",
   instructorNotes: "",
   duration: "",
   order: "1",
@@ -237,6 +244,35 @@ function isMissingUrlColumn(error: unknown) {
 
 function sameText(left: string, right: string) {
   return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
+function isValidVideoUrl(provider: string, rawUrl: string) {
+  if (!rawUrl.trim()) return true;
+  try {
+    const url = new URL(rawUrl);
+    if (!["https:", "http:"].includes(url.protocol)) return false;
+    const host = url.hostname.toLowerCase();
+    const normalizedProvider = provider.toLowerCase();
+    if (normalizedProvider === "youtube") return host.includes("youtube.com") || host.includes("youtu.be");
+    if (normalizedProvider === "vimeo") return host.includes("vimeo.com");
+    if (normalizedProvider === "mp4" || normalizedProvider === "uploaded_video") return /\.(mp4|webm|mov)(\?|#|$)/i.test(url.pathname) || host.includes("supabase") || host.includes("storage");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isValidChapterMarkers(raw: string) {
+  if (!raw.trim()) return true;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) && parsed.every((item) => {
+      const row = item as DbRow;
+      return Number.isFinite(Number(value(row, ["time", "seconds", "start"], "0"))) && Boolean(value(row, ["title", "label", "name"]));
+    });
+  } catch {
+    return false;
+  }
 }
 
 function displayDate(raw: string) {
@@ -714,6 +750,14 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
       setMessage("Lesson title is required.");
       return;
     }
+    if (!isValidVideoUrl(lessonForm.videoProvider, lessonForm.videoUrl)) {
+      setMessage("Video URL does not match the selected provider.");
+      return;
+    }
+    if (!isValidChapterMarkers(lessonForm.chapterMarkers)) {
+      setMessage("Chapter markers must be valid JSON, for example [{\"time\":0,\"title\":\"Introduction\"}].");
+      return;
+    }
     const supabase = createClient();
     const payload = {
       course_id: Number(selectedCourseId),
@@ -725,9 +769,16 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
       lesson_summary: lessonForm.summary.trim() || null,
       full_content: lessonForm.fullContent.trim() || null,
       video_type: lessonForm.videoType,
+      video_provider: lessonForm.videoProvider,
       video_url: lessonForm.videoUrl.trim() || null,
+      video_title: lessonForm.videoTitle.trim() || null,
+      video_duration_seconds: lessonForm.videoDurationSeconds ? Number(lessonForm.videoDurationSeconds) : null,
+      video_thumbnail_url: lessonForm.videoThumbnailUrl.trim() || null,
       pdf_notes_url: lessonForm.pdfUrl.trim() || null,
+      learning_objectives: lessonForm.learningObjectives.trim() || null,
       transcript: lessonForm.transcript.trim() || null,
+      transcript_text: lessonForm.transcriptText.trim() || null,
+      chapter_markers: lessonForm.chapterMarkers.trim() ? JSON.parse(lessonForm.chapterMarkers) : [],
       instructor_notes: lessonForm.instructorNotes.trim() || null,
       estimated_duration: lessonForm.duration.trim() || null,
       lesson_order: Number(lessonForm.order || 1),
@@ -757,9 +808,16 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
       summary: value(lesson, ["lesson_summary", "description"]),
       fullContent: value(lesson, ["full_content"]),
       videoType: value(lesson, ["video_type"], "Text-only lesson"),
+      videoProvider: value(lesson, ["video_provider"], "none"),
       videoUrl: value(lesson, ["video_url"]),
+      videoTitle: value(lesson, ["video_title"]),
+      videoDurationSeconds: value(lesson, ["video_duration_seconds"]),
+      videoThumbnailUrl: value(lesson, ["video_thumbnail_url"]),
       pdfUrl: value(lesson, ["pdf_notes_url"]),
+      learningObjectives: value(lesson, ["learning_objectives"]),
       transcript: value(lesson, ["transcript"]),
+      transcriptText: value(lesson, ["transcript_text"]),
+      chapterMarkers: value(lesson, ["chapter_markers"]) ? JSON.stringify(lesson.chapter_markers, null, 2) : "",
       instructorNotes: value(lesson, ["instructor_notes"]),
       duration: value(lesson, ["estimated_duration"]),
       order: value(lesson, ["lesson_order"], "1"),
@@ -783,9 +841,16 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
       lesson_summary: value(lesson, ["lesson_summary"]),
       full_content: value(lesson, ["full_content"]),
       video_type: value(lesson, ["video_type"], "Text-only lesson"),
+      video_provider: value(lesson, ["video_provider"], "none"),
       video_url: value(lesson, ["video_url"]) || null,
+      video_title: value(lesson, ["video_title"]) || null,
+      video_duration_seconds: value(lesson, ["video_duration_seconds"]) ? Number(value(lesson, ["video_duration_seconds"])) : null,
+      video_thumbnail_url: value(lesson, ["video_thumbnail_url"]) || null,
       pdf_notes_url: value(lesson, ["pdf_notes_url"]) || null,
+      learning_objectives: value(lesson, ["learning_objectives"]) || null,
       transcript: value(lesson, ["transcript"]),
+      transcript_text: value(lesson, ["transcript_text"]),
+      chapter_markers: lesson.chapter_markers ?? [],
       instructor_notes: value(lesson, ["instructor_notes"]),
       estimated_duration: value(lesson, ["estimated_duration"]),
       lesson_order: selectedCourseLessons.length + 1,
@@ -1289,11 +1354,33 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
                     <option>YouTube</option>
                     <option>Bunny Stream</option>
                   </select>
+                  <select className="field" value={lessonForm.videoProvider} onChange={(event) => setLessonForm({ ...lessonForm, videoProvider: event.target.value })}>
+                    <option value="none">No video</option>
+                    <option value="youtube">YouTube</option>
+                    <option value="vimeo">Vimeo</option>
+                    <option value="mp4">Direct MP4/WebM/MOV</option>
+                    <option value="uploaded_video">Uploaded video</option>
+                    <option value="bunny">Bunny Stream</option>
+                    <option value="embed">Hosted embed URL</option>
+                  </select>
                   <input className="field" placeholder="Video URL or uploaded video URL" value={lessonForm.videoUrl} onChange={(event) => setLessonForm({ ...lessonForm, videoUrl: event.target.value })} />
+                  <input className="field" placeholder="Video Title" value={lessonForm.videoTitle} onChange={(event) => setLessonForm({ ...lessonForm, videoTitle: event.target.value })} />
+                  <input className="field" type="number" min="0" placeholder="Duration in seconds" value={lessonForm.videoDurationSeconds} onChange={(event) => setLessonForm({ ...lessonForm, videoDurationSeconds: event.target.value })} />
+                  <input className="field" placeholder="Video Thumbnail URL" value={lessonForm.videoThumbnailUrl} onChange={(event) => setLessonForm({ ...lessonForm, videoThumbnailUrl: event.target.value })} />
                   <input className="field" placeholder="PDF Notes URL" value={lessonForm.pdfUrl} onChange={(event) => setLessonForm({ ...lessonForm, pdfUrl: event.target.value })} />
                   <input className="field" placeholder="Estimated Duration" value={lessonForm.duration} onChange={(event) => setLessonForm({ ...lessonForm, duration: event.target.value })} />
                 </div>
+                {lessonForm.videoUrl ? (
+                  <div className="border border-gold-500/16 bg-navy-950 p-4 text-sm text-ink/70">
+                    <p className="font-semibold text-gold-300">Media Preview</p>
+                    <p className="mt-2 break-all">{lessonForm.videoProvider}: {lessonForm.videoUrl}</p>
+                    {!isValidVideoUrl(lessonForm.videoProvider, lessonForm.videoUrl) ? <p className="mt-2 text-red-200">This URL does not match the selected provider.</p> : <a className="mt-2 inline-flex text-gold-300" href={lessonForm.videoUrl} target="_blank" rel="noreferrer">Open video URL</a>}
+                  </div>
+                ) : null}
+                <textarea className="field min-h-20" placeholder="Learning Objectives (one per line or JSON array)" value={lessonForm.learningObjectives} onChange={(event) => setLessonForm({ ...lessonForm, learningObjectives: event.target.value })} />
                 <textarea className="field min-h-24" placeholder="Transcript" value={lessonForm.transcript} onChange={(event) => setLessonForm({ ...lessonForm, transcript: event.target.value })} />
+                <textarea className="field min-h-24" placeholder="Transcript Text (searchable classroom transcript)" value={lessonForm.transcriptText} onChange={(event) => setLessonForm({ ...lessonForm, transcriptText: event.target.value })} />
+                <textarea className="field min-h-20" placeholder='Chapter Markers JSON, e.g. [{"time":0,"title":"Introduction"}]' value={lessonForm.chapterMarkers} onChange={(event) => setLessonForm({ ...lessonForm, chapterMarkers: event.target.value })} />
                 <textarea className="field min-h-20" placeholder="Instructor Notes" value={lessonForm.instructorNotes} onChange={(event) => setLessonForm({ ...lessonForm, instructorNotes: event.target.value })} />
                 <div className="grid gap-3 md:grid-cols-3">
                   <label className="flex items-center gap-2 text-sm text-ink/75"><input type="checkbox" checked={lessonForm.freePreview} onChange={(event) => setLessonForm({ ...lessonForm, freePreview: event.target.checked })} /> Free Preview</label>

@@ -28,6 +28,7 @@ const adminEnrollment = read("app/admin/enrollment/page.tsx");
 const adminCourseManagement = read("app/admin/course-management/page.tsx");
 const adminUploadCenter = read("app/admin/course-management/upload-center/page.tsx");
 const adminLmsManager = read("components/admin-lms-manager.tsx");
+const courseUploadCenter = read("components/course-upload-center.tsx");
 const studentDirectoryPage = read("app/student-directory/page.tsx");
 
 assert.match(middleware, /\["\/student-dashboard", "\/admin"\]/, "administrator /student-dashboard must redirect to /admin");
@@ -130,6 +131,27 @@ assert.match(adminLmsManager, /Lesson media saved successfully\./, "admin course
 assert.match(adminLmsManager, /savedProvider !== lessonForm\.videoProvider \|\| savedUrl !== expectedUrl/, "admin course manager must verify returned database media fields before reporting success");
 assert.match(adminLmsManager, /resetLessonPlaybackProgress/, "admin course manager must expose an optional reset playback progress action");
 assert.match(adminLmsManager, /\.from\("video_progress"\)\.delete\(\)\.eq\("lesson_id", Number\(lessonId\)\)/, "admin reset must target only the selected lesson playback rows");
+assert.match(courseUploadCenter, /External Lesson Video/, "course upload center must expose the external lesson video panel after lesson selection");
+assert.match(courseUploadCenter, /selectedLesson \? \(/, "external lesson video panel must render only when a valid lesson is selected");
+assert.match(courseUploadCenter, /Attach a YouTube, Vimeo, or direct browser-playable video URL to the selected lesson\./, "external video panel must describe supported external URL workflow");
+assert.match(courseUploadCenter, /youtube\.com[\s\S]*youtu\.be/, "upload center must accept YouTube watch, short, and embed URLs");
+assert.match(courseUploadCenter, /vimeo\.com[\s\S]*endsWith\("\.vimeo\.com"\)/, "upload center must accept Vimeo video and player URLs");
+assert.match(courseUploadCenter, /mp4\|webm\|mov/, "upload center must accept direct MP4, WebM, and MOV URLs");
+assert.match(courseUploadCenter, /javascript\|data/, "upload center must reject unsafe javascript and data URLs");
+assert.match(courseUploadCenter, /Local computer paths cannot be saved/, "upload center must reject local computer paths");
+assert.match(courseUploadCenter, /Preview Video/, "upload center must provide an administrator preview button");
+assert.match(courseUploadCenter, /Save Lesson Video/, "upload center must provide a save lesson video button");
+assert.match(courseUploadCenter, /Remove Video/, "upload center must provide a remove video button");
+assert.match(courseUploadCenter, /Reset Playback Progress/, "upload center must provide a confirmed reset playback action");
+assert.match(courseUploadCenter, /\.from\("lessons"\)[\s\S]*\.update\(payload\)[\s\S]*\.eq\("id", Number\(target\.lessonId\)\)[\s\S]*\.select\("id, video_provider, video_url, video_title, video_duration_seconds, video_thumbnail_url"\)/, "upload center must update and read back only the selected lesson row");
+assert.match(courseUploadCenter, /Lesson video saved successfully\./, "upload center must show success only after Supabase verifies the lesson video row");
+assert.match(courseUploadCenter, /Restoring the Academy classroom placeholder[\s\S]*video_provider: "none"[\s\S]*video_url: null/, "upload center must remove video metadata and restore the placeholder");
+assert.match(courseUploadCenter, /video_provider: "uploaded_video"[\s\S]*video_url: publicUrl[\s\S]*select\("id, video_provider, video_url, video_title"\)/, "computer video upload must connect the uploaded Storage URL to the selected lesson and verify it");
+assert.match(courseUploadCenter, /Video Upload/, "existing computer video upload card must remain available");
+assert.match(courseUploadCenter, /PDF Notes/, "existing PDF upload card must remain available");
+assert.match(courseUploadCenter, /PowerPoint Upload/, "existing PowerPoint upload card must remain available");
+assert.match(courseUploadCenter, /Assignment Upload/, "existing assignment upload card must remain available");
+assert.match(courseUploadCenter, /Course Thumbnail/, "existing course thumbnail upload card must remain available");
 
 for (const [route, source] of [
   ["/admin/certifications", adminCertifications],

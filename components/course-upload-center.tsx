@@ -10,9 +10,12 @@ import {
   GraduationCap,
   ImageIcon,
   Layers3,
+  PlayCircle,
   Plus,
   Presentation,
+  RefreshCw,
   Save,
+  Trash2,
   UploadCloud,
   Users,
   Video
@@ -28,6 +31,7 @@ type DbRow = Record<string, unknown>;
 type QuizQuestion = { prompt: string; options: string[]; correctAnswer: string };
 type AssetType = "Video" | "PDF Notes" | "PowerPoint" | "Assignment" | "Course Thumbnail" | "Module" | "Quiz";
 type UploadStage = "idle" | "uploading" | "success" | "failed";
+type VideoProvider = "none" | "youtube" | "vimeo" | "mp4" | "uploaded_video";
 type UploadStatus = {
   stage: UploadStage;
   title: string;
@@ -37,7 +41,7 @@ type UploadStatus = {
 const adminEmail = "acafffx@gmail.com";
 
 const acceptedUploads: Record<AssetType, { extensions: string[]; mimeTypes: string[]; label: string }> = {
-  Video: { extensions: [".mp4", ".mov"], mimeTypes: ["video/mp4", "video/quicktime"], label: "MP4 or MOV video" },
+  Video: { extensions: [".mp4", ".webm", ".mov"], mimeTypes: ["video/mp4", "video/webm", "video/quicktime"], label: "MP4, WebM, or MOV video" },
   "PDF Notes": { extensions: [".pdf"], mimeTypes: ["application/pdf"], label: "PDF" },
   PowerPoint: {
     extensions: [".pptx"],
@@ -94,6 +98,67 @@ function statusClasses(stage: UploadStage) {
   return "border-gold-500/20 bg-navy-950 text-ink/72";
 }
 
+function videoUrlValidationMessage(provider: VideoProvider, rawUrl: string) {
+  const trimmedUrl = rawUrl.trim();
+  if (!trimmedUrl) return "";
+  if (provider === "none") return "Choose YouTube, Vimeo, Direct MP4/WebM, or Uploaded Academy Video before entering a video URL.";
+  if (/^(javascript|data):/i.test(trimmedUrl)) return "Video URLs must use a safe http or https address.";
+  if (/^(file:|\/|\.\/|\.\.\/|[a-z]:\\)/i.test(trimmedUrl)) return "Local computer paths cannot be saved as lesson video URLs.";
+
+  try {
+    const url = new URL(trimmedUrl);
+    if (url.protocol !== "https:") return "Use a secure HTTPS video URL.";
+    const host = url.hostname.toLowerCase();
+    if (provider === "youtube") {
+      const isYoutube = host === "youtube.com" || host.endsWith(".youtube.com") || host === "youtu.be";
+      const hasId = host === "youtu.be" ? Boolean(url.pathname.split("/").filter(Boolean)[0]) : Boolean(url.searchParams.get("v") || url.pathname.split("/").filter(Boolean).pop());
+      return isYoutube && hasId ? "" : "Enter a valid YouTube watch, short, or embed URL.";
+    }
+    if (provider === "vimeo") {
+      const isVimeo = host === "vimeo.com" || host.endsWith(".vimeo.com");
+      const hasId = url.pathname.split("/").filter(Boolean).some((part) => /^\d+$/.test(part));
+      return isVimeo && hasId ? "" : "Enter a valid Vimeo video or player URL.";
+    }
+    if (provider === "mp4" || provider === "uploaded_video") {
+      return /\.(mp4|webm|mov)(\?|#|$)/i.test(url.pathname) || host.includes("supabase") || host.includes("storage")
+        ? ""
+        : "Direct videos must be HTTPS .mp4, .webm, .mov, or a valid Academy Storage URL.";
+    }
+    return "Choose a supported video provider.";
+  } catch {
+    return "Enter a complete video URL beginning with https://.";
+  }
+}
+
+function videoPreviewUrl(provider: VideoProvider, rawUrl: string) {
+  if (videoUrlValidationMessage(provider, rawUrl)) return "";
+  try {
+    const url = new URL(rawUrl.trim());
+    if (provider === "youtube") {
+      const id = url.hostname.includes("youtu.be")
+        ? url.pathname.split("/").filter(Boolean)[0]
+        : url.searchParams.get("v") || url.pathname.split("/").filter(Boolean).pop();
+      return id ? `https://www.youtube.com/embed/${id}` : "";
+    }
+    if (provider === "vimeo") {
+      const id = url.pathname.split("/").filter(Boolean).reverse().find((part) => /^\d+$/.test(part));
+      return id ? `https://player.vimeo.com/video/${id}` : "";
+    }
+    return rawUrl.trim();
+  } catch {
+    return "";
+  }
+}
+
+function parseDurationSeconds(rawDuration: string) {
+  const trimmed = rawDuration.trim();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) return Number(trimmed);
+  const parts = trimmed.split(":").map((part) => Number(part));
+  if (parts.length < 2 || parts.length > 3 || parts.some((part) => !Number.isFinite(part) || part < 0)) return Number.NaN;
+  return parts.reduce((total, part) => total * 60 + part, 0);
+}
+
 export function CourseUploadCenter() {
   const [authorized, setAuthorized] = useState(false);
   const [message, setMessage] = useState("Loading AFF Course Upload Center...");
@@ -113,6 +178,14 @@ export function CourseUploadCenter() {
   const [questionForm, setQuestionForm] = useState({ prompt: "", options: "", correctAnswer: "" });
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [certificateForm, setCertificateForm] = useState({ studentId: "", courseId: "", certificationName: "" });
+  const [externalVideo, setExternalVideo] = useState({
+    provider: "none" as VideoProvider,
+    url: "",
+    title: "",
+    duration: "",
+    thumbnailUrl: ""
+  });
+  const [previewRequested, setPreviewRequested] = useState(false);
 
   const loadCenter = useCallback(async () => {
     try {
@@ -156,7 +229,26 @@ export function CourseUploadCenter() {
 
   const selectedModules = useMemo(() => modules.filter((courseModule) => !target.courseId || value(courseModule, ["course_id"]) === target.courseId), [modules, target.courseId]);
   const selectedLessons = useMemo(() => lessons.filter((lesson) => !target.courseId || value(lesson, ["course_id"]) === target.courseId), [lessons, target.courseId]);
+  const selectedLesson = useMemo(() => lessons.find((lesson) => value(lesson, ["id"]) === target.lessonId) ?? null, [lessons, target.lessonId]);
+  const externalVideoValidation = videoUrlValidationMessage(externalVideo.provider, externalVideo.url);
+  const externalPreviewUrl = videoPreviewUrl(externalVideo.provider, externalVideo.url);
   const averageProgress = enrollments.length ? Math.round(enrollments.reduce((total, enrollment) => total + Number(value(enrollment, ["progress", "progress_percentage"], "0")), 0) / enrollments.length) : 0;
+
+  useEffect(() => {
+    if (!selectedLesson) {
+      setExternalVideo({ provider: "none", url: "", title: "", duration: "", thumbnailUrl: "" });
+      setPreviewRequested(false);
+      return;
+    }
+    setExternalVideo({
+      provider: (value(selectedLesson, ["video_provider"], "none") as VideoProvider) || "none",
+      url: value(selectedLesson, ["video_url"]),
+      title: value(selectedLesson, ["video_title"]),
+      duration: value(selectedLesson, ["video_duration_seconds"]),
+      thumbnailUrl: value(selectedLesson, ["video_thumbnail_url"])
+    });
+    setPreviewRequested(false);
+  }, [selectedLesson]);
 
   async function uploadAsset(file: File, assetType: AssetType) {
     if (!target.courseId) {
@@ -216,8 +308,15 @@ export function CourseUploadCenter() {
       if (insertedAsset) setAssets((current) => [insertedAsset as DbRow, ...current.filter((asset) => value(asset, ["id"]) !== value(insertedAsset as DbRow, ["id"]))]);
 
       if (assetType === "Video") {
-        const { error } = await supabase.from("lessons").update({ video_url: publicUrl, updated_at: new Date().toISOString() }).eq("id", Number(target.lessonId));
+        const { data: savedLesson, error } = await supabase.from("lessons").update({
+          video_provider: "uploaded_video",
+          video_type: "Supabase Storage video",
+          video_url: publicUrl,
+          video_title: file.name,
+          updated_at: new Date().toISOString()
+        }).eq("id", Number(target.lessonId)).select("id, video_provider, video_url, video_title").single();
         if (error) throw error;
+        if (value(savedLesson as DbRow, ["video_url"]) !== publicUrl) throw new Error("Video uploaded, but the selected lesson did not confirm the saved Storage URL.");
       }
       if (assetType === "PDF Notes") {
         const { error } = await supabase.from("lessons").update({ pdf_notes_url: publicUrl, updated_at: new Date().toISOString() }).eq("id", Number(target.lessonId));
@@ -239,6 +338,133 @@ export function CourseUploadCenter() {
     } finally {
       setUploading(null);
     }
+  }
+
+  async function saveExternalLessonVideo() {
+    if (!selectedLesson || !target.lessonId) {
+      const detail = "Select a lesson before saving an external video URL.";
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Lesson target required", detail });
+      return;
+    }
+    const validation = videoUrlValidationMessage(externalVideo.provider, externalVideo.url);
+    if (validation) {
+      setMessage(validation);
+      setUploadStatus({ stage: "failed", title: "Invalid video URL", detail: validation });
+      return;
+    }
+    if (externalVideo.provider === "none" && externalVideo.url.trim()) {
+      const detail = "Choose a video provider before saving a video URL.";
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Video provider required", detail });
+      return;
+    }
+    const parsedDuration = parseDurationSeconds(externalVideo.duration);
+    if (Number.isNaN(parsedDuration)) {
+      const detail = "Enter duration as seconds, MM:SS, or HH:MM:SS.";
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Invalid duration", detail });
+      return;
+    }
+
+    const supabase = createClient();
+    setUploadStatus({ stage: "uploading", title: "Saving lesson video", detail: "Updating the selected lesson row and verifying saved video metadata." });
+    const payload = {
+      video_provider: externalVideo.provider,
+      video_type: externalVideo.provider === "none" ? "Text-only lesson" : "External Lesson Video",
+      video_url: externalVideo.url.trim() || null,
+      video_title: externalVideo.title.trim() || null,
+      video_duration_seconds: parsedDuration,
+      video_thumbnail_url: externalVideo.thumbnailUrl.trim() || null,
+      updated_at: new Date().toISOString()
+    };
+    const { data: savedLesson, error } = await supabase
+      .from("lessons")
+      .update(payload)
+      .eq("id", Number(target.lessonId))
+      .select("id, video_provider, video_url, video_title, video_duration_seconds, video_thumbnail_url")
+      .single();
+    if (error) {
+      const detail = errorMessage(error, "Unable to save lesson video.");
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Lesson video save failed", detail });
+      return;
+    }
+    const savedUrl = value(savedLesson as DbRow, ["video_url"]);
+    const savedProvider = value(savedLesson as DbRow, ["video_provider"], "none");
+    if (savedUrl !== externalVideo.url.trim() || savedProvider !== externalVideo.provider) {
+      const detail = "The lesson row was updated, but saved video values did not match the form. Reload and verify the selected lesson.";
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Lesson video verification failed", detail });
+      return;
+    }
+    setLessons((current) => current.map((lesson) => value(lesson, ["id"]) === target.lessonId ? { ...lesson, ...(savedLesson as DbRow) } : lesson));
+    setMessage("Lesson video saved successfully.");
+    setUploadStatus({ stage: "success", title: "Lesson video saved successfully.", detail: "The existing lesson row was updated and verified from Supabase." });
+    setPreviewRequested(false);
+  }
+
+  async function removeExternalLessonVideo() {
+    if (!selectedLesson || !target.lessonId) {
+      const detail = "Select a lesson before removing video metadata.";
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Lesson target required", detail });
+      return;
+    }
+    const supabase = createClient();
+    setUploadStatus({ stage: "uploading", title: "Removing lesson video", detail: "Restoring the Academy classroom placeholder for the selected lesson." });
+    const { data: savedLesson, error } = await supabase
+      .from("lessons")
+      .update({
+        video_provider: "none",
+        video_type: "Text-only lesson",
+        video_url: null,
+        video_title: null,
+        video_duration_seconds: null,
+        video_thumbnail_url: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", Number(target.lessonId))
+      .select("id, video_provider, video_url, video_title, video_duration_seconds, video_thumbnail_url")
+      .single();
+    if (error) {
+      const detail = errorMessage(error, "Unable to remove lesson video.");
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Remove video failed", detail });
+      return;
+    }
+    if (value(savedLesson as DbRow, ["video_url"])) {
+      const detail = "The lesson still has a video URL after removal. Reload and verify the selected lesson.";
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Remove video verification failed", detail });
+      return;
+    }
+    setLessons((current) => current.map((lesson) => value(lesson, ["id"]) === target.lessonId ? { ...lesson, ...(savedLesson as DbRow) } : lesson));
+    setExternalVideo({ provider: "none", url: "", title: "", duration: "", thumbnailUrl: "" });
+    setPreviewRequested(false);
+    setMessage("Lesson video removed. The Academy placeholder will display for this lesson.");
+    setUploadStatus({ stage: "success", title: "Lesson video removed", detail: "The selected lesson no longer has video metadata. Notes, resources, completion, and course progress were not changed." });
+  }
+
+  async function resetSelectedLessonPlaybackProgress() {
+    if (!selectedLesson || !target.lessonId) {
+      const detail = "Select a lesson before resetting playback progress.";
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Lesson target required", detail });
+      return;
+    }
+    const lessonName = value(selectedLesson, ["lesson_title", "title"], "this lesson");
+    if (!window.confirm(`Reset playback progress for "${lessonName}"? This does not change lesson completion, notes, resources, or course progress.`)) return;
+    const supabase = createClient();
+    const { error } = await supabase.from("video_progress").delete().eq("lesson_id", Number(target.lessonId));
+    if (error) {
+      const detail = errorMessage(error, "Unable to reset playback progress.");
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Reset playback failed", detail });
+      return;
+    }
+    setMessage("Playback progress reset for the selected lesson.");
+    setUploadStatus({ stage: "success", title: "Playback progress reset", detail: "Only video_progress rows for the selected lesson were removed." });
   }
 
   async function createModule(event: FormEvent) {
@@ -357,10 +583,64 @@ export function CourseUploadCenter() {
           <Select value={target.moduleId} onChange={(moduleId) => setTarget((current) => ({ ...current, moduleId, lessonId: "" }))} label="Optional module" rows={selectedModules} valueKey="module_id" rowLabel={["module_title", "asset_title"]} />
           <Select value={target.lessonId} onChange={(lessonId) => setTarget((current) => ({ ...current, lessonId }))} label="Optional lesson" rows={selectedLessons} rowLabel={["lesson_title"]} />
         </div>
+        {selectedLesson ? (
+          <div className="mt-5 border border-gold-500/20 bg-navy-950/70 p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[.2em] text-gold-300">External Lesson Video</p>
+                <h3 className="mt-2 text-xl font-semibold text-white">{value(selectedLesson, ["lesson_title", "title"])}</h3>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-ink/68">Attach a YouTube, Vimeo, or direct browser-playable video URL to the selected lesson.</p>
+              </div>
+              <span className="inline-flex w-fit border border-gold-500/25 px-3 py-2 text-xs font-semibold uppercase tracking-[.16em] text-gold-300">Existing lesson row only</span>
+            </div>
+            <div className="mt-4 border border-gold-500/16 bg-gold-500/10 p-4 text-sm leading-6 text-ink/76">
+              Use a temporary public video URL for technical verification. Replace it with the official AFF lesson video before publication.
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <select className="field" value={externalVideo.provider} onChange={(event) => setExternalVideo((current) => ({ ...current, provider: event.target.value as VideoProvider }))}>
+                <option value="none">None</option>
+                <option value="youtube">YouTube</option>
+                <option value="vimeo">Vimeo</option>
+                <option value="mp4">Direct MP4/WebM</option>
+                <option value="uploaded_video">Uploaded Academy Video</option>
+              </select>
+              <input className="field" placeholder="Video URL" value={externalVideo.url} onChange={(event) => setExternalVideo((current) => ({ ...current, url: event.target.value }))} />
+              <input className="field" placeholder="Video Title" value={externalVideo.title} onChange={(event) => setExternalVideo((current) => ({ ...current, title: event.target.value }))} />
+              <input className="field" placeholder="Duration in seconds, MM:SS, or HH:MM:SS" value={externalVideo.duration} onChange={(event) => setExternalVideo((current) => ({ ...current, duration: event.target.value }))} />
+              <input className="field md:col-span-2" placeholder="Thumbnail URL — optional" value={externalVideo.thumbnailUrl} onChange={(event) => setExternalVideo((current) => ({ ...current, thumbnailUrl: event.target.value }))} />
+            </div>
+            {externalVideoValidation ? <p className="mt-3 text-sm font-semibold text-red-200">{externalVideoValidation}</p> : null}
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button className="inline-flex items-center justify-center gap-2 border border-gold-500/40 px-4 py-3 text-sm font-semibold text-gold-300 disabled:opacity-45" type="button" onClick={() => setPreviewRequested(true)} disabled={!externalVideo.url.trim() || Boolean(externalVideoValidation)}>
+                <PlayCircle size={16} /> Preview Video
+              </button>
+              <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-4 py-3 text-sm font-bold text-navy-950 disabled:opacity-60" type="button" onClick={saveExternalLessonVideo} disabled={Boolean(externalVideoValidation)}>
+                <Save size={16} /> Save Lesson Video
+              </button>
+              <button className="inline-flex items-center justify-center gap-2 border border-gold-500/30 px-4 py-3 text-sm font-semibold text-ink/80" type="button" onClick={removeExternalLessonVideo}>
+                <Trash2 size={16} /> Remove Video
+              </button>
+              <button className="inline-flex items-center justify-center gap-2 border border-gold-500/30 px-4 py-3 text-sm font-semibold text-ink/80" type="button" onClick={resetSelectedLessonPlaybackProgress}>
+                <RefreshCw size={16} /> Reset Playback Progress
+              </button>
+            </div>
+            {previewRequested && externalPreviewUrl ? (
+              <div className="mt-5 overflow-hidden border border-gold-500/20 bg-black">
+                <div className="aspect-video">
+                  {externalVideo.provider === "youtube" || externalVideo.provider === "vimeo" ? (
+                    <iframe className="h-full w-full" src={externalPreviewUrl} title="AFF external lesson video preview" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen />
+                  ) : (
+                    <video className="h-full w-full" controls preload="metadata" src={externalPreviewUrl} />
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <UploadDropzone title="Video Upload" text="MP4 or MOV up to 500 MB" accept="video/mp4,video/quicktime,.mp4,.mov" icon={<Video size={26} />} busy={uploading === "Video"} onFile={(file) => uploadAsset(file, "Video")} />
+        <UploadDropzone title="Video Upload" text="MP4, WebM, or MOV up to 500 MB" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" icon={<Video size={26} />} busy={uploading === "Video"} onFile={(file) => uploadAsset(file, "Video")} />
         <UploadDropzone title="PDF Notes" text="Course notes and reading materials" accept="application/pdf" icon={<FileText size={26} />} busy={uploading === "PDF Notes"} onFile={(file) => uploadAsset(file, "PDF Notes")} />
         <UploadDropzone title="PowerPoint Upload" text="PPTX instructor presentations" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" icon={<Presentation size={26} />} busy={uploading === "PowerPoint"} onFile={(file) => uploadAsset(file, "PowerPoint")} />
         <UploadDropzone title="Assignment Upload" text="PDF or PPTX homework files" accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation" icon={<FileArchive size={26} />} busy={uploading === "Assignment"} onFile={(file) => uploadAsset(file, "Assignment")} />

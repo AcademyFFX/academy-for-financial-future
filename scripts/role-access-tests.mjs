@@ -27,6 +27,7 @@ const adminLiveClassroom = read("app/admin/live-classroom/page.tsx");
 const adminEnrollment = read("app/admin/enrollment/page.tsx");
 const adminCourseManagement = read("app/admin/course-management/page.tsx");
 const adminUploadCenter = read("app/admin/course-management/upload-center/page.tsx");
+const adminLmsManager = read("components/admin-lms-manager.tsx");
 const studentDirectoryPage = read("app/student-directory/page.tsx");
 
 assert.match(middleware, /\["\/student-dashboard", "\/admin"\]/, "administrator /student-dashboard must redirect to /admin");
@@ -64,6 +65,7 @@ assert.match(studentLessonViewer, /youtubeEmbedUrl/, "student lesson viewer must
 assert.match(studentLessonViewer, /vimeoEmbedUrl/, "student lesson viewer must parse Vimeo classroom URLs");
 assert.match(studentLessonViewer, /isDirectVideo\(url\)/, "student lesson viewer must detect MP4/uploaded classroom video URLs");
 assert.match(studentLessonViewer, /Lesson media is being prepared by the Academy\./, "student lesson viewer must preserve the no-media placeholder");
+assert.match(studentLessonViewer, /Playback tracking is available for direct Academy video files\./, "iframe providers must not claim precise playback tracking without provider APIs");
 assert.match(studentLessonViewer, /\.from\("video_progress"\)[\s\S]*\.eq\("auth_user_id", user\.id\)[\s\S]*\.eq\("course_id", Number\(idOf\(course\)\)\)[\s\S]*\.eq\("lesson_id", Number\(idOf\(lesson\)\)\)/, "student lesson viewer must load playback progress for only the authenticated student");
 assert.match(studentLessonViewer, /\.from\("video_progress"\)[\s\S]*\.upsert\([\s\S]*onConflict: "auth_user_id,course_id,lesson_id"/, "student lesson viewer must upsert playback progress through the video_progress composite key");
 assert.match(studentLessonViewer, /state\.isAdmin[\s\S]*return/, "administrator preview must not write playback progress");
@@ -116,6 +118,18 @@ assert.match(adminRouteAudit, /process\.env\.NODE_ENV !== "production"[\s\S]*con
 assert.doesNotMatch(adminRouteAudit, /Supabase config/, "admin route audit must not render Supabase configuration details");
 assert.doesNotMatch(adminStatusRoute, /SUPABASE_SERVICE_ROLE_KEY|hasSupabaseServiceRoleKey|supabaseHost|environment/, "admin status API must not expose Supabase environment configuration");
 assert.doesNotMatch(adminClient, /hasSupabaseServiceRoleKey|supabaseHost|environment/, "browser admin client must not carry Supabase environment configuration");
+assert.match(adminLmsManager, /function videoUrlValidationMessage/, "admin course manager must validate lesson video URLs before saving");
+assert.match(adminLmsManager, /youtube\.com[\s\S]*youtu\.be/, "admin course manager must accept YouTube watch, short, and embed URLs");
+assert.match(adminLmsManager, /vimeo\.com[\s\S]*endsWith\("\.vimeo\.com"\)/, "admin course manager must accept Vimeo and player URLs");
+assert.match(adminLmsManager, /mp4\|webm\|mov/, "admin course manager must accept browser-playable direct media URLs");
+assert.match(adminLmsManager, /javascript\|data/, "admin course manager must reject unsafe javascript and data URLs");
+assert.match(adminLmsManager, /Local file paths cannot be saved/, "admin course manager must reject accidental local file paths");
+assert.match(adminLmsManager, /Use a temporary public test video URL for technical verification/, "admin course manager must explain the temporary test video workflow");
+assert.match(adminLmsManager, /\.from\("lessons"\)\.update\(payload\)\.eq\("id", Number\(lessonForm\.lessonId\)\)\.select/, "admin course manager must update the existing lesson row and read it back");
+assert.match(adminLmsManager, /Lesson media saved successfully\./, "admin course manager must show verified media save confirmation");
+assert.match(adminLmsManager, /savedProvider !== lessonForm\.videoProvider \|\| savedUrl !== expectedUrl/, "admin course manager must verify returned database media fields before reporting success");
+assert.match(adminLmsManager, /resetLessonPlaybackProgress/, "admin course manager must expose an optional reset playback progress action");
+assert.match(adminLmsManager, /\.from\("video_progress"\)\.delete\(\)\.eq\("lesson_id", Number\(lessonId\)\)/, "admin reset must target only the selected lesson playback rows");
 
 for (const [route, source] of [
   ["/admin/certifications", adminCertifications],

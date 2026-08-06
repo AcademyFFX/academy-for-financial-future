@@ -919,7 +919,8 @@ export default function StudentLessonViewerPage() {
 
   const videoSource = detectVideoSource(state.lesson, state.assets);
   const hasVideo = videoSource.provider !== "none" && videoSource.provider !== "invalid";
-  const canSeekChapters = videoSource.provider === "mp4" || videoSource.provider === "uploaded_video";
+  const canTrackPlayback = videoSource.provider === "mp4" || videoSource.provider === "uploaded_video";
+  const canSeekChapters = canTrackPlayback;
   const pdfUrl = safeUrl(value(state.lesson, ["pdf_notes_url"]));
   const resources = state.assets.filter((asset) => resourceType(asset) !== "Quiz" && safeUrl(resourceUrl(asset)));
   const resourceGroups: ResourceGroup[] = ["Lesson Materials", "Workbook", "Instructor Resources", "Homework Files", "Supplemental Learning"]
@@ -940,6 +941,7 @@ export default function StudentLessonViewerPage() {
   const durationSeconds = Number(value(videoProgress ?? state.videoProgress, ["duration_seconds"], String(videoSource.durationSeconds || 0)));
   const watchedPercent = Number(value(videoProgress ?? state.videoProgress, ["percent_watched"], "0"));
   const videoCompleted = value(videoProgress ?? state.videoProgress, ["completed"]) === "true";
+  const iframeTrackingNotice = hasVideo && !canTrackPlayback ? "Playback tracking is available for direct Academy video files." : "";
   const transcriptBlocks = transcriptSearch.trim()
     ? splitRichText(transcript).filter((block) => block.toLowerCase().includes(transcriptSearch.trim().toLowerCase()))
     : splitRichText(transcript);
@@ -1015,12 +1017,12 @@ export default function StudentLessonViewerPage() {
                 )}
               </div>
               <div className="grid gap-4 border-t border-gold-500/16 bg-navy-950/70 p-5 md:grid-cols-4">
-                <InfoPill label="Watched" value={`${Math.round(watchedPercent)}%`} />
-                <InfoPill label="Last Position" value={watchedSeconds ? formatTime(watchedSeconds) : "Not started"} />
+                <InfoPill label="Watched" value={canTrackPlayback ? `${Math.round(watchedPercent)}%` : hasVideo ? "Direct video only" : "0%"} />
+                <InfoPill label="Last Position" value={canTrackPlayback ? (watchedSeconds ? formatTime(watchedSeconds) : "Not started") : hasVideo ? "Direct video only" : "Not started"} />
                 <InfoPill label="Duration" value={durationSeconds || videoSource.durationSeconds ? formatTime(durationSeconds || videoSource.durationSeconds) : "Not available"} />
-                <InfoPill label="Resume Status" value={videoCompleted ? "Video completed" : videoMessage || (watchedSeconds ? `Resume from ${formatTime(watchedSeconds)}` : "Ready")} />
+                <InfoPill label="Resume Status" value={iframeTrackingNotice || (videoCompleted ? "Video completed" : videoMessage || (watchedSeconds ? `Resume from ${formatTime(watchedSeconds)}` : "Ready"))} />
               </div>
-              {watchedSeconds > 0 && (videoSource.provider === "mp4" || videoSource.provider === "uploaded_video") ? (
+              {watchedSeconds > 0 && canTrackPlayback ? (
                 <div className="flex flex-wrap gap-3 border-t border-gold-500/12 bg-navy-950/80 p-5">
                   <button type="button" onClick={() => seekNativeVideo(watchedSeconds)} className="inline-flex min-h-10 items-center gap-2 border border-gold-500/35 px-4 py-2 text-sm font-semibold text-gold-300">
                     <PlayCircle size={15} /> Resume from {formatTime(watchedSeconds)}

@@ -247,18 +247,63 @@ function sameText(left: string, right: string) {
 }
 
 function isValidVideoUrl(provider: string, rawUrl: string) {
-  if (!rawUrl.trim()) return true;
+  return !videoUrlValidationMessage(provider, rawUrl);
+}
+
+function videoUrlValidationMessage(provider: string, rawUrl: string) {
+  const trimmedUrl = rawUrl.trim();
+  const normalizedProvider = provider.toLowerCase();
+  if (!trimmedUrl) return "";
+  if (normalizedProvider === "none") return "Choose YouTube, Vimeo, Direct MP4, or Uploaded video before entering a video URL.";
+  if (/^(javascript|data):/i.test(trimmedUrl)) return "Video URLs must use a safe http or https address.";
+  if (/^(file|\/|\.\/|\.\.\/)/i.test(trimmedUrl)) return "Local file paths cannot be saved as lesson video URLs.";
   try {
-    const url = new URL(rawUrl);
-    if (!["https:", "http:"].includes(url.protocol)) return false;
+    const url = new URL(trimmedUrl);
+    if (!["https:", "http:"].includes(url.protocol)) return "Video URLs must use http or https.";
     const host = url.hostname.toLowerCase();
-    const normalizedProvider = provider.toLowerCase();
-    if (normalizedProvider === "youtube") return host.includes("youtube.com") || host.includes("youtu.be");
-    if (normalizedProvider === "vimeo") return host.includes("vimeo.com");
-    if (normalizedProvider === "mp4" || normalizedProvider === "uploaded_video") return /\.(mp4|webm|mov)(\?|#|$)/i.test(url.pathname) || host.includes("supabase") || host.includes("storage");
-    return true;
+    if (normalizedProvider === "youtube") {
+      const isYoutubeHost = host === "youtube.com" || host.endsWith(".youtube.com") || host === "youtu.be";
+      const hasVideoId = host === "youtu.be" ? Boolean(url.pathname.split("/").filter(Boolean)[0]) : Boolean(url.searchParams.get("v") || url.pathname.split("/").filter(Boolean).pop());
+      return isYoutubeHost && hasVideoId ? "" : "Enter a valid YouTube watch, short, or embed URL.";
+    }
+    if (normalizedProvider === "vimeo") {
+      const isVimeoHost = host === "vimeo.com" || host.endsWith(".vimeo.com");
+      const hasVideoId = url.pathname.split("/").filter(Boolean).some((part) => /^\d+$/.test(part));
+      return isVimeoHost && hasVideoId ? "" : "Enter a valid Vimeo video or player URL.";
+    }
+    if (normalizedProvider === "mp4" || normalizedProvider === "uploaded_video") {
+      const browserPlayable = /\.(mp4|webm|mov)(\?|#|$)/i.test(url.pathname);
+      const storageUrl = host.includes("supabase") || host.includes("storage");
+      return browserPlayable || storageUrl ? "" : "Direct media URLs must be browser-playable .mp4, .webm, .mov, or an uploaded Storage URL.";
+    }
+    if (normalizedProvider === "bunny") {
+      return host.includes("bunnycdn.com") || host.includes("mediadelivery.net") ? "" : "Enter a valid Bunny Stream or Bunny CDN URL.";
+    }
+    if (normalizedProvider === "embed") return "";
+    return "Choose a supported video provider.";
   } catch {
-    return false;
+    return "Enter a complete video URL beginning with https://.";
+  }
+}
+
+function videoPreviewEmbedUrl(provider: string, rawUrl: string) {
+  if (!isValidVideoUrl(provider, rawUrl)) return "";
+  const normalizedProvider = provider.toLowerCase();
+  try {
+    const url = new URL(rawUrl.trim());
+    if (normalizedProvider === "youtube") {
+      const id = url.hostname.includes("youtu.be")
+        ? url.pathname.split("/").filter(Boolean)[0]
+        : url.searchParams.get("v") || url.pathname.split("/").filter(Boolean).pop();
+      return id ? `https://www.youtube.com/embed/${id}` : "";
+    }
+    if (normalizedProvider === "vimeo") {
+      const id = url.pathname.split("/").filter(Boolean).reverse().find((part) => /^\d+$/.test(part));
+      return id ? `https://player.vimeo.com/video/${id}` : "";
+    }
+    return rawUrl.trim();
+  } catch {
+    return "";
   }
 }
 
@@ -439,6 +484,10 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
   const selectedCourseResources = useMemo(() => resources.filter((asset) => value(asset, ["course_id"]) === selectedCourseId), [resources, selectedCourseId]);
   const selectedCourseAssignments = useMemo(() => assignments.filter((asset) => value(asset, ["course_id"]) === selectedCourseId), [assignments, selectedCourseId]);
   const selectedCourseQuizzes = useMemo(() => quizAssets.filter((asset) => value(asset, ["course_id"]) === selectedCourseId), [quizAssets, selectedCourseId]);
+  const lessonVideoValidationMessage = videoUrlValidationMessage(lessonForm.videoProvider, lessonForm.videoUrl);
+  const lessonVideoPreviewUrl = videoPreviewEmbedUrl(lessonForm.videoProvider, lessonForm.videoUrl);
+  const lessonVideoIsDirect = ["mp4", "uploaded_video"].includes(lessonForm.videoProvider);
+  const lessonVideoIsIframe = ["youtube", "vimeo", "bunny", "embed"].includes(lessonForm.videoProvider);
 
   const filteredCourses = useMemo(() => {
     let output = courses.filter((course) => {
@@ -750,8 +799,9 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
       setMessage("Lesson title is required.");
       return;
     }
-    if (!isValidVideoUrl(lessonForm.videoProvider, lessonForm.videoUrl)) {
-      setMessage("Video URL does not match the selected provider.");
+    const videoValidationMessage = videoUrlValidationMessage(lessonForm.videoProvider, lessonForm.videoUrl);
+    if (videoValidationMessage) {
+      setMessage(videoValidationMessage);
       return;
     }
     if (!isValidChapterMarkers(lessonForm.chapterMarkers)) {
@@ -788,14 +838,38 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
       updated_at: new Date().toISOString()
     };
     const request = lessonForm.lessonId
-      ? supabase.from("lessons").update(payload).eq("id", Number(lessonForm.lessonId))
-      : supabase.from("lessons").insert(payload);
-    const { error } = await request;
-    setMessage(error ? friendlyDatabaseError(error, "Unable to save lesson.") : "Lesson saved.");
+      ? supabase.from("lessons").update(payload).eq("id", Number(lessonForm.lessonId)).select("id, video_provider, video_url, video_title, video_duration_seconds, video_thumbnail_url, transcript_text, learning_objectives, chapter_markers").single()
+      : supabase.from("lessons").insert(payload).select("id, video_provider, video_url, video_title, video_duration_seconds, video_thumbnail_url, transcript_text, learning_objectives, chapter_markers").single();
+    const { data: savedLesson, error } = await request;
+    if (error) {
+      setMessage(friendlyDatabaseError(error, "Unable to save lesson."));
+      return;
+    }
+    const savedProvider = value(savedLesson, ["video_provider"], "none");
+    const savedUrl = value(savedLesson, ["video_url"]);
+    const expectedUrl = lessonForm.videoUrl.trim();
+    if (savedProvider !== lessonForm.videoProvider || savedUrl !== expectedUrl) {
+      setMessage("Lesson saved, but media verification failed. Reload the lesson and confirm the saved video fields.");
+      return;
+    }
+    setMessage(lessonForm.videoUrl.trim() || lessonForm.lessonId ? "Lesson media saved successfully." : "Lesson saved.");
     if (!error) {
       setLessonForm({ ...emptyLessonForm, courseId: selectedCourseId });
       await load();
     }
+  }
+
+  async function resetLessonPlaybackProgress(lesson: DbRow) {
+    const lessonId = value(lesson, ["id"]);
+    const lessonName = value(lesson, ["lesson_title", "title"], "this lesson");
+    if (!lessonId) {
+      setMessage("Select a saved lesson before resetting playback progress.");
+      return;
+    }
+    if (!window.confirm(`Reset playback progress for "${lessonName}"? Lesson completion, notes, resources, and course progress will not be changed.`)) return;
+    const supabase = createClient();
+    const { error } = await supabase.from("video_progress").delete().eq("lesson_id", Number(lessonId));
+    setMessage(error ? friendlyDatabaseError(error, "Unable to reset playback progress for this lesson.") : "Playback progress reset for this lesson.");
   }
 
   function editLesson(lesson: DbRow) {
@@ -1370,11 +1444,26 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
                   <input className="field" placeholder="PDF Notes URL" value={lessonForm.pdfUrl} onChange={(event) => setLessonForm({ ...lessonForm, pdfUrl: event.target.value })} />
                   <input className="field" placeholder="Estimated Duration" value={lessonForm.duration} onChange={(event) => setLessonForm({ ...lessonForm, duration: event.target.value })} />
                 </div>
+                <div className="border border-gold-500/16 bg-gold-500/10 p-4 text-sm text-ink/75">
+                  <p className="font-semibold text-gold-300">Temporary Video Verification Workflow</p>
+                  <p className="mt-2">Use a temporary public test video URL for technical verification. Replace it with the official AFF lesson video before publication.</p>
+                </div>
                 {lessonForm.videoUrl ? (
                   <div className="border border-gold-500/16 bg-navy-950 p-4 text-sm text-ink/70">
                     <p className="font-semibold text-gold-300">Media Preview</p>
                     <p className="mt-2 break-all">{lessonForm.videoProvider}: {lessonForm.videoUrl}</p>
-                    {!isValidVideoUrl(lessonForm.videoProvider, lessonForm.videoUrl) ? <p className="mt-2 text-red-200">This URL does not match the selected provider.</p> : <a className="mt-2 inline-flex text-gold-300" href={lessonForm.videoUrl} target="_blank" rel="noreferrer">Open video URL</a>}
+                    {lessonVideoValidationMessage ? <p className="mt-2 text-red-200">{lessonVideoValidationMessage}</p> : <a className="mt-2 inline-flex text-gold-300" href={lessonForm.videoUrl} target="_blank" rel="noreferrer">Open video URL</a>}
+                    {!lessonVideoValidationMessage && lessonVideoPreviewUrl ? (
+                      <div className="mt-4 overflow-hidden border border-gold-500/20 bg-black">
+                        <div className="aspect-video">
+                          {lessonVideoIsDirect ? (
+                            <video className="h-full w-full" controls preload="metadata" src={lessonVideoPreviewUrl} />
+                          ) : lessonVideoIsIframe ? (
+                            <iframe className="h-full w-full" src={lessonVideoPreviewUrl} title="AFF lesson media preview" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen />
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
                 <textarea className="field min-h-20" placeholder="Learning Objectives (one per line or JSON array)" value={lessonForm.learningObjectives} onChange={(event) => setLessonForm({ ...lessonForm, learningObjectives: event.target.value })} />
@@ -1400,6 +1489,7 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
                     <button onClick={() => moveLesson(lesson, -1)} className="mini-button" type="button"><ArrowUp size={14} /></button>
                     <button onClick={() => moveLesson(lesson, 1)} className="mini-button" type="button"><ArrowDown size={14} /></button>
                     <button onClick={() => updateLessonStatus(value(lesson, ["id"]), statusOf(lesson) === "Published" ? "Draft" : "Published")} className="mini-button" type="button">{statusOf(lesson) === "Published" ? "Unpublish" : "Publish"}</button>
+                    <button onClick={() => resetLessonPlaybackProgress(lesson)} className="mini-button" type="button"><RefreshCw size={14} /> Reset playback</button>
                     <button onClick={() => deleteLesson(value(lesson, ["id"]))} className="mini-danger" type="button">Delete</button>
                   </AdminItem>
                 ))}

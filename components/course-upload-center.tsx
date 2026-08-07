@@ -37,12 +37,32 @@ type UploadStatus = {
   title: string;
   detail: string;
 };
+type VideoSaveStage =
+  | "button_clicked"
+  | "validating_selection"
+  | "validating_provider"
+  | "validating_url"
+  | "validating_title"
+  | "validating_duration"
+  | "checking_auth"
+  | "checking_admin"
+  | "updating_lesson"
+  | "verifying_readback"
+  | "success"
+  | "error";
 type VideoSaveDiagnostic = {
+  saveStage: VideoSaveStage;
+  validationError: string;
   authUserId: string;
   authEmail: string;
   isAffAdmin: string;
   selectedCourseId: string;
   selectedLessonId: string;
+  videoProvider: string;
+  videoUrl: string;
+  videoTitle: string;
+  videoDurationSeconds: string;
+  videoThumbnailUrl: string;
   updateErrorCode: string;
   updateErrorMessage: string;
 };
@@ -368,46 +388,63 @@ export function CourseUploadCenter() {
   async function saveExternalLessonVideo() {
     const selectedCourseId = Number(target.courseId);
     const selectedLessonId = Number(target.lessonId);
+    const parsedDuration = parseDurationSeconds(externalVideo.duration);
     const baseDiagnostic: VideoSaveDiagnostic = {
+      saveStage: "button_clicked",
+      validationError: "None",
       authUserId: "Not checked",
       authEmail: "Not checked",
       isAffAdmin: "Not checked",
       selectedCourseId: target.courseId || "Missing",
       selectedLessonId: target.lessonId || "Missing",
+      videoProvider: externalVideo.provider,
+      videoUrl: externalVideo.url.trim() || "Blank",
+      videoTitle: externalVideo.title.trim() || "Blank",
+      videoDurationSeconds: Number.isNaN(parsedDuration) ? "Invalid" : parsedDuration === null ? "Blank" : String(parsedDuration),
+      videoThumbnailUrl: externalVideo.thumbnailUrl.trim() || "Blank",
       updateErrorCode: "",
       updateErrorMessage: ""
     };
     setVideoSaveDiagnostic(baseDiagnostic);
-    if (!selectedLesson || !Number.isFinite(selectedCourseId) || !Number.isFinite(selectedLessonId) || value(selectedLesson, ["course_id"]) !== target.courseId) {
-      const detail = "Unable to identify the selected lesson. Please reselect the course and lesson.";
+
+    function failValidation(stage: VideoSaveStage, detail: string, title = "Lesson video validation failed") {
       setMessage(detail);
-      setUploadStatus({ stage: "failed", title: "Selected lesson not found", detail });
-      setVideoSaveDiagnostic({ ...baseDiagnostic, updateErrorMessage: detail });
+      setUploadStatus({ stage: "failed", title, detail });
+      setVideoSaveDiagnostic({ ...baseDiagnostic, saveStage: stage, validationError: detail, updateErrorMessage: detail });
+    }
+
+    setVideoSaveDiagnostic({ ...baseDiagnostic, saveStage: "validating_selection" });
+    if (!selectedLesson || !Number.isFinite(selectedCourseId) || !Number.isFinite(selectedLessonId) || value(selectedLesson, ["course_id"]) !== target.courseId) {
+      failValidation("validating_selection", "Unable to identify the selected lesson. Please reselect the course and lesson.", "Selected lesson not found");
       return;
     }
-    const validation = videoUrlValidationMessage(externalVideo.provider, externalVideo.url);
-    if (validation) {
-      setMessage(validation);
-      setUploadStatus({ stage: "failed", title: "Invalid video URL", detail: validation });
+
+    setVideoSaveDiagnostic({ ...baseDiagnostic, saveStage: "validating_provider" });
+    if (!["none", "youtube", "vimeo", "mp4", "uploaded_video"].includes(externalVideo.provider)) {
+      failValidation("validating_provider", "Choose a supported video provider.");
       return;
     }
     if (externalVideo.provider !== "none" && !externalVideo.url.trim()) {
-      const detail = "Enter a video URL before saving this provider.";
-      setMessage(detail);
-      setUploadStatus({ stage: "failed", title: "Video URL required", detail });
+      failValidation("validating_url", "Enter a video URL before saving this provider.", "Video URL required");
       return;
     }
     if (externalVideo.provider === "none" && externalVideo.url.trim()) {
-      const detail = "Choose a video provider before saving a video URL.";
-      setMessage(detail);
-      setUploadStatus({ stage: "failed", title: "Video provider required", detail });
+      failValidation("validating_provider", "Choose a video provider before saving a video URL.", "Video provider required");
       return;
     }
-    const parsedDuration = parseDurationSeconds(externalVideo.duration);
+
+    setVideoSaveDiagnostic({ ...baseDiagnostic, saveStage: "validating_url" });
+    const validation = videoUrlValidationMessage(externalVideo.provider, externalVideo.url);
+    if (validation) {
+      failValidation("validating_url", validation, "Invalid video URL");
+      return;
+    }
+
+    setVideoSaveDiagnostic({ ...baseDiagnostic, saveStage: "validating_title" });
+
+    setVideoSaveDiagnostic({ ...baseDiagnostic, saveStage: "validating_duration" });
     if (Number.isNaN(parsedDuration)) {
-      const detail = "Enter duration as seconds, MM:SS, or HH:MM:SS.";
-      setMessage(detail);
-      setUploadStatus({ stage: "failed", title: "Invalid duration", detail });
+      failValidation("validating_duration", "Enter duration as seconds, MM:SS, or HH:MM:SS.", "Invalid duration");
       return;
     }
 
@@ -415,34 +452,43 @@ export function CourseUploadCenter() {
     setSavingVideo(true);
     setMessage("Saving lesson video...");
     setUploadStatus({ stage: "uploading", title: "Saving lesson video", detail: "Updating the selected lesson row and verifying saved video metadata." });
+    setVideoSaveDiagnostic({ ...baseDiagnostic, saveStage: "checking_auth" });
     const {
       data: { user },
       error: userError
     } = await supabase.auth.getUser();
-    const adminResult = userError ? { data: null, error: userError } : await supabase.rpc("is_aff_admin");
     const nextDiagnostic: VideoSaveDiagnostic = {
+      ...baseDiagnostic,
+      saveStage: "checking_auth",
+      validationError: "None",
       authUserId: user?.id ?? "No authenticated user",
       authEmail: (user?.email ?? "No authenticated email").toLowerCase(),
-      isAffAdmin: adminResult.error ? `Error: ${supabaseErrorDetail(adminResult.error, "Unable to call is_aff_admin.")}` : String(Boolean(adminResult.data)),
+      isAffAdmin: "Not checked",
       selectedCourseId: String(selectedCourseId),
       selectedLessonId: String(selectedLessonId),
-      updateErrorCode: "",
-      updateErrorMessage: ""
     };
     setVideoSaveDiagnostic(nextDiagnostic);
     if (userError) {
       const detail = supabaseErrorDetail(userError, "Unable to read authenticated Supabase user.");
       setMessage(detail);
       setUploadStatus({ stage: "failed", title: "Authentication diagnostic failed", detail });
-      setVideoSaveDiagnostic({ ...nextDiagnostic, updateErrorCode: supabaseErrorCode(userError), updateErrorMessage: detail });
+      setVideoSaveDiagnostic({ ...nextDiagnostic, saveStage: "error", updateErrorCode: supabaseErrorCode(userError), updateErrorMessage: detail });
       setSavingVideo(false);
       return;
     }
+    setVideoSaveDiagnostic({ ...nextDiagnostic, saveStage: "checking_admin" });
+    const adminResult = await supabase.rpc("is_aff_admin");
+    const adminDiagnostic = {
+      ...nextDiagnostic,
+      saveStage: "checking_admin" as VideoSaveStage,
+      isAffAdmin: adminResult.error ? `Error: ${supabaseErrorDetail(adminResult.error, "Unable to call is_aff_admin.")}` : String(Boolean(adminResult.data))
+    };
+    setVideoSaveDiagnostic(adminDiagnostic);
     if (adminResult.error) {
       const detail = supabaseErrorDetail(adminResult.error, "Unable to call is_aff_admin.");
       setMessage(detail);
       setUploadStatus({ stage: "failed", title: "Admin diagnostic failed", detail });
-      setVideoSaveDiagnostic({ ...nextDiagnostic, updateErrorCode: supabaseErrorCode(adminResult.error), updateErrorMessage: detail });
+      setVideoSaveDiagnostic({ ...adminDiagnostic, saveStage: "error", updateErrorCode: supabaseErrorCode(adminResult.error), updateErrorMessage: detail });
       setSavingVideo(false);
       return;
     }
@@ -465,6 +511,7 @@ export function CourseUploadCenter() {
         durationSeconds: payload.video_duration_seconds
       });
     }
+    setVideoSaveDiagnostic({ ...adminDiagnostic, saveStage: "updating_lesson" });
     const { data: updatedLesson, error } = await supabase
       .from("lessons")
       .update(payload)
@@ -481,7 +528,7 @@ export function CourseUploadCenter() {
           : rawDetail;
       setMessage(detail);
       setUploadStatus({ stage: "failed", title: "Lesson video save failed", detail });
-      setVideoSaveDiagnostic({ ...nextDiagnostic, updateErrorCode: supabaseErrorCode(error), updateErrorMessage: detail });
+      setVideoSaveDiagnostic({ ...adminDiagnostic, saveStage: "error", updateErrorCode: supabaseErrorCode(error), updateErrorMessage: detail });
       setSavingVideo(false);
       return;
     }
@@ -489,10 +536,11 @@ export function CourseUploadCenter() {
       const detail = "Database update returned no lesson row.";
       setMessage(detail);
       setUploadStatus({ stage: "failed", title: "Lesson video save failed", detail });
-      setVideoSaveDiagnostic({ ...nextDiagnostic, updateErrorMessage: detail });
+      setVideoSaveDiagnostic({ ...adminDiagnostic, saveStage: "error", updateErrorMessage: detail });
       setSavingVideo(false);
       return;
     }
+    setVideoSaveDiagnostic({ ...adminDiagnostic, saveStage: "verifying_readback" });
     const { data: confirmedLesson, error: readBackError } = await supabase
       .from("lessons")
       .select(lessonVideoColumns)
@@ -503,7 +551,7 @@ export function CourseUploadCenter() {
       const detail = supabaseErrorDetail(readBackError, "Unable to read back saved lesson video metadata.");
       setMessage(detail);
       setUploadStatus({ stage: "failed", title: "Lesson video verification failed", detail });
-      setVideoSaveDiagnostic({ ...nextDiagnostic, updateErrorCode: supabaseErrorCode(readBackError), updateErrorMessage: detail });
+      setVideoSaveDiagnostic({ ...adminDiagnostic, saveStage: "error", updateErrorCode: supabaseErrorCode(readBackError), updateErrorMessage: detail });
       setSavingVideo(false);
       return;
     }
@@ -526,7 +574,7 @@ export function CourseUploadCenter() {
       const detail = "The lesson row was updated, but read-back verification did not match the submitted video metadata.";
       setMessage(detail);
       setUploadStatus({ stage: "failed", title: "Lesson video verification failed", detail });
-      setVideoSaveDiagnostic({ ...nextDiagnostic, updateErrorMessage: detail });
+      setVideoSaveDiagnostic({ ...adminDiagnostic, saveStage: "error", updateErrorMessage: detail });
       setSavingVideo(false);
       return;
     }
@@ -543,7 +591,7 @@ export function CourseUploadCenter() {
       thumbnailUrl: confirmedThumbnail
     });
     setLastVideoSavedAt(savedAt);
-    setVideoSaveDiagnostic({ ...nextDiagnostic, updateErrorMessage: "No update error. Lesson video metadata verified." });
+    setVideoSaveDiagnostic({ ...adminDiagnostic, saveStage: "success", updateErrorMessage: "No update error. Lesson video metadata verified." });
     setMessage("Lesson video saved successfully.");
     setUploadStatus({ stage: "success", title: "Lesson video saved successfully.", detail: `Saved and verified at ${new Date(savedAt).toLocaleString()}.` });
     setSavingVideo(false);
@@ -763,7 +811,7 @@ export function CourseUploadCenter() {
               <button className="inline-flex items-center justify-center gap-2 border border-gold-500/40 px-4 py-3 text-sm font-semibold text-gold-300 disabled:opacity-45" type="button" onClick={() => setPreviewRequested(true)} disabled={!externalVideo.url.trim() || Boolean(externalVideoValidation)}>
                 <PlayCircle size={16} /> Preview Video
               </button>
-              <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-4 py-3 text-sm font-bold text-navy-950 disabled:opacity-60" type="button" onClick={saveExternalLessonVideo} disabled={savingVideo || Boolean(externalVideoValidation)}>
+              <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-4 py-3 text-sm font-bold text-navy-950 disabled:opacity-60" type="button" onClick={saveExternalLessonVideo} disabled={savingVideo}>
                 <Save size={16} /> {savingVideo ? "Saving lesson video..." : "Save Lesson Video"}
               </button>
               <button className="inline-flex items-center justify-center gap-2 border border-gold-500/30 px-4 py-3 text-sm font-semibold text-ink/80" type="button" onClick={removeExternalLessonVideo}>
@@ -789,11 +837,18 @@ export function CourseUploadCenter() {
               <div className="mt-5 border border-gold-500/18 bg-navy-900/70 p-4 text-sm">
                 <p className="text-xs font-semibold uppercase tracking-[.2em] text-gold-300">Safe Save Diagnostic</p>
                 <dl className="mt-3 grid gap-2 text-ink/72 md:grid-cols-2">
+                  <div><dt className="text-ink/48">Save stage</dt><dd className="break-all text-white">{videoSaveDiagnostic.saveStage}</dd></div>
+                  <div><dt className="text-ink/48">Validation error</dt><dd className="break-all text-white">{videoSaveDiagnostic.validationError || "None"}</dd></div>
                   <div><dt className="text-ink/48">Authenticated Supabase user ID</dt><dd className="break-all text-white">{videoSaveDiagnostic.authUserId}</dd></div>
                   <div><dt className="text-ink/48">Authenticated email</dt><dd className="break-all text-white">{videoSaveDiagnostic.authEmail}</dd></div>
                   <div><dt className="text-ink/48">public.is_aff_admin()</dt><dd className="break-all text-white">{videoSaveDiagnostic.isAffAdmin}</dd></div>
                   <div><dt className="text-ink/48">Selected course ID</dt><dd className="break-all text-white">{videoSaveDiagnostic.selectedCourseId}</dd></div>
                   <div><dt className="text-ink/48">Selected lesson ID</dt><dd className="break-all text-white">{videoSaveDiagnostic.selectedLessonId}</dd></div>
+                  <div><dt className="text-ink/48">Video provider</dt><dd className="break-all text-white">{videoSaveDiagnostic.videoProvider}</dd></div>
+                  <div><dt className="text-ink/48">Video URL</dt><dd className="break-all text-white">{videoSaveDiagnostic.videoUrl}</dd></div>
+                  <div><dt className="text-ink/48">Video title</dt><dd className="break-all text-white">{videoSaveDiagnostic.videoTitle}</dd></div>
+                  <div><dt className="text-ink/48">Video duration seconds</dt><dd className="break-all text-white">{videoSaveDiagnostic.videoDurationSeconds}</dd></div>
+                  <div><dt className="text-ink/48">Video thumbnail URL</dt><dd className="break-all text-white">{videoSaveDiagnostic.videoThumbnailUrl}</dd></div>
                   <div><dt className="text-ink/48">Supabase update error code</dt><dd className="break-all text-white">{videoSaveDiagnostic.updateErrorCode || "None"}</dd></div>
                   <div className="md:col-span-2"><dt className="text-ink/48">Supabase update error message</dt><dd className="break-all text-white">{videoSaveDiagnostic.updateErrorMessage || "None"}</dd></div>
                 </dl>

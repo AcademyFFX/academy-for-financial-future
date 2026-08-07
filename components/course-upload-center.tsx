@@ -37,6 +37,15 @@ type UploadStatus = {
   title: string;
   detail: string;
 };
+type VideoSaveDiagnostic = {
+  authUserId: string;
+  authEmail: string;
+  isAffAdmin: string;
+  selectedCourseId: string;
+  selectedLessonId: string;
+  updateErrorCode: string;
+  updateErrorMessage: string;
+};
 
 const adminEmail = "acafffx@gmail.com";
 const lessonVideoColumns = "id, course_id, video_provider, video_url, video_title, video_duration_seconds, video_thumbnail_url, updated_at";
@@ -75,6 +84,16 @@ function errorMessage(error: unknown, fallback: string) {
   if (error instanceof Error) return error.message;
   if (error && typeof error === "object" && "message" in error) return String(error.message);
   return fallback;
+}
+
+function supabaseErrorCode(error: unknown) {
+  return error && typeof error === "object" && "code" in error ? String(error.code ?? "") : "";
+}
+
+function supabaseErrorDetail(error: unknown, fallback: string) {
+  const code = supabaseErrorCode(error);
+  const message = errorMessage(error, fallback);
+  return code ? `${code}: ${message}` : message;
 }
 
 function fileExtension(name: string) {
@@ -181,6 +200,7 @@ export function CourseUploadCenter() {
   const [certificateForm, setCertificateForm] = useState({ studentId: "", courseId: "", certificationName: "" });
   const [savingVideo, setSavingVideo] = useState(false);
   const [lastVideoSavedAt, setLastVideoSavedAt] = useState("");
+  const [videoSaveDiagnostic, setVideoSaveDiagnostic] = useState<VideoSaveDiagnostic | null>(null);
   const [externalVideo, setExternalVideo] = useState({
     provider: "none" as VideoProvider,
     url: "",
@@ -252,6 +272,7 @@ export function CourseUploadCenter() {
     });
     setPreviewRequested(false);
     setLastVideoSavedAt("");
+    setVideoSaveDiagnostic(null);
   }, [selectedLesson]);
 
   async function uploadAsset(file: File, assetType: AssetType) {
@@ -347,10 +368,21 @@ export function CourseUploadCenter() {
   async function saveExternalLessonVideo() {
     const selectedCourseId = Number(target.courseId);
     const selectedLessonId = Number(target.lessonId);
+    const baseDiagnostic: VideoSaveDiagnostic = {
+      authUserId: "Not checked",
+      authEmail: "Not checked",
+      isAffAdmin: "Not checked",
+      selectedCourseId: target.courseId || "Missing",
+      selectedLessonId: target.lessonId || "Missing",
+      updateErrorCode: "",
+      updateErrorMessage: ""
+    };
+    setVideoSaveDiagnostic(baseDiagnostic);
     if (!selectedLesson || !Number.isFinite(selectedCourseId) || !Number.isFinite(selectedLessonId) || value(selectedLesson, ["course_id"]) !== target.courseId) {
       const detail = "Unable to identify the selected lesson. Please reselect the course and lesson.";
       setMessage(detail);
       setUploadStatus({ stage: "failed", title: "Selected lesson not found", detail });
+      setVideoSaveDiagnostic({ ...baseDiagnostic, updateErrorMessage: detail });
       return;
     }
     const validation = videoUrlValidationMessage(externalVideo.provider, externalVideo.url);
@@ -383,6 +415,37 @@ export function CourseUploadCenter() {
     setSavingVideo(true);
     setMessage("Saving lesson video...");
     setUploadStatus({ stage: "uploading", title: "Saving lesson video", detail: "Updating the selected lesson row and verifying saved video metadata." });
+    const {
+      data: { user },
+      error: userError
+    } = await supabase.auth.getUser();
+    const adminResult = userError ? { data: null, error: userError } : await supabase.rpc("is_aff_admin");
+    const nextDiagnostic: VideoSaveDiagnostic = {
+      authUserId: user?.id ?? "No authenticated user",
+      authEmail: (user?.email ?? "No authenticated email").toLowerCase(),
+      isAffAdmin: adminResult.error ? `Error: ${supabaseErrorDetail(adminResult.error, "Unable to call is_aff_admin.")}` : String(Boolean(adminResult.data)),
+      selectedCourseId: String(selectedCourseId),
+      selectedLessonId: String(selectedLessonId),
+      updateErrorCode: "",
+      updateErrorMessage: ""
+    };
+    setVideoSaveDiagnostic(nextDiagnostic);
+    if (userError) {
+      const detail = supabaseErrorDetail(userError, "Unable to read authenticated Supabase user.");
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Authentication diagnostic failed", detail });
+      setVideoSaveDiagnostic({ ...nextDiagnostic, updateErrorCode: supabaseErrorCode(userError), updateErrorMessage: detail });
+      setSavingVideo(false);
+      return;
+    }
+    if (adminResult.error) {
+      const detail = supabaseErrorDetail(adminResult.error, "Unable to call is_aff_admin.");
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Admin diagnostic failed", detail });
+      setVideoSaveDiagnostic({ ...nextDiagnostic, updateErrorCode: supabaseErrorCode(adminResult.error), updateErrorMessage: detail });
+      setSavingVideo(false);
+      return;
+    }
     const payload = {
       video_provider: externalVideo.provider,
       video_type: externalVideo.provider === "none" ? "Text-only lesson" : "External Lesson Video",
@@ -410,7 +473,7 @@ export function CourseUploadCenter() {
       .select(lessonVideoColumns)
       .single();
     if (error) {
-      const rawDetail = errorMessage(error, "Unable to save lesson video.");
+      const rawDetail = supabaseErrorDetail(error, "Unable to save lesson video.");
       const detail = /permission|rls|policy|denied|authorized/i.test(rawDetail)
         ? `Permission denied while updating the lesson. ${rawDetail}`
         : /0 rows|no rows|multiple/i.test(rawDetail)
@@ -418,6 +481,7 @@ export function CourseUploadCenter() {
           : rawDetail;
       setMessage(detail);
       setUploadStatus({ stage: "failed", title: "Lesson video save failed", detail });
+      setVideoSaveDiagnostic({ ...nextDiagnostic, updateErrorCode: supabaseErrorCode(error), updateErrorMessage: detail });
       setSavingVideo(false);
       return;
     }
@@ -425,6 +489,7 @@ export function CourseUploadCenter() {
       const detail = "Database update returned no lesson row.";
       setMessage(detail);
       setUploadStatus({ stage: "failed", title: "Lesson video save failed", detail });
+      setVideoSaveDiagnostic({ ...nextDiagnostic, updateErrorMessage: detail });
       setSavingVideo(false);
       return;
     }
@@ -435,9 +500,10 @@ export function CourseUploadCenter() {
       .eq("course_id", selectedCourseId)
       .single();
     if (readBackError) {
-      const detail = errorMessage(readBackError, "Unable to read back saved lesson video metadata.");
+      const detail = supabaseErrorDetail(readBackError, "Unable to read back saved lesson video metadata.");
       setMessage(detail);
       setUploadStatus({ stage: "failed", title: "Lesson video verification failed", detail });
+      setVideoSaveDiagnostic({ ...nextDiagnostic, updateErrorCode: supabaseErrorCode(readBackError), updateErrorMessage: detail });
       setSavingVideo(false);
       return;
     }
@@ -460,6 +526,7 @@ export function CourseUploadCenter() {
       const detail = "The lesson row was updated, but read-back verification did not match the submitted video metadata.";
       setMessage(detail);
       setUploadStatus({ stage: "failed", title: "Lesson video verification failed", detail });
+      setVideoSaveDiagnostic({ ...nextDiagnostic, updateErrorMessage: detail });
       setSavingVideo(false);
       return;
     }
@@ -476,6 +543,7 @@ export function CourseUploadCenter() {
       thumbnailUrl: confirmedThumbnail
     });
     setLastVideoSavedAt(savedAt);
+    setVideoSaveDiagnostic({ ...nextDiagnostic, updateErrorMessage: "No update error. Lesson video metadata verified." });
     setMessage("Lesson video saved successfully.");
     setUploadStatus({ stage: "success", title: "Lesson video saved successfully.", detail: `Saved and verified at ${new Date(savedAt).toLocaleString()}.` });
     setSavingVideo(false);
@@ -717,6 +785,20 @@ export function CourseUploadCenter() {
               </div>
             ) : null}
             {lastVideoSavedAt ? <p className="mt-4 text-sm font-semibold text-gold-300">Saved: {new Date(lastVideoSavedAt).toLocaleString()}</p> : null}
+            {videoSaveDiagnostic ? (
+              <div className="mt-5 border border-gold-500/18 bg-navy-900/70 p-4 text-sm">
+                <p className="text-xs font-semibold uppercase tracking-[.2em] text-gold-300">Safe Save Diagnostic</p>
+                <dl className="mt-3 grid gap-2 text-ink/72 md:grid-cols-2">
+                  <div><dt className="text-ink/48">Authenticated Supabase user ID</dt><dd className="break-all text-white">{videoSaveDiagnostic.authUserId}</dd></div>
+                  <div><dt className="text-ink/48">Authenticated email</dt><dd className="break-all text-white">{videoSaveDiagnostic.authEmail}</dd></div>
+                  <div><dt className="text-ink/48">public.is_aff_admin()</dt><dd className="break-all text-white">{videoSaveDiagnostic.isAffAdmin}</dd></div>
+                  <div><dt className="text-ink/48">Selected course ID</dt><dd className="break-all text-white">{videoSaveDiagnostic.selectedCourseId}</dd></div>
+                  <div><dt className="text-ink/48">Selected lesson ID</dt><dd className="break-all text-white">{videoSaveDiagnostic.selectedLessonId}</dd></div>
+                  <div><dt className="text-ink/48">Supabase update error code</dt><dd className="break-all text-white">{videoSaveDiagnostic.updateErrorCode || "None"}</dd></div>
+                  <div className="md:col-span-2"><dt className="text-ink/48">Supabase update error message</dt><dd className="break-all text-white">{videoSaveDiagnostic.updateErrorMessage || "None"}</dd></div>
+                </dl>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </section>

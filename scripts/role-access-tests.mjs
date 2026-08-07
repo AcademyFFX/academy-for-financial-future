@@ -30,6 +30,7 @@ const adminUploadCenter = read("app/admin/course-management/upload-center/page.t
 const adminLmsManager = read("components/admin-lms-manager.tsx");
 const courseUploadCenter = read("components/course-upload-center.tsx");
 const studentDirectoryPage = read("app/student-directory/page.tsx");
+const lessonVideoPersistenceMigration = read("supabase/migrations/20260806_repair_lesson_video_metadata_persistence.sql");
 
 assert.match(middleware, /\["\/student-dashboard", "\/admin"\]/, "administrator /student-dashboard must redirect to /admin");
 assert.match(middleware, /\["\/student-profile", "\/admin\/profile"\]/, "administrator /student-profile must redirect to /admin/profile");
@@ -141,17 +142,32 @@ assert.match(courseUploadCenter, /javascript\|data/, "upload center must reject 
 assert.match(courseUploadCenter, /Local computer paths cannot be saved/, "upload center must reject local computer paths");
 assert.match(courseUploadCenter, /Preview Video/, "upload center must provide an administrator preview button");
 assert.match(courseUploadCenter, /Save Lesson Video/, "upload center must provide a save lesson video button");
+assert.match(courseUploadCenter, /type="button" onClick=\{saveExternalLessonVideo\}/, "save lesson video button must fire the explicit click handler without submitting a parent form");
+assert.match(courseUploadCenter, /Saving lesson video\.\.\./, "save lesson video workflow must show an immediate saving state");
 assert.match(courseUploadCenter, /Remove Video/, "upload center must provide a remove video button");
 assert.match(courseUploadCenter, /Reset Playback Progress/, "upload center must provide a confirmed reset playback action");
-assert.match(courseUploadCenter, /\.from\("lessons"\)[\s\S]*\.update\(payload\)[\s\S]*\.eq\("id", Number\(target\.lessonId\)\)[\s\S]*\.select\("id, video_provider, video_url, video_title, video_duration_seconds, video_thumbnail_url"\)/, "upload center must update and read back only the selected lesson row");
+assert.match(courseUploadCenter, /Unable to identify the selected lesson\. Please reselect the course and lesson\./, "missing or mismatched selected lessons must show a clear error");
+assert.match(courseUploadCenter, /parseDurationSeconds[\s\S]*parts\.reduce\(\(total, part\) => total \* 60 \+ part, 0\)/, "duration values such as 10:34 must convert to integer seconds");
+assert.match(courseUploadCenter, /\.from\("lessons"\)[\s\S]*\.update\(payload\)[\s\S]*\.eq\("id", selectedLessonId\)[\s\S]*\.eq\("course_id", selectedCourseId\)[\s\S]*\.select\(lessonVideoColumns\)/, "upload center must update only the selected lesson row for the selected course");
+assert.match(courseUploadCenter, /\.from\("lessons"\)[\s\S]*\.select\(lessonVideoColumns\)[\s\S]*\.eq\("id", selectedLessonId\)[\s\S]*\.eq\("course_id", selectedCourseId\)[\s\S]*\.single\(\)/, "upload center must read back the saved lesson row after update");
+assert.match(courseUploadCenter, /Database update returned no lesson row\./, "database updates that return no row must be treated as failures");
+assert.match(courseUploadCenter, /Permission denied while updating the lesson/, "Supabase RLS or permission failures must be visible to the admin");
+assert.match(courseUploadCenter, /confirmedDuration !== expectedDuration/, "read-back verification must include persisted duration");
+assert.match(courseUploadCenter, /confirmedThumbnail !== expectedThumbnail/, "read-back verification must include persisted thumbnail URL");
 assert.match(courseUploadCenter, /Lesson video saved successfully\./, "upload center must show success only after Supabase verifies the lesson video row");
+assert.match(courseUploadCenter, /Saved: \{new Date\(lastVideoSavedAt\)\.toLocaleString\(\)\}/, "successful saves must display the saved timestamp");
 assert.match(courseUploadCenter, /Restoring the Academy classroom placeholder[\s\S]*video_provider: "none"[\s\S]*video_url: null/, "upload center must remove video metadata and restore the placeholder");
 assert.match(courseUploadCenter, /video_provider: "uploaded_video"[\s\S]*video_url: publicUrl[\s\S]*select\("id, video_provider, video_url, video_title"\)/, "computer video upload must connect the uploaded Storage URL to the selected lesson and verify it");
+assert.doesNotMatch(courseUploadCenter, /\.from\("lessons"\)\.insert\(/, "upload center must not create duplicate lessons when saving lesson video metadata");
 assert.match(courseUploadCenter, /Video Upload/, "existing computer video upload card must remain available");
 assert.match(courseUploadCenter, /PDF Notes/, "existing PDF upload card must remain available");
 assert.match(courseUploadCenter, /PowerPoint Upload/, "existing PowerPoint upload card must remain available");
 assert.match(courseUploadCenter, /Assignment Upload/, "existing assignment upload card must remain available");
 assert.match(courseUploadCenter, /Course Thumbnail/, "existing course thumbnail upload card must remain available");
+assert.match(lessonVideoPersistenceMigration, /alter table public\.lessons add column if not exists video_provider text/, "lesson video persistence migration must add missing provider column idempotently");
+assert.match(lessonVideoPersistenceMigration, /grant update \([\s\S]*video_provider[\s\S]*video_url[\s\S]*video_duration_seconds[\s\S]*\) on public\.lessons to authenticated/, "lesson video persistence migration must grant only required update columns");
+assert.match(lessonVideoPersistenceMigration, /create policy "AFF admins can update lesson video metadata"[\s\S]*for update[\s\S]*using \(public\.is_aff_admin\(\)\)[\s\S]*with check \(public\.is_aff_admin\(\)\)/, "lesson video persistence migration must restrict lesson metadata updates to active AFF admins");
+assert.doesNotMatch(lessonVideoPersistenceMigration, /grant insert|grant delete|for all/i, "lesson video persistence migration must not grant broad student lesson-edit permissions");
 
 for (const [route, source] of [
   ["/admin/certifications", adminCertifications],

@@ -39,6 +39,7 @@ type UploadStatus = {
 };
 
 const adminEmail = "acafffx@gmail.com";
+const lessonVideoColumns = "id, course_id, video_provider, video_url, video_title, video_duration_seconds, video_thumbnail_url, updated_at";
 
 const acceptedUploads: Record<AssetType, { extensions: string[]; mimeTypes: string[]; label: string }> = {
   Video: { extensions: [".mp4", ".webm", ".mov"], mimeTypes: ["video/mp4", "video/webm", "video/quicktime"], label: "MP4, WebM, or MOV video" },
@@ -178,6 +179,8 @@ export function CourseUploadCenter() {
   const [questionForm, setQuestionForm] = useState({ prompt: "", options: "", correctAnswer: "" });
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [certificateForm, setCertificateForm] = useState({ studentId: "", courseId: "", certificationName: "" });
+  const [savingVideo, setSavingVideo] = useState(false);
+  const [lastVideoSavedAt, setLastVideoSavedAt] = useState("");
   const [externalVideo, setExternalVideo] = useState({
     provider: "none" as VideoProvider,
     url: "",
@@ -248,6 +251,7 @@ export function CourseUploadCenter() {
       thumbnailUrl: value(selectedLesson, ["video_thumbnail_url"])
     });
     setPreviewRequested(false);
+    setLastVideoSavedAt("");
   }, [selectedLesson]);
 
   async function uploadAsset(file: File, assetType: AssetType) {
@@ -341,16 +345,24 @@ export function CourseUploadCenter() {
   }
 
   async function saveExternalLessonVideo() {
-    if (!selectedLesson || !target.lessonId) {
-      const detail = "Select a lesson before saving an external video URL.";
+    const selectedCourseId = Number(target.courseId);
+    const selectedLessonId = Number(target.lessonId);
+    if (!selectedLesson || !Number.isFinite(selectedCourseId) || !Number.isFinite(selectedLessonId) || value(selectedLesson, ["course_id"]) !== target.courseId) {
+      const detail = "Unable to identify the selected lesson. Please reselect the course and lesson.";
       setMessage(detail);
-      setUploadStatus({ stage: "failed", title: "Lesson target required", detail });
+      setUploadStatus({ stage: "failed", title: "Selected lesson not found", detail });
       return;
     }
     const validation = videoUrlValidationMessage(externalVideo.provider, externalVideo.url);
     if (validation) {
       setMessage(validation);
       setUploadStatus({ stage: "failed", title: "Invalid video URL", detail: validation });
+      return;
+    }
+    if (externalVideo.provider !== "none" && !externalVideo.url.trim()) {
+      const detail = "Enter a video URL before saving this provider.";
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Video URL required", detail });
       return;
     }
     if (externalVideo.provider === "none" && externalVideo.url.trim()) {
@@ -368,6 +380,8 @@ export function CourseUploadCenter() {
     }
 
     const supabase = createClient();
+    setSavingVideo(true);
+    setMessage("Saving lesson video...");
     setUploadStatus({ stage: "uploading", title: "Saving lesson video", detail: "Updating the selected lesson row and verifying saved video metadata." });
     const payload = {
       video_provider: externalVideo.provider,
@@ -378,34 +392,99 @@ export function CourseUploadCenter() {
       video_thumbnail_url: externalVideo.thumbnailUrl.trim() || null,
       updated_at: new Date().toISOString()
     };
-    const { data: savedLesson, error } = await supabase
+    if (process.env.NODE_ENV !== "production") {
+      console.info("AFF lesson video save request", {
+        selectedCourseId,
+        selectedLessonId,
+        provider: payload.video_provider,
+        hasUrl: Boolean(payload.video_url),
+        hasTitle: Boolean(payload.video_title),
+        durationSeconds: payload.video_duration_seconds
+      });
+    }
+    const { data: updatedLesson, error } = await supabase
       .from("lessons")
       .update(payload)
-      .eq("id", Number(target.lessonId))
-      .select("id, video_provider, video_url, video_title, video_duration_seconds, video_thumbnail_url")
+      .eq("id", selectedLessonId)
+      .eq("course_id", selectedCourseId)
+      .select(lessonVideoColumns)
       .single();
     if (error) {
-      const detail = errorMessage(error, "Unable to save lesson video.");
+      const rawDetail = errorMessage(error, "Unable to save lesson video.");
+      const detail = /permission|rls|policy|denied|authorized/i.test(rawDetail)
+        ? `Permission denied while updating the lesson. ${rawDetail}`
+        : /0 rows|no rows|multiple/i.test(rawDetail)
+          ? "The selected lesson could not be found."
+          : rawDetail;
       setMessage(detail);
       setUploadStatus({ stage: "failed", title: "Lesson video save failed", detail });
+      setSavingVideo(false);
       return;
     }
-    const savedUrl = value(savedLesson as DbRow, ["video_url"]);
-    const savedProvider = value(savedLesson as DbRow, ["video_provider"], "none");
-    if (savedUrl !== externalVideo.url.trim() || savedProvider !== externalVideo.provider) {
-      const detail = "The lesson row was updated, but saved video values did not match the form. Reload and verify the selected lesson.";
+    if (!updatedLesson) {
+      const detail = "Database update returned no lesson row.";
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Lesson video save failed", detail });
+      setSavingVideo(false);
+      return;
+    }
+    const { data: confirmedLesson, error: readBackError } = await supabase
+      .from("lessons")
+      .select(lessonVideoColumns)
+      .eq("id", selectedLessonId)
+      .eq("course_id", selectedCourseId)
+      .single();
+    if (readBackError) {
+      const detail = errorMessage(readBackError, "Unable to read back saved lesson video metadata.");
       setMessage(detail);
       setUploadStatus({ stage: "failed", title: "Lesson video verification failed", detail });
+      setSavingVideo(false);
       return;
     }
-    setLessons((current) => current.map((lesson) => value(lesson, ["id"]) === target.lessonId ? { ...lesson, ...(savedLesson as DbRow) } : lesson));
+    const confirmedUrl = value(confirmedLesson as DbRow, ["video_url"]);
+    const confirmedProvider = value(confirmedLesson as DbRow, ["video_provider"], "none");
+    const confirmedTitle = value(confirmedLesson as DbRow, ["video_title"]);
+    const confirmedDuration = value(confirmedLesson as DbRow, ["video_duration_seconds"]);
+    const confirmedThumbnail = value(confirmedLesson as DbRow, ["video_thumbnail_url"]);
+    const expectedUrl = externalVideo.url.trim();
+    const expectedTitle = externalVideo.title.trim();
+    const expectedDuration = parsedDuration === null ? "" : String(parsedDuration);
+    const expectedThumbnail = externalVideo.thumbnailUrl.trim();
+    if (
+      confirmedUrl !== expectedUrl ||
+      confirmedProvider !== externalVideo.provider ||
+      confirmedTitle !== expectedTitle ||
+      confirmedDuration !== expectedDuration ||
+      confirmedThumbnail !== expectedThumbnail
+    ) {
+      const detail = "The lesson row was updated, but read-back verification did not match the submitted video metadata.";
+      setMessage(detail);
+      setUploadStatus({ stage: "failed", title: "Lesson video verification failed", detail });
+      setSavingVideo(false);
+      return;
+    }
+    if (process.env.NODE_ENV !== "production") {
+      console.info("AFF lesson video save confirmed", confirmedLesson);
+    }
+    const savedAt = value(confirmedLesson as DbRow, ["updated_at"], new Date().toISOString());
+    setLessons((current) => current.map((lesson) => value(lesson, ["id"]) === target.lessonId ? { ...lesson, ...(confirmedLesson as DbRow) } : lesson));
+    setExternalVideo({
+      provider: (confirmedProvider as VideoProvider) || "none",
+      url: confirmedUrl,
+      title: confirmedTitle,
+      duration: confirmedDuration,
+      thumbnailUrl: confirmedThumbnail
+    });
+    setLastVideoSavedAt(savedAt);
     setMessage("Lesson video saved successfully.");
-    setUploadStatus({ stage: "success", title: "Lesson video saved successfully.", detail: "The existing lesson row was updated and verified from Supabase." });
-    setPreviewRequested(false);
+    setUploadStatus({ stage: "success", title: "Lesson video saved successfully.", detail: `Saved and verified at ${new Date(savedAt).toLocaleString()}.` });
+    setSavingVideo(false);
   }
 
   async function removeExternalLessonVideo() {
-    if (!selectedLesson || !target.lessonId) {
+    const selectedCourseId = Number(target.courseId);
+    const selectedLessonId = Number(target.lessonId);
+    if (!selectedLesson || !Number.isFinite(selectedCourseId) || !Number.isFinite(selectedLessonId) || value(selectedLesson, ["course_id"]) !== target.courseId) {
       const detail = "Select a lesson before removing video metadata.";
       setMessage(detail);
       setUploadStatus({ stage: "failed", title: "Lesson target required", detail });
@@ -424,8 +503,9 @@ export function CourseUploadCenter() {
         video_thumbnail_url: null,
         updated_at: new Date().toISOString()
       })
-      .eq("id", Number(target.lessonId))
-      .select("id, video_provider, video_url, video_title, video_duration_seconds, video_thumbnail_url")
+      .eq("id", selectedLessonId)
+      .eq("course_id", selectedCourseId)
+      .select(lessonVideoColumns)
       .single();
     if (error) {
       const detail = errorMessage(error, "Unable to remove lesson video.");
@@ -441,6 +521,7 @@ export function CourseUploadCenter() {
     }
     setLessons((current) => current.map((lesson) => value(lesson, ["id"]) === target.lessonId ? { ...lesson, ...(savedLesson as DbRow) } : lesson));
     setExternalVideo({ provider: "none", url: "", title: "", duration: "", thumbnailUrl: "" });
+    setLastVideoSavedAt(value(savedLesson as DbRow, ["updated_at"], new Date().toISOString()));
     setPreviewRequested(false);
     setMessage("Lesson video removed. The Academy placeholder will display for this lesson.");
     setUploadStatus({ stage: "success", title: "Lesson video removed", detail: "The selected lesson no longer has video metadata. Notes, resources, completion, and course progress were not changed." });
@@ -614,8 +695,8 @@ export function CourseUploadCenter() {
               <button className="inline-flex items-center justify-center gap-2 border border-gold-500/40 px-4 py-3 text-sm font-semibold text-gold-300 disabled:opacity-45" type="button" onClick={() => setPreviewRequested(true)} disabled={!externalVideo.url.trim() || Boolean(externalVideoValidation)}>
                 <PlayCircle size={16} /> Preview Video
               </button>
-              <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-4 py-3 text-sm font-bold text-navy-950 disabled:opacity-60" type="button" onClick={saveExternalLessonVideo} disabled={Boolean(externalVideoValidation)}>
-                <Save size={16} /> Save Lesson Video
+              <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-4 py-3 text-sm font-bold text-navy-950 disabled:opacity-60" type="button" onClick={saveExternalLessonVideo} disabled={savingVideo || Boolean(externalVideoValidation)}>
+                <Save size={16} /> {savingVideo ? "Saving lesson video..." : "Save Lesson Video"}
               </button>
               <button className="inline-flex items-center justify-center gap-2 border border-gold-500/30 px-4 py-3 text-sm font-semibold text-ink/80" type="button" onClick={removeExternalLessonVideo}>
                 <Trash2 size={16} /> Remove Video
@@ -635,6 +716,7 @@ export function CourseUploadCenter() {
                 </div>
               </div>
             ) : null}
+            {lastVideoSavedAt ? <p className="mt-4 text-sm font-semibold text-gold-300">Saved: {new Date(lastVideoSavedAt).toLocaleString()}</p> : null}
           </div>
         ) : null}
       </section>

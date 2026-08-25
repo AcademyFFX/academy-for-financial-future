@@ -328,7 +328,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-navy-950">
       <header ref={headerRef} className="sticky top-0 z-[9999] border-b border-gold-500/20 bg-navy-950/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-8 overflow-visible px-4 py-2 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 overflow-visible px-4 py-2 sm:px-6 lg:gap-5 lg:px-6 xl:gap-8 xl:px-8">
           <Link href="/" className="logo-section flex shrink-0 items-center">
             <AFFStandardLogo
               priority
@@ -337,7 +337,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
             />
           </Link>
 
-          <nav className="relative hidden min-w-0 flex-1 shrink items-center justify-center gap-7 overflow-visible lg:flex">
+          <nav className="relative hidden min-w-0 flex-1 shrink items-center justify-center gap-1 overflow-visible lg:flex xl:gap-3 2xl:gap-5">
             <TopLink href="/" label="Home" active={pathname === "/"} />
             {navGroups.map((group, index) => (
               <DesktopDropdown
@@ -456,6 +456,31 @@ function AuthNavigation({
   onNavigate?: () => void;
   desktop?: boolean;
 }) {
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!desktop || !accountOpen) return;
+
+    function handleOutsideClick(event: MouseEvent | PointerEvent) {
+      if (!accountRef.current?.contains(event.target as Node)) {
+        setAccountOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setAccountOpen(false);
+    }
+
+    document.addEventListener("pointerdown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [accountOpen, desktop]);
+
   if (!user) {
     return (
       <div className={desktop ? "hidden shrink-0 items-center gap-2 border-l border-gold-500/20 pl-3 lg:flex" : "grid grid-cols-2 gap-2 pt-1"}>
@@ -469,22 +494,70 @@ function AuthNavigation({
     );
   }
 
+  if (desktop) {
+    return (
+      <div ref={accountRef} className="relative hidden shrink-0 items-center border-l border-gold-500/20 pl-3 lg:flex">
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={accountOpen}
+          onClick={() => setAccountOpen((open) => !open)}
+          className="inline-flex max-w-[230px] items-center gap-2 border border-gold-500/35 bg-navy-950/70 px-3 py-2 text-xs font-semibold text-gold-300 transition hover:border-gold-300 hover:bg-navy-800 hover:text-white"
+        >
+          <span className="min-w-0 truncate">Welcome, {displayName}</span>
+          <ChevronDown size={14} className={`shrink-0 transition ${accountOpen ? "rotate-180" : ""}`} />
+        </button>
+
+        {accountOpen ? (
+          <div className="absolute right-0 top-full z-[99999] w-64 pt-3">
+            <div className="border border-gold-500/35 bg-navy-950 p-2 shadow-gold">
+              <div className="border-b border-gold-500/14 px-3 py-2">
+                <p className="truncate text-xs font-bold uppercase tracking-[.16em] text-gold-300">Student Account</p>
+                <p className="mt-1 truncate text-xs text-ink/62">{displayName}</p>
+              </div>
+              <div className="grid gap-1 pt-2">
+                {links.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setAccountOpen(false)}
+                    className={`px-3 py-2.5 text-sm font-semibold transition ${
+                      pathname === link.href
+                        ? "bg-gold-500 text-navy-950"
+                        : "text-ink/78 hover:bg-navy-800 hover:text-white"
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="mt-1 inline-flex items-center justify-center gap-2 bg-gold-500 px-3 py-2.5 text-sm font-bold text-navy-950 transition hover:bg-gold-300"
+                >
+                  <LogOut size={16} />
+                  Logout
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
-    <div className={desktop ? "hidden max-w-[410px] shrink-0 items-center gap-2 border-l border-gold-500/20 pl-3 lg:flex" : "grid gap-2 border-t border-gold-500/14 pt-3"}>
-      <p className={desktop ? "max-w-36 truncate text-right text-xs font-semibold text-gold-300" : "px-3 text-sm font-semibold text-gold-300"}>
+    <div className="grid gap-2 border-t border-gold-500/14 pt-3">
+      <p className="px-3 text-sm font-semibold text-gold-300">
         Welcome, {displayName}
       </p>
-      <div className={desktop ? "flex items-center gap-2" : "grid gap-2"}>
+      <div className="grid gap-2">
         {links.map((link) => (
           <Link
             key={link.href}
             href={link.href}
             onClick={onNavigate}
-            className={
-              desktop
-                ? `border px-3 py-2 text-xs font-semibold transition ${pathname === link.href ? "border-gold-300 text-white" : "border-gold-500/35 text-gold-300 hover:border-gold-300 hover:text-white"}`
-                : `border border-gold-500/24 px-3 py-3 text-sm font-semibold ${pathname === link.href ? "text-gold-300" : "text-white"}`
-            }
+            className={`border border-gold-500/24 px-3 py-3 text-sm font-semibold ${pathname === link.href ? "text-gold-300" : "text-white"}`}
           >
             {link.label}
           </Link>
@@ -492,7 +565,7 @@ function AuthNavigation({
         <button
           type="button"
           onClick={onLogout}
-          className={desktop ? "bg-gold-500 px-3 py-2 text-xs font-bold text-navy-950 transition hover:bg-gold-300" : "bg-gold-500 px-3 py-3 text-sm font-bold text-navy-950"}
+          className="bg-gold-500 px-3 py-3 text-sm font-bold text-navy-950"
         >
           Logout
         </button>
@@ -668,7 +741,7 @@ function AdminNavigationRow({
 
 function TopLink({ href, label, active }: NavLink & { active: boolean }) {
   return (
-    <Link href={href} className={`shrink-0 px-3 py-2 text-xs font-semibold uppercase tracking-[.12em] transition ${active ? "text-gold-300" : "text-ink/76 hover:text-white"}`}>
+    <Link href={href} className={`shrink-0 px-2 py-2 text-[11px] font-semibold uppercase tracking-[.08em] transition xl:px-3 xl:text-xs xl:tracking-[.12em] ${active ? "text-gold-300" : "text-ink/76 hover:text-white"}`}>
       {label}
     </Link>
   );
@@ -699,7 +772,7 @@ function DesktopDropdown({
         aria-haspopup="menu"
         aria-expanded={isOpen}
         onClick={() => setOpenMenu(openMenu === group.label ? null : group.label)}
-        className={`inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold uppercase tracking-[.12em] transition ${active || isOpen ? "text-gold-300" : "text-ink/76 hover:text-white"}`}
+        className={`inline-flex items-center gap-1 px-2 py-2 text-[11px] font-semibold uppercase tracking-[.08em] transition xl:px-3 xl:text-xs xl:tracking-[.12em] ${active || isOpen ? "text-gold-300" : "text-ink/76 hover:text-white"}`}
       >
         {group.label}
         <ChevronDown className={`transition ${isOpen ? "rotate-180" : ""}`} size={14} />

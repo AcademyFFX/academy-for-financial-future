@@ -197,9 +197,39 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
     if (!userId || !studentDbId) return;
     const supabase = createClient();
     const course = courses.find((item) => idOf(item) === courseId);
-    const { error } = await supabase.from("enrollments").insert({ student_id: Number(studentDbId), course_id: Number(courseId), course_name: value(course, ["course_name", "title"]), enrollment_status: "Active" });
-    setMessage(error ? error.message : "Course enrollment active.");
-    if (!error) await loadLms();
+    const courseName = value(course, ["course_name", "title"], "Selected course");
+    const existingEnrollment = enrollmentForCourse(course ?? {});
+    if (existingEnrollment) {
+      setMessage(`${courseName} is already active in your Academy enrollments.`);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("enrollments")
+      .insert({
+        student_id: Number(studentDbId),
+        course_id: Number(courseId),
+        course_name: courseName,
+        enrollment_status: "Active"
+      })
+      .select("id, student_id, course_id, course_name, enrollment_status")
+      .single();
+
+    if (error) {
+      const message = error.message.toLowerCase().includes("duplicate") || error.code === "23505"
+        ? `${courseName} is already active in your Academy enrollments.`
+        : `Enrollment failed: ${error.message}`;
+      setMessage(message);
+      return;
+    }
+
+    if (!data) {
+      setMessage("Enrollment failed: Supabase did not return the created enrollment record.");
+      return;
+    }
+
+    setMessage(`${courseName} enrollment active.`);
+    await loadLms();
   }
 
   async function issueCertificate(course: DbRow, newlyPassedQuizId = "") {

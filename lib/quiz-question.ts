@@ -16,9 +16,19 @@ type QuestionRecord = Record<string, unknown>;
 function textValue(record: QuestionRecord, keys: string[], fallback = "") {
   for (const key of keys) {
     const value = record[key];
-    if (value !== null && value !== undefined && String(value).trim()) return String(value);
+    if (value !== null && value !== undefined && String(value).trim()) return cleanQuizAnswerText(String(value));
   }
   return fallback;
+}
+
+export function cleanQuizAnswerText(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .replace(/^\s*(?:options?|answer options?|correct\s*answers?)\s*:\s*/i, "")
+    .replace(/^\s*(?:option|answer)\s+[a-z]\s*[:.)-]\s*/i, "")
+    .replace(/^\s*(?:option|answer)\s*[:.)-]\s*/i, "")
+    .replace(/^\s*(?:[a-z]|\d+)\s*[:.)-]\s+/i, "")
+    .trim();
 }
 
 export function normalizeQuizOptions(value: unknown): string[] {
@@ -31,21 +41,21 @@ export function normalizeQuizOptions(value: unknown): string[] {
         }
         return String(option ?? "");
       })
-      .map((option) => option.trim())
+      .map(cleanQuizAnswerText)
       .filter(Boolean);
   }
 
   if (value && typeof value === "object") {
     return Object.entries(value as QuestionRecord)
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(([, option]) => String(option ?? "").trim())
+      .map(([, option]) => cleanQuizAnswerText(option))
       .filter(Boolean);
   }
 
   if (typeof value === "string") {
     return value
       .split(/[\n,|]+/)
-      .map((option) => option.trim())
+      .map(cleanQuizAnswerText)
       .filter(Boolean);
   }
 
@@ -75,16 +85,18 @@ export function normalizeQuizQuestionRecord(record: unknown, fallbackTitle = "")
 }
 
 export function serializeQuizQuestion(question: Pick<NormalizedQuizQuestion, "questionText" | "options" | "correctAnswer" | "points">) {
+  const options = normalizeQuizOptions(question.options);
+  const correctAnswer = cleanQuizAnswerText(question.correctAnswer);
   return {
-    prompt: question.questionText,
-    question: question.questionText,
-    question_text: question.questionText,
-    questionText: question.questionText,
-    options: question.options,
-    choices: question.options,
-    answers: question.options,
-    correctAnswer: question.correctAnswer,
-    correct_answer: question.correctAnswer,
+    prompt: cleanQuizAnswerText(question.questionText),
+    question: cleanQuizAnswerText(question.questionText),
+    question_text: cleanQuizAnswerText(question.questionText),
+    questionText: cleanQuizAnswerText(question.questionText),
+    options,
+    choices: options,
+    answers: options,
+    correctAnswer,
+    correct_answer: correctAnswer,
     points: question.points,
     point_value: question.points
   };

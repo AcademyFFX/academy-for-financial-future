@@ -28,7 +28,7 @@ import {
 import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getClientAdminStatus } from "@/lib/admin-client";
-import { normalizeQuizQuestionRecord, serializeQuizQuestion } from "@/lib/quiz-question";
+import { cleanQuizAnswerText, normalizeQuizOptions, normalizeQuizQuestionRecord, serializeQuizQuestion } from "@/lib/quiz-question";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -1057,16 +1057,17 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
   }
 
   function validateQuizQuestion() {
-    const options = quizForm.options.split(",").map((item) => item.trim()).filter(Boolean);
+    const options = normalizeQuizOptions(quizForm.options);
+    const correctAnswer = cleanQuizAnswerText(quizForm.correctAnswer);
     if (!quizForm.courseId) return { error: "Select a course before saving a quiz question.", options };
     if (!quizForm.title.trim()) return { error: "Quiz title is required.", options };
     if (!quizForm.prompt.trim()) return { error: "Question cannot be blank.", options };
     if (options.length < 2) return { error: "Enter at least two answer options separated by commas.", options };
-    if (!quizForm.correctAnswer.trim()) return { error: "Correct answer cannot be blank.", options };
-    if (!options.includes(quizForm.correctAnswer.trim())) return { error: "Correct answer must exactly match one of the listed options.", options };
+    if (!correctAnswer) return { error: "Correct answer cannot be blank.", options };
+    if (!options.includes(correctAnswer)) return { error: "Correct answer must exactly match one of the listed options after prefix cleanup.", options };
     if (Number(quizForm.points) <= 0) return { error: "Point value must be at least 1.", options };
     if (!editingQuestionId && savedQuestions.length >= 20) return { error: "This quiz already has 20 questions.", options };
-    return { error: "", options };
+    return { error: "", options, correctAnswer };
   }
 
   async function saveQuizQuestion(addAnother = false) {
@@ -1079,7 +1080,7 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
     const questionData = serializeQuizQuestion({
       questionText: quizForm.prompt.trim(),
       options: validation.options,
-      correctAnswer: quizForm.correctAnswer.trim(),
+      correctAnswer: validation.correctAnswer ?? "",
       points: Number(quizForm.points || 1)
     });
     const payload = {

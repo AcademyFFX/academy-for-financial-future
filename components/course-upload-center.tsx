@@ -24,7 +24,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DragEvent, FormEvent, ReactNode } from "react";
 import { ProgressBar } from "@/components/progress";
 import { getClientAdminStatus } from "@/lib/admin-client";
-import { serializeQuizQuestion } from "@/lib/quiz-question";
+import { cleanQuizAnswerText, normalizeQuizOptions, serializeQuizQuestion } from "@/lib/quiz-question";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -689,12 +689,14 @@ export function CourseUploadCenter() {
   }
 
   function addQuestion() {
-    const options = questionForm.options.split(",").map((option) => option.trim()).filter(Boolean);
-    if (!questionForm.prompt || options.length < 2 || !questionForm.correctAnswer) { setMessage("Add a question, at least two options, and the correct answer."); return; }
+    const options = normalizeQuizOptions(questionForm.options);
+    const correctAnswer = cleanQuizAnswerText(questionForm.correctAnswer);
+    if (!questionForm.prompt || options.length < 2 || !correctAnswer) { setMessage("Add a question, at least two options, and the correct answer."); return; }
+    if (!options.includes(correctAnswer)) { setMessage("Correct answer must exactly match one of the listed options after prefix cleanup."); return; }
     setQuestions((current) => [...current, serializeQuizQuestion({
       questionText: questionForm.prompt,
       options,
-      correctAnswer: questionForm.correctAnswer,
+      correctAnswer,
       points: 1
     })]);
     setQuestionForm({ prompt: "", options: "", correctAnswer: "" });

@@ -195,6 +195,17 @@ assert.match(courseUploadCenter, /PDF Notes/, "existing PDF upload card must rem
 assert.match(courseUploadCenter, /PowerPoint Upload/, "existing PowerPoint upload card must remain available");
 assert.match(courseUploadCenter, /Assignment Upload/, "existing assignment upload card must remain available");
 assert.match(courseUploadCenter, /Course Thumbnail/, "existing course thumbnail upload card must remain available");
+assert.match(courseUploadCenter, /const maxPreparedQuizQuestions = 20/, "upload center quiz builder must support up to 20 prepared questions");
+assert.match(courseUploadCenter, /const requiredQuizOptionCount = 4/, "upload center quiz builder must keep exactly four answer options per question");
+assert.match(courseUploadCenter, /function validatePreparedQuizQuestion/, "upload center quiz builder must use a dedicated validation function");
+assert.match(courseUploadCenter, /preparedCount >= maxPreparedQuizQuestions/, "upload center quiz builder must prevent only the 20-question cap");
+assert.doesNotMatch(courseUploadCenter, /preparedCount >= 4|questions\.length >= 4|current\.length >= 4/, "upload center quiz builder must not contain an accidental four-question cap");
+assert.match(courseUploadCenter, /Enter exactly \$\{requiredQuizOptionCount\} answer options separated by commas\./, "malformed option sets must show a visible validation message");
+assert.match(courseUploadCenter, /Correct answer must exactly match one of the listed options after prefix cleanup\./, "correct-answer matching must remain exact after normalization");
+assert.match(courseUploadCenter, /setQuestions\(\(current\) => \[\.\.\.current, validation\.question\]\)/, "adding questions must append without replacing the prepared question array");
+assert.match(courseUploadCenter, /Question \$\{questions\.length \+ 1\} prepared successfully\./, "adding 1, 4, 5, and later questions must surface a success message");
+assert.match(courseUploadCenter, /\{questions\.map\(\(question, index\) =>/, "prepared questions must render before publish for preview verification");
+assert.match(courseUploadCenter, /signed_url: JSON\.stringify\(\{ quizTitle: quizForm\.title, quiz_title: quizForm\.title, questions, passingScore: Number\(quizForm\.passingScore\) \}\)/, "publishing must save all prepared questions in the quiz payload");
 assert.match(lessonVideoPersistenceMigration, /alter table public\.lessons add column if not exists video_provider text/, "lesson video persistence migration must add missing provider column idempotently");
 assert.match(lessonVideoPersistenceMigration, /grant update \([\s\S]*video_provider[\s\S]*video_url[\s\S]*video_duration_seconds[\s\S]*\) on public\.lessons to authenticated/, "lesson video persistence migration must grant only required update columns");
 assert.match(lessonVideoPersistenceMigration, /create policy "AFF admins can update lesson video metadata"[\s\S]*for update[\s\S]*using \(public\.is_aff_admin\(\)\)[\s\S]*with check \(public\.is_aff_admin\(\)\)/, "lesson video persistence migration must restrict lesson metadata updates to active AFF admins");

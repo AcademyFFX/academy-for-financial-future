@@ -28,7 +28,7 @@ import { cleanQuizAnswerText, normalizeQuizOptions, serializeQuizQuestion } from
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
-type QuizQuestion = { prompt: string; options: string[]; correctAnswer: string };
+type QuizQuestion = { prompt: string; question: string; question_text: string; questionText: string; options: string[]; choices: string[]; answers: string[]; correctAnswer: string; correct_answer: string; points: number; point_value: number };
 type AssetType = "Video" | "PDF Notes" | "PowerPoint" | "Assignment" | "Course Thumbnail" | "Module" | "Quiz";
 type UploadStage = "idle" | "uploading" | "success" | "failed";
 type VideoProvider = "none" | "youtube" | "vimeo" | "mp4" | "uploaded_video";
@@ -69,6 +69,8 @@ type VideoSaveDiagnostic = {
 
 const adminEmail = "acafffx@gmail.com";
 const lessonVideoColumns = "id, course_id, video_provider, video_url, video_title, video_duration_seconds, video_thumbnail_url, updated_at";
+const maxPreparedQuizQuestions = 20;
+const requiredQuizOptionCount = 4;
 
 const acceptedUploads: Record<AssetType, { extensions: string[]; mimeTypes: string[]; label: string }> = {
   Video: { extensions: [".mp4", ".webm", ".mov"], mimeTypes: ["video/mp4", "video/webm", "video/quicktime"], label: "MP4, WebM, or MOV video" },
@@ -136,6 +138,34 @@ function statusClasses(stage: UploadStage) {
   if (stage === "failed") return "border-red-400/45 bg-red-500/10 text-red-100";
   if (stage === "uploading") return "border-gold-300/45 bg-gold-500/10 text-gold-100";
   return "border-gold-500/20 bg-navy-950 text-ink/72";
+}
+
+function validatePreparedQuizQuestion(questionForm: { prompt: string; options: string; correctAnswer: string }, preparedCount: number) {
+  const prompt = questionForm.prompt.trim();
+  const options = normalizeQuizOptions(questionForm.options);
+  const correctAnswer = cleanQuizAnswerText(questionForm.correctAnswer);
+
+  if (preparedCount >= maxPreparedQuizQuestions) {
+    return { error: `This quiz already has ${maxPreparedQuizQuestions} prepared questions. Publish this quiz or remove a question before adding another.`, options, correctAnswer };
+  }
+  if (!prompt) return { error: "Question cannot be blank.", options, correctAnswer };
+  if (options.length !== requiredQuizOptionCount) {
+    return { error: `Enter exactly ${requiredQuizOptionCount} answer options separated by commas.`, options, correctAnswer };
+  }
+  if (!correctAnswer) return { error: "Correct answer cannot be blank.", options, correctAnswer };
+  if (!options.includes(correctAnswer)) {
+    return { error: "Correct answer must exactly match one of the listed options after prefix cleanup.", options, correctAnswer };
+  }
+
+  return {
+    error: "",
+    question: serializeQuizQuestion({
+      questionText: prompt,
+      options,
+      correctAnswer,
+      points: 1
+    })
+  };
 }
 
 function videoUrlValidationMessage(provider: VideoProvider, rawUrl: string) {
@@ -217,6 +247,7 @@ export function CourseUploadCenter() {
   const [quizForm, setQuizForm] = useState({ courseId: "", moduleId: "", lessonId: "", title: "", passingScore: "80" });
   const [questionForm, setQuestionForm] = useState({ prompt: "", options: "", correctAnswer: "" });
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [quizValidationMessage, setQuizValidationMessage] = useState("");
   const [certificateForm, setCertificateForm] = useState({ studentId: "", courseId: "", certificationName: "" });
   const [savingVideo, setSavingVideo] = useState(false);
   const [lastVideoSavedAt, setLastVideoSavedAt] = useState("");
@@ -689,17 +720,17 @@ export function CourseUploadCenter() {
   }
 
   function addQuestion() {
-    const options = normalizeQuizOptions(questionForm.options);
-    const correctAnswer = cleanQuizAnswerText(questionForm.correctAnswer);
-    if (!questionForm.prompt || options.length < 2 || !correctAnswer) { setMessage("Add a question, at least two options, and the correct answer."); return; }
-    if (!options.includes(correctAnswer)) { setMessage("Correct answer must exactly match one of the listed options after prefix cleanup."); return; }
-    setQuestions((current) => [...current, serializeQuizQuestion({
-      questionText: questionForm.prompt,
-      options,
-      correctAnswer,
-      points: 1
-    })]);
+    const validation = validatePreparedQuizQuestion(questionForm, questions.length);
+    if (validation.error || !validation.question) {
+      const detail = validation.error || "Unable to add quiz question.";
+      setQuizValidationMessage(detail);
+      setMessage(detail);
+      return;
+    }
+    setQuestions((current) => [...current, validation.question]);
     setQuestionForm({ prompt: "", options: "", correctAnswer: "" });
+    setQuizValidationMessage(`Question ${questions.length + 1} prepared successfully.`);
+    setMessage(`Question ${questions.length + 1} prepared successfully.`);
   }
 
   async function createQuiz(event: FormEvent) {
@@ -725,7 +756,7 @@ export function CourseUploadCenter() {
       uploaded_by_email: adminEmail
     });
     setMessage(error ? error.message : "Quiz published.");
-    if (!error) { setQuizForm({ courseId: "", moduleId: "", lessonId: "", title: "", passingScore: "80" }); setQuestions([]); }
+    if (!error) { setQuizForm({ courseId: "", moduleId: "", lessonId: "", title: "", passingScore: "80" }); setQuestions([]); setQuizValidationMessage(""); }
   }
 
   async function assignCertificate(event: FormEvent) {
@@ -889,8 +920,22 @@ export function CourseUploadCenter() {
             <input className="field mt-3" placeholder="Options separated by commas" value={questionForm.options} onChange={(event) => setQuestionForm((current) => ({ ...current, options: event.target.value }))} />
             <input className="field mt-3" placeholder="Correct answer" value={questionForm.correctAnswer} onChange={(event) => setQuestionForm((current) => ({ ...current, correctAnswer: event.target.value }))} />
             <button className="mt-3 inline-flex items-center gap-2 border border-gold-500/40 px-3 py-2 text-sm font-semibold text-gold-300" type="button" onClick={addQuestion}><Plus size={15} /> Add Question</button>
+            {quizValidationMessage ? <p className="mt-3 text-sm font-semibold text-gold-200">{quizValidationMessage}</p> : null}
           </div>
-          <p className="text-sm text-ink/65">{questions.length} questions prepared</p>
+          <div className="grid gap-2 text-sm text-ink/65">
+            <p>{questions.length} questions prepared</p>
+            {questions.length ? (
+              <div className="grid gap-2 border border-gold-500/16 bg-navy-950 p-3">
+                {questions.map((question, index) => (
+                  <div key={`${question.questionText}-${index}`} className="border-b border-gold-500/10 pb-2 last:border-b-0 last:pb-0">
+                    <p className="font-semibold text-white">Question {index + 1}: {question.questionText}</p>
+                    <p className="mt-1 text-ink/65">{question.options.map((option, optionIndex) => `Option ${String.fromCharCode(65 + optionIndex)}: ${option}`).join(" | ")}</p>
+                    <p className="mt-1 text-gold-300">Correct answer: {question.correctAnswer}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <input className="field" type="number" min="0" max="100" value={quizForm.passingScore} onChange={(event) => setQuizForm((current) => ({ ...current, passingScore: event.target.value }))} />
           <button className="inline-flex items-center justify-center gap-2 bg-gold-500 px-4 py-3 font-bold text-navy-950" type="submit"><Save size={17} /> Publish Quiz</button>
         </form>

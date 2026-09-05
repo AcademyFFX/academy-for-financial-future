@@ -29,6 +29,7 @@ const adminCourseManagement = read("app/admin/course-management/page.tsx");
 const adminUploadCenter = read("app/admin/course-management/upload-center/page.tsx");
 const adminLmsManager = read("components/admin-lms-manager.tsx");
 const courseUploadCenter = read("components/course-upload-center.tsx");
+const lmsCourseCenter = read("components/lms-course-center.tsx");
 const studentDirectoryPage = read("app/student-directory/page.tsx");
 const lessonVideoPersistenceMigration = read("supabase/migrations/20260806_repair_lesson_video_metadata_persistence.sql");
 
@@ -60,6 +61,17 @@ assert.match(studentCourses, /\.from\("enrollments"\)[\s\S]*\.eq\("student_id", 
 assert.match(studentCourses, /\.from\("lesson_progress"\)[\s\S]*\.eq\("student_id", user\.id\)/, "student courses must scope lesson progress to the authenticated user");
 assert.match(studentCourses, /\.from\("certificates"\)[\s\S]*\.eq\("student_id", user\.id\)/, "student courses must scope certificate records to the authenticated user");
 assert.doesNotMatch(studentCourses, /SERVICE_ROLE|service_role|hardcoded/i, "student courses must not expose service-role access or hardcoded student data");
+assert.match(lmsCourseCenter, /const \[quizResults, setQuizResults\]/, "student course quiz submissions must store visible saved result state");
+assert.match(lmsCourseCenter, /const \[submittingQuizIds, setSubmittingQuizIds\]/, "student course quiz submissions must guard against duplicate clicks");
+assert.match(lmsCourseCenter, /Answer question \$\{unanswered \+ 1\} before submitting this quiz\./, "student quiz submission must validate unanswered questions visibly");
+assert.match(lmsCourseCenter, /Submitting quiz attempt\.\.\./, "student quiz submission must show an in-flight status");
+assert.match(lmsCourseCenter, /selected_answers: selectedAnswers/, "student quiz submission must persist selected answer details");
+assert.match(lmsCourseCenter, /total_points: totalPoints/, "student quiz submission must persist total points");
+assert.match(lmsCourseCenter, /earned_points: earnedPoints/, "student quiz submission must persist earned points");
+assert.match(lmsCourseCenter, /percentage/, "student quiz submission must persist and render percentage");
+assert.match(lmsCourseCenter, /\.from\("exams"\)\.insert\([\s\S]*\.select\("\*"\)\.single\(\)/, "student quiz submission must read back the saved exam attempt before showing success");
+assert.match(lmsCourseCenter, /Quiz submitted successfully:/, "student quiz submission must display score and pass/fail after save");
+assert.match(lmsCourseCenter, /Saved Attempts/, "student quiz UI must render saved attempt history");
 assert.match(studentLessonViewer, /\.from\("students"\)[\s\S]*\.eq\("auth_user_id", user\.id\)/, "student lesson viewer must locate students by auth_user_id");
 assert.match(studentLessonViewer, /\.from\("enrollments"\)[\s\S]*\.eq\("student_id", studentId\)/, "student lesson viewer must verify enrollment through internal students.id");
 assert.match(studentLessonViewer, /\.from\("lesson_progress"\)[\s\S]*upsert/, "student lesson viewer must persist completion through lesson_progress upsert");

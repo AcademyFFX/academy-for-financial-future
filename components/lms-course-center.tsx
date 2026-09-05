@@ -101,6 +101,8 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
   const [attempts, setAttempts] = useState<DbRow[]>([]);
   const [certificates, setCertificates] = useState<DbRow[]>([]);
   const [answers, setAnswers] = useState<Record<string, Record<number, string>>>({});
+  const [quizResults, setQuizResults] = useState<Record<string, DbRow>>({});
+  const [submittingQuizIds, setSubmittingQuizIds] = useState<Set<string>>(new Set());
   const [hasPaidAccess, setHasPaidAccess] = useState(false);
 
   const loadLms = useCallback(async () => {
@@ -274,25 +276,96 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
   }
 
   async function submitQuiz(course: DbRow, quiz: DbRow) {
-    if (!userId) return;
+    const quizId = idOf(quiz);
+    if (submittingQuizIds.has(quizId)) return;
+    if (!userId) {
+      setMessage("Sign in again before submitting this quiz.");
+      return;
+    }
     if (!hasPaidAccess) {
       setMessage("Upgrade to an active paid membership to submit quizzes and unlock certification progress.");
       return;
     }
     const quizQuestions = questionsOf(quiz);
-    if (!quizQuestions.length) return;
+    if (!quizQuestions.length) {
+      setMessage("This quiz has no published questions yet.");
+      return;
+    }
     const quizAnswers = answers[idOf(quiz)] ?? {};
+    const unanswered = quizQuestions.findIndex((_, index) => !quizAnswers[index]);
+    if (unanswered >= 0) {
+      setMessage(`Answer question ${unanswered + 1} before submitting this quiz.`);
+      return;
+    }
     const totalPoints = quizQuestions.reduce((total, question) => total + Number(question.points ?? 1), 0);
     const earnedPoints = quizQuestions.reduce((total, question, index) => total + (quizAnswers[index] === question.correctAnswer ? Number(question.points ?? 1) : 0), 0);
-    const score = totalPoints ? Math.round((earnedPoints / totalPoints) * 100) : 0;
-    const result = score >= Number(value(quiz, ["passing_score"], "80")) ? "Pass" : "Fail";
+    const percentage = totalPoints ? Math.round((earnedPoints / totalPoints) * 100) : 0;
+    const score = percentage;
+    const passingScore = Number(value(quiz, ["passing_score"], "80")) || 80;
+    const result = percentage >= passingScore ? "Pass" : "Fail";
+    const selectedAnswers = quizQuestions.map((question, index) => ({
+      question: question.questionText || question.prompt,
+      selectedAnswer: quizAnswers[index],
+      correctAnswer: question.correctAnswer,
+      points: Number(question.points ?? 1),
+      earnedPoints: quizAnswers[index] === question.correctAnswer ? Number(question.points ?? 1) : 0
+    }));
+    const previousAttempts = attempts.filter((attempt) => {
+      const attemptQuizId = value(attempt, ["quiz_id", "exam_id"]);
+      const attemptCourseId = value(attempt, ["course_id"]);
+      const attemptLessonId = value(attempt, ["lesson_id"]);
+      const attemptTitle = value(attempt, ["exam_title"]);
+      return (
+        (attemptQuizId && attemptQuizId === quizId) ||
+        (attemptTitle === value(quiz, ["quiz_title"], "AFF Quiz") &&
+          (!attemptCourseId || attemptCourseId === idOf(course)) &&
+          (!attemptLessonId || attemptLessonId === value(quiz, ["lesson_id"])))
+      );
+    });
+    setSubmittingQuizIds((current) => {
+      const next = new Set(current);
+      next.add(quizId);
+      return next;
+    });
+    setMessage("Submitting quiz attempt...");
     const supabase = createClient();
-    const { error } = await supabase.from("exams").insert({ student_id: userId, exam_title: value(quiz, ["quiz_title"], "AFF Quiz"), answers: quizAnswers, score, result });
-    setMessage(error ? error.message : `Quiz submitted: ${score}% (${result}).`);
-    if (!error) {
-      if (result === "Pass" && coursePercent(idOf(course)) === 100) await issueCertificate(course, value(quiz, ["quiz_title"]));
-      await loadLms();
+    const { data, error } = await supabase.from("exams").insert({
+      student_id: userId,
+      course_id: Number(idOf(course)),
+      lesson_id: value(quiz, ["lesson_id"]) ? Number(value(quiz, ["lesson_id"])) : null,
+      quiz_id: quizId,
+      exam_title: value(quiz, ["quiz_title"], "AFF Quiz"),
+      answers: quizAnswers,
+      selected_answers: selectedAnswers,
+      question_bank: quizQuestions,
+      score,
+      total_points: totalPoints,
+      earned_points: earnedPoints,
+      percentage,
+      result,
+      passed: result === "Pass",
+      passing_score: passingScore,
+      attempt_number: previousAttempts.length + 1,
+      submitted_at: new Date().toISOString()
+    }).select("*").single();
+    setSubmittingQuizIds((current) => {
+      const next = new Set(current);
+      next.delete(quizId);
+      return next;
+    });
+    if (error) {
+      setMessage(`Quiz submission failed: ${error.message}`);
+      return;
     }
+    if (!data) {
+      setMessage("Quiz submission failed: Supabase did not return a saved attempt.");
+      return;
+    }
+    setQuizResults((current) => ({ ...current, [quizId]: data as DbRow }));
+    setAttempts((current) => [data as DbRow, ...current]);
+    setMessage(`Quiz submitted successfully: ${earnedPoints}/${totalPoints} points · ${percentage}% · ${result}.`);
+    if (result === "Pass" && coursePercent(idOf(course)) === 100) await issueCertificate(course, value(quiz, ["quiz_title"]));
+    await loadLms();
   }
 
   function courseMatches(course: DbRow) {
@@ -346,18 +419,30 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
                 })}</div></section>;
               })}
               {homework.filter((item) => value(item, ["course_id"]) === courseId).map((item) => { const payload = parseAssetPayload(item); return <article key={idOf(item)} className="bg-navy-950 p-5"><p className="text-xs uppercase tracking-[.2em] text-gold-300">Homework · Due in {String(payload?.dueDays ?? "7")} days</p><h4 className="mt-2 font-semibold text-white">{value(item, ["asset_title"])}</h4><p className="mt-2 text-sm text-ink/68">{payload?.instructions ?? ""}</p>{value(item, ["url", "public_url"]) && value(item, ["url", "public_url"]) !== "#" ? <a className="mt-3 inline-flex items-center gap-2 text-sm text-gold-300" href={value(item, ["url", "public_url"])}><FileText size={15} /> Assignment File</a> : null}</article>; })}
-              {quizzes.filter((quiz) => value(quiz, ["course_id"]) === courseId).map((quiz) => <article key={idOf(quiz)} className="bg-navy-950 p-5"><p className="text-xs uppercase tracking-[.2em] text-gold-300">Quiz · Passing {value(quiz, ["passing_score"], "80")}% · {value(quiz, ["file_size"], "1")} points</p><h4 className="mt-2 font-semibold text-white">{value(quiz, ["quiz_title"])}</h4><div className="mt-4 grid gap-4">{questionsOf(quiz).map((questionRecord, index) => {
+              {quizzes.filter((quiz) => value(quiz, ["course_id"]) === courseId).map((quiz) => {
+                const quizId = idOf(quiz);
+                const latestResult = quizResults[quizId] ?? attempts.find((attempt) => {
+                  const attemptQuizId = value(attempt, ["quiz_id", "exam_id"]);
+                  return attemptQuizId ? attemptQuizId === quizId : value(attempt, ["exam_title"]) === value(quiz, ["quiz_title"]);
+                });
+                const quizAttempts = attempts.filter((attempt) => {
+                  const attemptQuizId = value(attempt, ["quiz_id", "exam_id"]);
+                  return attemptQuizId ? attemptQuizId === quizId : value(attempt, ["exam_title"]) === value(quiz, ["quiz_title"]);
+                });
+                const submitting = submittingQuizIds.has(quizId);
+                return <article key={quizId} className="bg-navy-950 p-5"><p className="text-xs uppercase tracking-[.2em] text-gold-300">Quiz · Passing {value(quiz, ["passing_score"], "80")}% · {value(quiz, ["file_size"], "1")} points</p><h4 className="mt-2 font-semibold text-white">{value(quiz, ["quiz_title"])}</h4>{latestResult ? <div className={`mt-4 border p-4 ${value(latestResult, ["result"]) === "Pass" ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100" : "border-red-300/35 bg-red-500/10 text-red-100"}`}><p className="text-sm font-bold">Latest result: {value(latestResult, ["result"], "Submitted")}</p><p className="mt-1 text-sm">Score: {value(latestResult, ["earned_points"], "0")}/{value(latestResult, ["total_points"], value(quiz, ["file_size"], "0"))} points · {value(latestResult, ["percentage", "score"], "0")}%</p><p className="mt-1 text-xs opacity-80">Submitted {value(latestResult, ["submitted_at", "created_at"]) ? new Date(value(latestResult, ["submitted_at", "created_at"])).toLocaleString() : "just now"}</p></div> : null}<div className="mt-4 grid gap-4">{questionsOf(quiz).map((questionRecord, index) => {
                 console.log(questionRecord);
                 return (
-                  <label key={`${idOf(quiz)}-${index}`} className="grid gap-2 text-sm text-ink/72">
+                  <label key={`${quizId}-${index}`} className="grid gap-2 text-sm text-ink/72">
                     <span>{questionRecord.questionText || questionRecord.prompt} <span className="text-gold-300">({questionRecord.points ?? 1} point{Number(questionRecord.points ?? 1) === 1 ? "" : "s"})</span></span>
                     <div className="grid gap-1 text-xs text-ink/60">
-                      {questionRecord.options.map((option, optionIndex) => <span key={`${idOf(quiz)}-${index}-display-${optionIndex}`}>Option {String.fromCharCode(65 + optionIndex)}: {option}</span>)}
+                      {questionRecord.options.map((option, optionIndex) => <span key={`${quizId}-${index}-display-${optionIndex}`}>Option {String.fromCharCode(65 + optionIndex)}: {option}</span>)}
                     </div>
-                    <select className="field" value={answers[idOf(quiz)]?.[index] ?? ""} onChange={(event) => setAnswers((current) => ({ ...current, [idOf(quiz)]: { ...(current[idOf(quiz)] ?? {}), [index]: event.target.value } }))}><option value="">Select answer</option>{questionRecord.options.map((option) => <option key={option}>{option}</option>)}</select>
+                    <select className="field" value={answers[quizId]?.[index] ?? ""} onChange={(event) => setAnswers((current) => ({ ...current, [quizId]: { ...(current[quizId] ?? {}), [index]: event.target.value } }))}><option value="">Select answer</option>{questionRecord.options.map((option) => <option key={option}>{option}</option>)}</select>
                   </label>
                 );
-              })}</div><button className="mt-4 bg-gold-500 px-4 py-2 text-sm font-bold text-navy-950" onClick={() => submitQuiz(course, quiz)}>Submit Quiz</button></article>)}
+              })}</div><button className="mt-4 bg-gold-500 px-4 py-2 text-sm font-bold text-navy-950 disabled:cursor-not-allowed disabled:opacity-60" type="button" disabled={submitting} onClick={() => submitQuiz(course, quiz)}>{submitting ? "Submitting..." : "Submit Quiz"}</button>{quizAttempts.length ? <div className="mt-5 border-t border-gold-500/15 pt-4"><p className="text-xs uppercase tracking-[.18em] text-gold-300">Saved Attempts</p><div className="mt-3 grid gap-2">{quizAttempts.slice(0, 5).map((attempt, index) => <div key={value(attempt, ["id"], `${quizId}-${index}`)} className="flex flex-col gap-1 border border-gold-500/12 bg-navy-900/70 p-3 text-sm text-ink/72 sm:flex-row sm:items-center sm:justify-between"><span>Attempt {value(attempt, ["attempt_number"], String(quizAttempts.length - index))} · {value(attempt, ["result"], "Submitted")}</span><span className="text-gold-300">{value(attempt, ["earned_points"], "0")}/{value(attempt, ["total_points"], value(quiz, ["file_size"], "0"))} · {value(attempt, ["percentage", "score"], "0")}%</span></div>)}</div></div> : null}</article>;
+              })}
             </div> : null}
           </article>
         );

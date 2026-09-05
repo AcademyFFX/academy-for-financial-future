@@ -12,6 +12,20 @@ import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
 type QuizQuestion = NormalizedQuizQuestion;
+type QuizSubmissionDiagnostic = {
+  stage: string;
+  authUserId: string;
+  internalStudentId: string;
+  courseId: string;
+  lessonId: string;
+  quizId: string;
+  quizTitle: string;
+  insertStudentId: string;
+  fallbackStudentId: string;
+  payload: string;
+  errorCode: string;
+  errorMessage: string;
+};
 
 function value(row: DbRow | undefined, keys: string[], fallback = "") {
   if (!row) return fallback;
@@ -24,6 +38,28 @@ function value(row: DbRow | undefined, keys: string[], fallback = "") {
 
 function idOf(row: DbRow) {
   return value(row, ["id"]);
+}
+
+function supabaseErrorCode(error: unknown) {
+  return error && typeof error === "object" && "code" in error ? String(error.code ?? "") : "";
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) return String(error.message);
+  return fallback;
+}
+
+function isStudentIdTypeMismatch(error: unknown) {
+  const code = supabaseErrorCode(error);
+  const message = errorMessage(error, "");
+  return code === "22P02" || /invalid input syntax for type bigint|uuid = bigint|bigint = uuid/i.test(message);
+}
+
+function isMissingColumn(error: unknown, column: string) {
+  const code = supabaseErrorCode(error);
+  const message = errorMessage(error, "");
+  return code === "42703" || code === "PGRST204" || new RegExp(`\\b${column}\\b`, "i").test(message);
 }
 
 function questionsOf(row: DbRow): QuizQuestion[] {
@@ -103,6 +139,7 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
   const [answers, setAnswers] = useState<Record<string, Record<number, string>>>({});
   const [quizResults, setQuizResults] = useState<Record<string, DbRow>>({});
   const [submittingQuizIds, setSubmittingQuizIds] = useState<Set<string>>(new Set());
+  const [quizSubmissionDiagnostics, setQuizSubmissionDiagnostics] = useState<Record<string, QuizSubmissionDiagnostic>>({});
   const [hasPaidAccess, setHasPaidAccess] = useState(false);
 
   const loadLms = useCallback(async () => {
@@ -135,15 +172,21 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
         .eq("student_id", user.id)
         .maybeSingle();
       setHasPaidAccess(hasFullCourseAccess(membership));
-      const [courseResult, lessonResult, assetResult, enrollmentResult, progressResult, attemptResult, certificateResult] = await Promise.all([
+      const [courseResult, lessonResult, assetResult, enrollmentResult, progressResult, certificateResult] = await Promise.all([
         supabase.from("courses").select("*").order("created_at"),
         supabase.from("lessons").select("*").order("lesson_order"),
         supabase.from("course_assets").select("*").eq("asset_status", "Published").order("created_at"),
         internalStudentId ? supabase.from("enrollments").select("*").eq("student_id", internalStudentId) : Promise.resolve({ data: [], error: null }),
         supabase.from("lesson_progress").select("*").eq("student_id", user.id),
-        supabase.from("exams").select("*").eq("student_id", user.id),
         supabase.from("certificates").select("*").eq("student_id", user.id)
       ]);
+      let attemptResult = await supabase.from("exams").select("*").eq("auth_user_id", user.id).order("submitted_at", { ascending: false });
+      if (attemptResult.error && isMissingColumn(attemptResult.error, "auth_user_id")) {
+        attemptResult = await supabase.from("exams").select("*").eq("student_id", user.id).order("submitted_at", { ascending: false });
+      }
+      if (attemptResult.error && isStudentIdTypeMismatch(attemptResult.error) && internalStudentId) {
+        attemptResult = await supabase.from("exams").select("*").eq("student_id", internalStudentId).order("submitted_at", { ascending: false });
+      }
       const requiredError = courseResult.error ?? lessonResult.error ?? assetResult.error;
       if (requiredError) throw requiredError;
       const assets = (assetResult.data ?? []) as DbRow[];
@@ -277,24 +320,45 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
 
   async function submitQuiz(course: DbRow, quiz: DbRow) {
     const quizId = idOf(quiz);
+    const lessonId = value(quiz, ["lesson_id"]);
+    const quizTitle = value(quiz, ["quiz_title"], "AFF Quiz");
+    const baseDiagnostic = {
+      stage: "button_clicked",
+      authUserId: userId || "Not available",
+      internalStudentId: studentDbId || "Not available",
+      courseId: idOf(course),
+      lessonId: lessonId || "Course-level quiz",
+      quizId,
+      quizTitle,
+      insertStudentId: userId || "Not attempted",
+      fallbackStudentId: studentDbId || "Not attempted",
+      payload: "Not built",
+      errorCode: "None",
+      errorMessage: "None"
+    };
+    setQuizSubmissionDiagnostics((current) => ({ ...current, [quizId]: baseDiagnostic }));
     if (submittingQuizIds.has(quizId)) return;
     if (!userId) {
       setMessage("Sign in again before submitting this quiz.");
+      setQuizSubmissionDiagnostics((current) => ({ ...current, [quizId]: { ...baseDiagnostic, stage: "error", errorMessage: "No authenticated Supabase user ID was available." } }));
       return;
     }
     if (!hasPaidAccess) {
       setMessage("Upgrade to an active paid membership to submit quizzes and unlock certification progress.");
+      setQuizSubmissionDiagnostics((current) => ({ ...current, [quizId]: { ...baseDiagnostic, stage: "error", errorMessage: "Student does not have active paid course access." } }));
       return;
     }
     const quizQuestions = questionsOf(quiz);
     if (!quizQuestions.length) {
       setMessage("This quiz has no published questions yet.");
+      setQuizSubmissionDiagnostics((current) => ({ ...current, [quizId]: { ...baseDiagnostic, stage: "error", errorMessage: "No published quiz questions were found for this quiz." } }));
       return;
     }
     const quizAnswers = answers[idOf(quiz)] ?? {};
     const unanswered = quizQuestions.findIndex((_, index) => !quizAnswers[index]);
     if (unanswered >= 0) {
       setMessage(`Answer question ${unanswered + 1} before submitting this quiz.`);
+      setQuizSubmissionDiagnostics((current) => ({ ...current, [quizId]: { ...baseDiagnostic, stage: "error", errorMessage: `Question ${unanswered + 1} is unanswered.` } }));
       return;
     }
     const totalPoints = quizQuestions.reduce((total, question) => total + Number(question.points ?? 1), 0);
@@ -329,12 +393,13 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
     });
     setMessage("Submitting quiz attempt...");
     const supabase = createClient();
-    const { data, error } = await supabase.from("exams").insert({
+    const payload = {
       student_id: userId,
+      auth_user_id: userId,
       course_id: Number(idOf(course)),
-      lesson_id: value(quiz, ["lesson_id"]) ? Number(value(quiz, ["lesson_id"])) : null,
+      lesson_id: lessonId ? Number(lessonId) : null,
       quiz_id: quizId,
-      exam_title: value(quiz, ["quiz_title"], "AFF Quiz"),
+      exam_title: quizTitle,
       answers: quizAnswers,
       selected_answers: selectedAnswers,
       question_bank: quizQuestions,
@@ -347,22 +412,70 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
       passing_score: passingScore,
       attempt_number: previousAttempts.length + 1,
       submitted_at: new Date().toISOString()
-    }).select("*").single();
+    };
+    setQuizSubmissionDiagnostics((current) => ({ ...current, [quizId]: { ...baseDiagnostic, stage: "inserting_auth_user_attempt", payload: JSON.stringify(payload, null, 2) } }));
+    let insertPayload: DbRow = payload;
+    let examsSupportsAuthUserId = true;
+    let response = await supabase.from("exams").insert(insertPayload).select("*").single();
+    if (response.error && isMissingColumn(response.error, "auth_user_id")) {
+      examsSupportsAuthUserId = false;
+      insertPayload = { ...payload };
+      delete insertPayload.auth_user_id;
+      setQuizSubmissionDiagnostics((current) => ({
+        ...current,
+        [quizId]: {
+          ...baseDiagnostic,
+          stage: "retrying_without_auth_user_id_column",
+          payload: JSON.stringify(insertPayload, null, 2),
+          errorCode: supabaseErrorCode(response.error),
+          errorMessage: errorMessage(response.error, "The auth_user_id attempt insert failed.")
+        }
+      }));
+      response = await supabase.from("exams").insert(insertPayload).select("*").single();
+    }
+    if (response.error && isStudentIdTypeMismatch(response.error) && studentDbId) {
+      insertPayload = { ...payload, student_id: Number(studentDbId), auth_user_id: userId };
+      if (!examsSupportsAuthUserId) delete insertPayload.auth_user_id;
+      setQuizSubmissionDiagnostics((current) => ({
+        ...current,
+        [quizId]: {
+          ...baseDiagnostic,
+          stage: "retrying_internal_student_attempt",
+          insertStudentId: studentDbId,
+          payload: JSON.stringify(insertPayload, null, 2),
+          errorCode: supabaseErrorCode(response.error),
+          errorMessage: errorMessage(response.error, "The auth-user attempt insert failed.")
+        }
+      }));
+      response = await supabase.from("exams").insert(insertPayload).select("*").single();
+    }
+    const { data, error } = response;
     setSubmittingQuizIds((current) => {
       const next = new Set(current);
       next.delete(quizId);
       return next;
     });
     if (error) {
-      setMessage(`Quiz submission failed: ${error.message}`);
+      const code = supabaseErrorCode(error);
+      const detail = code ? `${code}: ${error.message}` : error.message;
+      setQuizSubmissionDiagnostics((current) => ({
+        ...current,
+        [quizId]: { ...baseDiagnostic, stage: "error", insertStudentId: String(insertPayload.student_id ?? ""), payload: JSON.stringify(insertPayload, null, 2), errorCode: code || "None", errorMessage: error.message }
+      }));
+      setMessage(`Quiz submission failed: ${detail}`);
       return;
     }
     if (!data) {
       setMessage("Quiz submission failed: Supabase did not return a saved attempt.");
+      setQuizSubmissionDiagnostics((current) => ({ ...current, [quizId]: { ...baseDiagnostic, stage: "error", payload: JSON.stringify(insertPayload, null, 2), errorMessage: "Supabase did not return a saved attempt row." } }));
       return;
     }
     setQuizResults((current) => ({ ...current, [quizId]: data as DbRow }));
     setAttempts((current) => [data as DbRow, ...current]);
+    setQuizSubmissionDiagnostics((current) => ({
+      ...current,
+      [quizId]: { ...baseDiagnostic, stage: "success", insertStudentId: String(insertPayload.student_id ?? ""), payload: JSON.stringify(insertPayload, null, 2), errorCode: "None", errorMessage: "None" }
+    }));
     setMessage(`Quiz submitted successfully: ${earnedPoints}/${totalPoints} points · ${percentage}% · ${result}.`);
     if (result === "Pass" && coursePercent(idOf(course)) === 100) await issueCertificate(course, value(quiz, ["quiz_title"]));
     await loadLms();
@@ -430,7 +543,8 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
                   return attemptQuizId ? attemptQuizId === quizId : value(attempt, ["exam_title"]) === value(quiz, ["quiz_title"]);
                 });
                 const submitting = submittingQuizIds.has(quizId);
-                return <article key={quizId} className="bg-navy-950 p-5"><p className="text-xs uppercase tracking-[.2em] text-gold-300">Quiz · Passing {value(quiz, ["passing_score"], "80")}% · {value(quiz, ["file_size"], "1")} points</p><h4 className="mt-2 font-semibold text-white">{value(quiz, ["quiz_title"])}</h4>{latestResult ? <div className={`mt-4 border p-4 ${value(latestResult, ["result"]) === "Pass" ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100" : "border-red-300/35 bg-red-500/10 text-red-100"}`}><p className="text-sm font-bold">Latest result: {value(latestResult, ["result"], "Submitted")}</p><p className="mt-1 text-sm">Score: {value(latestResult, ["earned_points"], "0")}/{value(latestResult, ["total_points"], value(quiz, ["file_size"], "0"))} points · {value(latestResult, ["percentage", "score"], "0")}%</p><p className="mt-1 text-xs opacity-80">Submitted {value(latestResult, ["submitted_at", "created_at"]) ? new Date(value(latestResult, ["submitted_at", "created_at"])).toLocaleString() : "just now"}</p></div> : null}<div className="mt-4 grid gap-4">{questionsOf(quiz).map((questionRecord, index) => {
+                const diagnostic = quizSubmissionDiagnostics[quizId];
+                return <article key={quizId} className="bg-navy-950 p-5"><p className="text-xs uppercase tracking-[.2em] text-gold-300">Quiz · Passing {value(quiz, ["passing_score"], "80")}% · {value(quiz, ["file_size"], "1")} points</p><h4 className="mt-2 font-semibold text-white">{value(quiz, ["quiz_title"])}</h4>{diagnostic ? <div className="mt-4 border border-gold-500/18 bg-navy-900/70 p-4 text-xs text-ink/68"><p className="font-semibold text-gold-300">Quiz Submission Diagnostic</p><p className="mt-2">Stage: {diagnostic.stage}</p><p>Authenticated user ID: {diagnostic.authUserId}</p><p>Internal student ID: {diagnostic.internalStudentId}</p><p>Course ID: {diagnostic.courseId}</p><p>Lesson ID: {diagnostic.lessonId}</p><p>Quiz ID: {diagnostic.quizId}</p><p>Insert student_id: {diagnostic.insertStudentId}</p><p>Error code: {diagnostic.errorCode}</p><p className="break-words">Error message: {diagnostic.errorMessage}</p><details className="mt-2"><summary className="cursor-pointer text-gold-300">Insert payload</summary><pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words text-[11px] text-ink/62">{diagnostic.payload}</pre></details></div> : null}{latestResult ? <div className={`mt-4 border p-4 ${value(latestResult, ["result"]) === "Pass" ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100" : "border-red-300/35 bg-red-500/10 text-red-100"}`}><p className="text-sm font-bold">Result: {value(latestResult, ["result"], "Submitted") === "Pass" ? "Passed" : "Not Passed"}</p><p className="mt-1 text-sm">Score: {value(latestResult, ["earned_points"], "0")} / {value(latestResult, ["total_points"], value(quiz, ["file_size"], "0"))}</p><p className="mt-1 text-sm">Percentage: {value(latestResult, ["percentage", "score"], "0")}%</p><p className="mt-1 text-xs opacity-80">Submitted {value(latestResult, ["submitted_at", "created_at"]) ? new Date(value(latestResult, ["submitted_at", "created_at"])).toLocaleString() : "just now"}</p></div> : null}<div className="mt-4 grid gap-4">{questionsOf(quiz).map((questionRecord, index) => {
                 console.log(questionRecord);
                 return (
                   <label key={`${quizId}-${index}`} className="grid gap-2 text-sm text-ink/72">

@@ -27,7 +27,7 @@ type QuizSubmissionDiagnostic = {
   errorMessage: string;
 };
 
-function value(row: DbRow | undefined, keys: string[], fallback = "") {
+function value(row: DbRow | undefined | null, keys: string[], fallback = "") {
   if (!row) return fallback;
   for (const key of keys) {
     const current = row[key];
@@ -85,10 +85,43 @@ function parseAssetPayload(row: DbRow) {
   const raw = value(row, ["signed_url"]);
   if (!raw || raw === "#") return null;
   try {
-    return JSON.parse(raw) as { quizTitle?: string; quiz_title?: string; question?: unknown; questions?: unknown[]; instructions?: string; dueDays?: number; passingScore?: number };
+    return JSON.parse(raw) as { quizTitle?: string; quiz_title?: string; question?: unknown; questions?: unknown[]; instructions?: string; dueDays?: number; due_date?: string; noDueDate?: boolean; no_due_date?: boolean; passingScore?: number; passing_score?: number };
   } catch {
     return null;
   }
+}
+
+function booleanValue(row: DbRow | null | undefined, keys: string[]) {
+  const raw = value(row ?? undefined, keys).trim().toLowerCase();
+  return ["true", "1", "yes", "y", "checked"].includes(raw);
+}
+
+function itemMatchesLesson(row: DbRow, lesson: DbRow) {
+  const rowLessonId = value(row, ["lesson_id"]);
+  const rowLessonTitle = value(row, ["lesson_title"]);
+  return Boolean((rowLessonId && rowLessonId === idOf(lesson)) || (rowLessonTitle && sameText(rowLessonTitle, value(lesson, ["lesson_title", "title"]))));
+}
+
+function itemIsCourseLevel(row: DbRow) {
+  return !value(row, ["lesson_id"]) && !value(row, ["lesson_title"]);
+}
+
+function homeworkDueLabel(item: DbRow, payload: ReturnType<typeof parseAssetPayload>) {
+  if (booleanValue(item, ["no_due_date", "noDueDate"]) || booleanValue(payload as DbRow | null, ["no_due_date", "noDueDate"])) return "No Due Date";
+  const dueDate = value(item, ["due_date", "submission_date"], value(payload as DbRow | null, ["due_date"]));
+  if (dueDate) return dueDate;
+  const dueDays = Number(value(payload as DbRow | null, ["dueDays"]));
+  return Number.isFinite(dueDays) && dueDays > 0 ? `Due in ${dueDays} day${dueDays === 1 ? "" : "s"}` : "No Due Date";
+}
+
+function quizPassingScore(row: DbRow) {
+  const payload = parseAssetPayload(row);
+  const candidates = [value(payload as DbRow | null, ["passingScore", "passing_score"]), value(row, ["passing_score"])];
+  for (const candidate of candidates) {
+    const score = Number(candidate);
+    if (Number.isFinite(score) && score >= 50 && score <= 100) return score;
+  }
+  return 80;
 }
 
 function quizRowsFromAssets(assets: DbRow[]) {
@@ -112,7 +145,7 @@ function quizRowsFromAssets(assets: DbRow[]) {
         ...asset,
         id: key,
         quiz_title: quizTitle,
-        passing_score: String(payload?.passingScore ?? "80"),
+        passing_score: String(quizPassingScore(asset)),
         questions: normalizedQuestions,
         file_size: points
       });
@@ -365,7 +398,7 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
     const earnedPoints = quizQuestions.reduce((total, question, index) => total + (quizAnswers[index] === question.correctAnswer ? Number(question.points ?? 1) : 0), 0);
     const percentage = totalPoints ? Math.round((earnedPoints / totalPoints) * 100) : 0;
     const score = percentage;
-    const passingScore = Number(value(quiz, ["passing_score"], "80")) || 80;
+    const passingScore = quizPassingScore(quiz);
     const result = percentage >= passingScore ? "Pass" : "Fail";
     const selectedAnswers = quizQuestions.map((question, index) => ({
       question: question.questionText || question.prompt,
@@ -481,6 +514,71 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
     await loadLms();
   }
 
+  function renderQuizCard(course: DbRow, quiz: DbRow) {
+    const quizId = idOf(quiz);
+    const latestResult = quizResults[quizId] ?? attempts.find((attempt) => {
+      const attemptQuizId = value(attempt, ["quiz_id", "exam_id"]);
+      return attemptQuizId ? attemptQuizId === quizId : value(attempt, ["exam_title"]) === value(quiz, ["quiz_title"]);
+    });
+    const quizAttempts = attempts.filter((attempt) => {
+      const attemptQuizId = value(attempt, ["quiz_id", "exam_id"]);
+      return attemptQuizId ? attemptQuizId === quizId : value(attempt, ["exam_title"]) === value(quiz, ["quiz_title"]);
+    });
+    const submitting = submittingQuizIds.has(quizId);
+    const diagnostic = quizSubmissionDiagnostics[quizId];
+    const showDiagnostic = process.env.NODE_ENV !== "production" && diagnostic;
+    const latestPassed = value(latestResult, ["result"]) === "Pass" || value(latestResult, ["passed"]) === "true";
+    return (
+      <article key={quizId} className="bg-navy-950 p-5">
+        <p className="text-xs uppercase tracking-[.2em] text-gold-300">Quiz · Passing {quizPassingScore(quiz)}% · {value(quiz, ["file_size"], "1")} points</p>
+        <h4 className="mt-2 font-semibold text-white">{value(quiz, ["quiz_title"])}</h4>
+        {showDiagnostic ? (
+          <div className="mt-4 border border-gold-500/18 bg-navy-900/70 p-4 text-xs text-ink/68">
+            <p className="font-semibold text-gold-300">Quiz Submission Diagnostic</p>
+            <p className="mt-2">Stage: {diagnostic.stage}</p>
+            <p>Authenticated user ID: {diagnostic.authUserId}</p>
+            <p>Internal student ID: {diagnostic.internalStudentId}</p>
+            <p>Course ID: {diagnostic.courseId}</p>
+            <p>Lesson ID: {diagnostic.lessonId}</p>
+            <p>Quiz ID: {diagnostic.quizId}</p>
+            <p>Insert student_id: {diagnostic.insertStudentId}</p>
+            <p>Error code: {diagnostic.errorCode}</p>
+            <p className="break-words">Error message: {diagnostic.errorMessage}</p>
+            <details className="mt-2">
+              <summary className="cursor-pointer text-gold-300">Insert payload</summary>
+              <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words text-[11px] text-ink/62">{diagnostic.payload}</pre>
+            </details>
+          </div>
+        ) : null}
+        {latestResult ? (
+          <div className={`mt-4 border p-4 ${latestPassed ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100" : "border-red-300/35 bg-red-500/10 text-red-100"}`}>
+            <p className="text-xs uppercase tracking-[.18em]">{latestPassed ? "Assessment Passed" : "Assessment Not Passed"}</p>
+            <p className="mt-2 text-sm font-bold">Result: {latestPassed ? "Passed" : "Not Passed"}</p>
+            <p className="mt-1 text-sm">Score: {value(latestResult, ["earned_points"], "0")} / {value(latestResult, ["total_points"], value(quiz, ["file_size"], "0"))}</p>
+            <p className="mt-1 text-sm">Percentage: {value(latestResult, ["percentage", "score"], "0")}%</p>
+            <p className="mt-1 text-xs opacity-80">Submitted {value(latestResult, ["submitted_at", "created_at"]) ? new Date(value(latestResult, ["submitted_at", "created_at"])).toLocaleString() : "just now"}</p>
+            {!latestPassed ? <p className="mt-2 text-sm">Assessment Not Passed — review the lesson and try again.</p> : null}
+          </div>
+        ) : null}
+        <div className="mt-4 grid gap-4">{questionsOf(quiz).map((questionRecord, index) => (
+          <label key={`${quizId}-${index}`} className="grid gap-2 text-sm text-ink/72">
+            <span>{questionRecord.questionText || questionRecord.prompt} <span className="text-gold-300">({questionRecord.points ?? 1} point{Number(questionRecord.points ?? 1) === 1 ? "" : "s"})</span></span>
+            <div className="grid gap-1 text-xs text-ink/60">
+              {questionRecord.options.map((option, optionIndex) => <span key={`${quizId}-${index}-display-${optionIndex}`}>Option {String.fromCharCode(65 + optionIndex)}: {option}</span>)}
+            </div>
+            <select className="field" value={answers[quizId]?.[index] ?? ""} onChange={(event) => setAnswers((current) => ({ ...current, [quizId]: { ...(current[quizId] ?? {}), [index]: event.target.value } }))}>
+              <option value="">Select answer</option>
+              {questionRecord.options.map((option) => <option key={option}>{option}</option>)}
+            </select>
+          </label>
+        ))}</div>
+        <button className="mt-4 bg-gold-500 px-4 py-2 text-sm font-bold text-navy-950 disabled:cursor-not-allowed disabled:opacity-60" type="button" disabled={submitting} onClick={() => submitQuiz(course, quiz)}>{submitting ? "Submitting..." : "Submit Quiz"}</button>
+        {latestPassed ? <p className="mt-3 text-sm text-emerald-100">Quiz requirement complete. Course progress updates when the connected lesson is marked complete.</p> : null}
+        {quizAttempts.length ? <div className="mt-5 border-t border-gold-500/15 pt-4"><p className="text-xs uppercase tracking-[.18em] text-gold-300">Saved Attempts</p><div className="mt-3 grid gap-2">{quizAttempts.slice(0, 5).map((attempt, index) => <div key={value(attempt, ["id"], `${quizId}-${index}`)} className="flex flex-col gap-1 border border-gold-500/12 bg-navy-900/70 p-3 text-sm text-ink/72 sm:flex-row sm:items-center sm:justify-between"><span>Attempt {value(attempt, ["attempt_number"], String(quizAttempts.length - index))} · {value(attempt, ["result"], "Submitted") === "Pass" ? "Passed" : "Not Passed"}</span><span className="text-gold-300">{value(attempt, ["earned_points"], "0")} / {value(attempt, ["total_points"], value(quiz, ["file_size"], "0"))} · {value(attempt, ["percentage", "score"], "0")}%</span></div>)}</div></div> : null}
+      </article>
+    );
+  }
+
   function courseMatches(course: DbRow) {
     if (!courseCode) return true;
     return [value(course, ["course_code"]), value(course, ["course_name", "title"]), safeSlug(value(course, ["course_name", "title"]))]
@@ -529,74 +627,13 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
                 return <section key={moduleId} className="bg-navy-950 p-5"><h4 className="text-lg font-semibold text-white">{value(module, ["module_title", "asset_title"])}</h4><p className="mt-2 text-sm text-ink/65">{value(module, ["module_description"])}</p><div className="mt-4 grid gap-3">{moduleLessons.map((lesson, index) => {
                   const lessonId = idOf(lesson); const done = completedLessonIds.has(lessonId);
                   const lessonHref = `/student-courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}`;
-                  return <article key={lessonId} className="border border-gold-500/18 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="mb-1 text-xs font-semibold uppercase tracking-[.16em] text-gold-300">Lesson {index + 1}</p><Link href={lessonHref} className="font-semibold text-white transition hover:text-gold-300">{value(lesson, ["lesson_title", "title"])}</Link><p className="mt-1 text-sm text-ink/65">{value(lesson, ["description"])}</p></div><Link className="inline-flex items-center justify-center gap-2 border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300 transition hover:border-gold-300 hover:text-white" href={lessonHref}><PlayCircle size={15} /> {done ? "Review Lesson" : "Open Lesson"}</Link></div><div className="mt-3 flex flex-wrap gap-2">{done ? <span className="inline-flex items-center gap-2 text-sm text-gold-300">Complete</span> : null}{value(lesson, ["video_url"]) ? <a className="inline-flex items-center gap-2 text-sm text-gold-300" href={value(lesson, ["video_url"])} target="_blank" rel="noreferrer"><PlayCircle size={15} /> Video</a> : null}{value(lesson, ["pdf_notes_url"]) ? <a className="inline-flex items-center gap-2 text-sm text-gold-300" href={value(lesson, ["pdf_notes_url"])} target="_blank" rel="noreferrer"><Download size={15} /> PDF Notes</a> : null}</div></article>;
+                  const lessonHomework = homework.filter((item) => value(item, ["course_id"]) === courseId && itemMatchesLesson(item, lesson));
+                  const lessonQuizzes = quizzes.filter((quiz) => value(quiz, ["course_id"]) === courseId && itemMatchesLesson(quiz, lesson));
+                  return <article key={lessonId} className="border border-gold-500/18 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="mb-1 text-xs font-semibold uppercase tracking-[.16em] text-gold-300">Lesson {index + 1}</p><Link href={lessonHref} className="font-semibold text-white transition hover:text-gold-300">{value(lesson, ["lesson_title", "title"])}</Link><p className="mt-1 text-sm text-ink/65">{value(lesson, ["description"])}</p></div><Link className="inline-flex items-center justify-center gap-2 border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300 transition hover:border-gold-300 hover:text-white" href={lessonHref}><PlayCircle size={15} /> {done ? "Review Lesson" : "Open Lesson"}</Link></div><div className="mt-3 flex flex-wrap gap-2">{done ? <span className="inline-flex items-center gap-2 text-sm text-gold-300">Complete</span> : null}{value(lesson, ["video_url"]) ? <a className="inline-flex items-center gap-2 text-sm text-gold-300" href={value(lesson, ["video_url"])} target="_blank" rel="noreferrer"><PlayCircle size={15} /> Video</a> : null}{value(lesson, ["pdf_notes_url"]) ? <a className="inline-flex items-center gap-2 text-sm text-gold-300" href={value(lesson, ["pdf_notes_url"])} target="_blank" rel="noreferrer"><Download size={15} /> PDF Notes</a> : null}</div>{lessonHomework.length ? <div className="mt-4 grid gap-3">{lessonHomework.map((item) => { const payload = parseAssetPayload(item); return <div key={idOf(item)} className="border border-gold-500/14 bg-navy-900/70 p-3"><p className="text-xs uppercase tracking-[.18em] text-gold-300">Homework · {homeworkDueLabel(item, payload)}</p><h5 className="mt-2 text-sm font-semibold text-white">{value(item, ["asset_title"])}</h5><p className="mt-2 text-sm text-ink/68">{payload?.instructions ?? value(item, ["description"])}</p>{value(item, ["url", "public_url"]) && value(item, ["url", "public_url"]) !== "#" ? <a className="mt-3 inline-flex items-center gap-2 text-sm text-gold-300" href={value(item, ["url", "public_url"])}><FileText size={15} /> Assignment File</a> : null}</div>; })}</div> : null}{lessonQuizzes.length ? <div className="mt-4 grid gap-3">{lessonQuizzes.map((quiz) => renderQuizCard(course, quiz))}</div> : null}</article>;
                 })}</div></section>;
               })}
-              {homework.filter((item) => value(item, ["course_id"]) === courseId).map((item) => { const payload = parseAssetPayload(item); return <article key={idOf(item)} className="bg-navy-950 p-5"><p className="text-xs uppercase tracking-[.2em] text-gold-300">Homework · Due in {String(payload?.dueDays ?? "7")} days</p><h4 className="mt-2 font-semibold text-white">{value(item, ["asset_title"])}</h4><p className="mt-2 text-sm text-ink/68">{payload?.instructions ?? ""}</p>{value(item, ["url", "public_url"]) && value(item, ["url", "public_url"]) !== "#" ? <a className="mt-3 inline-flex items-center gap-2 text-sm text-gold-300" href={value(item, ["url", "public_url"])}><FileText size={15} /> Assignment File</a> : null}</article>; })}
-              {quizzes.filter((quiz) => value(quiz, ["course_id"]) === courseId).map((quiz) => {
-                const quizId = idOf(quiz);
-                const latestResult = quizResults[quizId] ?? attempts.find((attempt) => {
-                  const attemptQuizId = value(attempt, ["quiz_id", "exam_id"]);
-                  return attemptQuizId ? attemptQuizId === quizId : value(attempt, ["exam_title"]) === value(quiz, ["quiz_title"]);
-                });
-                const quizAttempts = attempts.filter((attempt) => {
-                  const attemptQuizId = value(attempt, ["quiz_id", "exam_id"]);
-                  return attemptQuizId ? attemptQuizId === quizId : value(attempt, ["exam_title"]) === value(quiz, ["quiz_title"]);
-                });
-                const submitting = submittingQuizIds.has(quizId);
-                const diagnostic = quizSubmissionDiagnostics[quizId];
-                const showDiagnostic = process.env.NODE_ENV !== "production" && diagnostic;
-                const latestPassed = value(latestResult, ["result"]) === "Pass" || value(latestResult, ["passed"]) === "true";
-                return (
-                  <article key={quizId} className="bg-navy-950 p-5">
-                    <p className="text-xs uppercase tracking-[.2em] text-gold-300">Quiz · Passing {value(quiz, ["passing_score"], "80")}% · {value(quiz, ["file_size"], "1")} points</p>
-                    <h4 className="mt-2 font-semibold text-white">{value(quiz, ["quiz_title"])}</h4>
-                    {showDiagnostic ? (
-                      <div className="mt-4 border border-gold-500/18 bg-navy-900/70 p-4 text-xs text-ink/68">
-                        <p className="font-semibold text-gold-300">Quiz Submission Diagnostic</p>
-                        <p className="mt-2">Stage: {diagnostic.stage}</p>
-                        <p>Authenticated user ID: {diagnostic.authUserId}</p>
-                        <p>Internal student ID: {diagnostic.internalStudentId}</p>
-                        <p>Course ID: {diagnostic.courseId}</p>
-                        <p>Lesson ID: {diagnostic.lessonId}</p>
-                        <p>Quiz ID: {diagnostic.quizId}</p>
-                        <p>Insert student_id: {diagnostic.insertStudentId}</p>
-                        <p>Error code: {diagnostic.errorCode}</p>
-                        <p className="break-words">Error message: {diagnostic.errorMessage}</p>
-                        <details className="mt-2">
-                          <summary className="cursor-pointer text-gold-300">Insert payload</summary>
-                          <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words text-[11px] text-ink/62">{diagnostic.payload}</pre>
-                        </details>
-                      </div>
-                    ) : null}
-                    {latestResult ? (
-                      <div className={`mt-4 border p-4 ${latestPassed ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100" : "border-red-300/35 bg-red-500/10 text-red-100"}`}>
-                        <p className="text-xs uppercase tracking-[.18em]">{latestPassed ? "Assessment Passed" : "Assessment Not Passed"}</p>
-                        <p className="mt-2 text-sm font-bold">Result: {latestPassed ? "Passed" : "Not Passed"}</p>
-                        <p className="mt-1 text-sm">Score: {value(latestResult, ["earned_points"], "0")} / {value(latestResult, ["total_points"], value(quiz, ["file_size"], "0"))}</p>
-                        <p className="mt-1 text-sm">Percentage: {value(latestResult, ["percentage", "score"], "0")}%</p>
-                        <p className="mt-1 text-xs opacity-80">Submitted {value(latestResult, ["submitted_at", "created_at"]) ? new Date(value(latestResult, ["submitted_at", "created_at"])).toLocaleString() : "just now"}</p>
-                        {!latestPassed ? <p className="mt-2 text-sm">Assessment Not Passed — review the lesson and try again.</p> : null}
-                      </div>
-                    ) : null}
-                    <div className="mt-4 grid gap-4">{questionsOf(quiz).map((questionRecord, index) => (
-                      <label key={`${quizId}-${index}`} className="grid gap-2 text-sm text-ink/72">
-                        <span>{questionRecord.questionText || questionRecord.prompt} <span className="text-gold-300">({questionRecord.points ?? 1} point{Number(questionRecord.points ?? 1) === 1 ? "" : "s"})</span></span>
-                        <div className="grid gap-1 text-xs text-ink/60">
-                          {questionRecord.options.map((option, optionIndex) => <span key={`${quizId}-${index}-display-${optionIndex}`}>Option {String.fromCharCode(65 + optionIndex)}: {option}</span>)}
-                        </div>
-                        <select className="field" value={answers[quizId]?.[index] ?? ""} onChange={(event) => setAnswers((current) => ({ ...current, [quizId]: { ...(current[quizId] ?? {}), [index]: event.target.value } }))}>
-                          <option value="">Select answer</option>
-                          {questionRecord.options.map((option) => <option key={option}>{option}</option>)}
-                        </select>
-                      </label>
-                    ))}</div>
-                    <button className="mt-4 bg-gold-500 px-4 py-2 text-sm font-bold text-navy-950 disabled:cursor-not-allowed disabled:opacity-60" type="button" disabled={submitting} onClick={() => submitQuiz(course, quiz)}>{submitting ? "Submitting..." : "Submit Quiz"}</button>
-                    {latestPassed ? <p className="mt-3 text-sm text-emerald-100">Quiz requirement complete. Course progress updates when the connected lesson is marked complete.</p> : null}
-                    {quizAttempts.length ? <div className="mt-5 border-t border-gold-500/15 pt-4"><p className="text-xs uppercase tracking-[.18em] text-gold-300">Saved Attempts</p><div className="mt-3 grid gap-2">{quizAttempts.slice(0, 5).map((attempt, index) => <div key={value(attempt, ["id"], `${quizId}-${index}`)} className="flex flex-col gap-1 border border-gold-500/12 bg-navy-900/70 p-3 text-sm text-ink/72 sm:flex-row sm:items-center sm:justify-between"><span>Attempt {value(attempt, ["attempt_number"], String(quizAttempts.length - index))} · {value(attempt, ["result"], "Submitted") === "Pass" ? "Passed" : "Not Passed"}</span><span className="text-gold-300">{value(attempt, ["earned_points"], "0")} / {value(attempt, ["total_points"], value(quiz, ["file_size"], "0"))} · {value(attempt, ["percentage", "score"], "0")}%</span></div>)}</div></div> : null}
-                  </article>
-                );
-              })}
+              {homework.filter((item) => value(item, ["course_id"]) === courseId && itemIsCourseLevel(item)).map((item) => { const payload = parseAssetPayload(item); return <article key={idOf(item)} className="bg-navy-950 p-5"><p className="text-xs uppercase tracking-[.2em] text-gold-300">Homework · {homeworkDueLabel(item, payload)}</p><h4 className="mt-2 font-semibold text-white">{value(item, ["asset_title"])}</h4><p className="mt-2 text-sm text-ink/68">{payload?.instructions ?? ""}</p>{value(item, ["url", "public_url"]) && value(item, ["url", "public_url"]) !== "#" ? <a className="mt-3 inline-flex items-center gap-2 text-sm text-gold-300" href={value(item, ["url", "public_url"])}><FileText size={15} /> Assignment File</a> : null}</article>; })}
+              {quizzes.filter((quiz) => value(quiz, ["course_id"]) === courseId && itemIsCourseLevel(quiz)).map((quiz) => renderQuizCard(course, quiz))}
             </div> : null}
           </article>
         );

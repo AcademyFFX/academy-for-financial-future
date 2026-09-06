@@ -72,6 +72,13 @@ assert.match(lmsCourseCenter, /\{canonicalCourseLessons\.length\} lesson/, "mana
 assert.doesNotMatch(lmsCourseCenter, /department_name"\], "AFF Global University"\)} · \{value\(course, \["duration"\]/, "managed LMS course card header must not use stale course duration for academic lesson count");
 assert.match(lmsCourseCenter, /moduleLessons\.map\(\(lesson, index\) =>/, "managed LMS lesson list must derive visible lesson sequence from the canonical sorted array index");
 assert.match(lmsCourseCenter, /Lesson \{index \+ 1\}/, "managed LMS lesson list must not display duplicated stored lesson_order values");
+assert.match(lmsCourseCenter, /function itemMatchesLesson/, "managed LMS homework and quizzes must support strict lesson matching");
+assert.match(lmsCourseCenter, /lessonHomework = homework\.filter\(\(item\) => value\(item, \["course_id"\]\) === courseId && itemMatchesLesson\(item, lesson\)\)/, "managed LMS homework must render under only its linked lesson");
+assert.match(lmsCourseCenter, /lessonQuizzes = quizzes\.filter\(\(quiz\) => value\(quiz, \["course_id"\]\) === courseId && itemMatchesLesson\(quiz, lesson\)\)/, "managed LMS quizzes must render under only their linked lesson");
+assert.match(lmsCourseCenter, /function homeworkDueLabel/, "managed LMS homework due display must be centralized");
+assert.match(lmsCourseCenter, /No Due Date/, "managed LMS homework must honor no due date instead of falling back to seven days");
+assert.match(lmsCourseCenter, /function quizPassingScore/, "managed LMS quiz passing score must be normalized separately from quiz point totals");
+assert.match(lmsCourseCenter, /score >= 50 && score <= 100/, "managed LMS quiz passing score must not use small point totals as percentages");
 assert.match(lmsCourseCenter, /\.from\("exams"\)\.select\("\*"\)\.eq\("auth_user_id", user\.id\)/, "student quiz attempts should load by auth_user_id when available");
 assert.match(lmsCourseCenter, /\.from\("exams"\)\.select\("\*"\)\.eq\("student_id", internalStudentId\)/, "student quiz attempts must fall back to internal students.id when production student_id is bigint");
 assert.match(lmsCourseCenter, /Answer question \$\{unanswered \+ 1\} before submitting this quiz\./, "student quiz submission must validate unanswered questions visibly");
@@ -97,6 +104,10 @@ assert.match(studentLessonViewer, /youtubeEmbedUrl/, "student lesson viewer must
 assert.match(studentLessonViewer, /vimeoEmbedUrl/, "student lesson viewer must parse Vimeo classroom URLs");
 assert.match(studentLessonViewer, /isDirectVideo\(url\)/, "student lesson viewer must detect MP4/uploaded classroom video URLs");
 assert.match(studentLessonViewer, /Lesson media is being prepared by the Academy\./, "student lesson viewer must preserve the no-media placeholder");
+assert.match(studentLessonViewer, /function assetMatchesLessonOrSharedResource/, "student lesson viewer must keep quiz and homework assets scoped to the current lesson");
+assert.match(studentLessonViewer, /if \(type === "Quiz" \|\| resourceGroupFor\(asset\) === "Homework Files"\) return assetMatchesLesson\(asset, course, lesson\)/, "student lesson viewer must not fall back to course-level quiz or homework assets on lesson pages");
+assert.match(studentLessonViewer, /function assignmentDueLabel/, "student lesson viewer must centralize assignment due-date display");
+assert.match(studentLessonViewer, /booleanValue\(assignment, \["no_due_date", "noDueDate"\]\)/, "student lesson viewer must honor no_due_date before displaying due-date fallbacks");
 assert.match(studentLessonViewer, /Playback tracking is available for direct Academy video files\./, "iframe providers must not claim precise playback tracking without provider APIs");
 assert.match(studentLessonViewer, /\.from\("video_progress"\)[\s\S]*\.eq\("auth_user_id", user\.id\)[\s\S]*\.eq\("course_id", Number\(idOf\(course\)\)\)[\s\S]*\.eq\("lesson_id", Number\(idOf\(lesson\)\)\)/, "student lesson viewer must load playback progress for only the authenticated student");
 assert.match(studentLessonViewer, /\.from\("video_progress"\)[\s\S]*\.upsert\([\s\S]*onConflict: "auth_user_id,course_id,lesson_id"/, "student lesson viewer must upsert playback progress through the video_progress composite key");

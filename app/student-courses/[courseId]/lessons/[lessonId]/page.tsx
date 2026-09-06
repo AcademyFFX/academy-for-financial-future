@@ -296,13 +296,43 @@ function assignmentMatchesLesson(row: DbRow, course: DbRow, lesson: DbRow) {
   const rowCourseId = value(row, ["course_id"]);
   const rowLessonId = value(row, ["lesson_id"]);
   const rowLesson = value(row, ["lesson_title"]);
-  const moduleText = value(row, ["course_module", "module_title"]);
   return Boolean(
-    (rowLessonId && rowLessonId === lessonId) ||
-      (rowCourseId && rowCourseId === courseId) ||
-      (rowLesson && sameText(rowLesson, lessonTitle(lesson))) ||
-      (moduleText && sameText(moduleText, courseTitle(course)))
+    rowCourseId === courseId &&
+      ((rowLessonId && rowLessonId === lessonId) ||
+        (rowLesson && sameText(rowLesson, lessonTitle(lesson))))
   );
+}
+
+function assetMatchesLesson(asset: DbRow, course: DbRow, lesson: DbRow) {
+  const assetCourseId = value(asset, ["course_id"]);
+  const assetLessonId = value(asset, ["lesson_id"]);
+  const assetLessonTitle = value(asset, ["lesson_title"]);
+  return Boolean(
+    assetCourseId === idOf(course) &&
+      ((assetLessonId && assetLessonId === idOf(lesson)) ||
+        (assetLessonTitle && sameText(assetLessonTitle, lessonTitle(lesson))))
+  );
+}
+
+function assetMatchesLessonOrSharedResource(asset: DbRow, course: DbRow, lesson: DbRow) {
+  const type = resourceType(asset);
+  if (type === "Quiz" || resourceGroupFor(asset) === "Homework Files") return assetMatchesLesson(asset, course, lesson);
+  const assetCourseId = value(asset, ["course_id"]);
+  const assetLessonId = value(asset, ["lesson_id"]);
+  const assetModuleId = value(asset, ["module_id"]);
+  const lessonModuleId = value(lesson, ["module_id"]);
+  return assetCourseId === idOf(course) && (!assetLessonId || assetLessonId === idOf(lesson)) && (!assetModuleId || !lessonModuleId || assetModuleId === lessonModuleId);
+}
+
+function booleanValue(row: DbRow | null | undefined, keys: string[]) {
+  const raw = value(row, keys).trim().toLowerCase();
+  return ["true", "1", "yes", "y", "checked"].includes(raw);
+}
+
+function assignmentDueLabel(assignment: DbRow, payload: DbRow) {
+  if (booleanValue(assignment, ["no_due_date", "noDueDate"]) || booleanValue(payload, ["no_due_date", "noDueDate"])) return "No Due Date";
+  const dueDate = value(assignment, ["due_date", "submission_date"], value(payload, ["due_date"]));
+  return dueDate || "No Due Date";
 }
 
 function resourceGroupFor(asset: DbRow) {
@@ -489,13 +519,7 @@ export default function StudentLessonViewerPage() {
         }
       }
 
-      const assets = ((assetResult.data ?? []) as DbRow[]).filter((asset) => {
-        const assetCourseId = value(asset, ["course_id"]);
-        const assetLessonId = value(asset, ["lesson_id"]);
-        const assetModuleId = value(asset, ["module_id"]);
-        const lessonModuleId = value(lesson, ["module_id"]);
-        return assetCourseId === idOf(course) && (!assetLessonId || assetLessonId === idOf(lesson)) && (!assetModuleId || !lessonModuleId || assetModuleId === lessonModuleId);
-      });
+      const assets = ((assetResult.data ?? []) as DbRow[]).filter((asset) => assetMatchesLessonOrSharedResource(asset, course, lesson));
 
       const assignments = assignmentResult.error
         ? assets.filter((asset) => resourceGroupFor(asset) === "Homework Files")
@@ -1339,7 +1363,7 @@ function HomeworkPanel({ assignments, submission, course, lesson }: { assignment
     <div className="mt-4 grid gap-4">
       {assignments.map((assignment, index) => {
         const payload = parseAssetPayload(assignment);
-        const dueDate = value(assignment, ["due_date", "submission_date"], value(payload, ["due_date"]));
+        const dueDate = assignmentDueLabel(assignment, payload);
         const instructions = value(assignment, ["instructions", "student_notes", "description"], value(payload, ["instructions"], fileDescription(assignment)));
         const title = value(assignment, ["title", "asset_title", "file_name"], `${lessonTitle(lesson)} Homework`);
         return (

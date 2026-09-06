@@ -78,7 +78,7 @@ function sameText(left: string, right: string) {
 function isPublished(row: DbRow, keys: string[]) {
   const status = value(row, keys);
   if (!status) return true;
-  return status.trim().toLowerCase() === "published";
+  return ["published", "active", "available"].includes(status.trim().toLowerCase());
 }
 
 function parseAssetPayload(row: DbRow) {
@@ -499,6 +499,7 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
       {publishedCourses.filter(courseMatches).map((course) => {
         const courseId = idOf(course);
         const enrolled = enrollmentByCourse.has(courseId) || Boolean(enrollmentForCourse(course));
+        const canonicalCourseLessons = publishedLessons.filter((lesson) => value(lesson, ["course_id"]) === courseId);
         const percent = coursePercent(courseId);
         const courseModules = modules.filter((module) => value(module, ["course_id"]) === courseId);
         const courseSections = courseModules.length ? courseModules : [{ id: `lessons-${courseId}`, module_title: "Lessons", course_id: courseId }];
@@ -513,7 +514,7 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
               </Link>
               <div className="p-6">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div><p className="text-xs uppercase tracking-[.2em] text-gold-300">{value(course, ["department_name"], "AFF Global University")} · {value(course, ["duration"], "Managed Course")}</p><Link href={`/courses/managed/${encodeURIComponent(courseLinkKey)}`}><h3 className="mt-2 text-2xl font-semibold text-white hover:text-gold-300">{courseName}</h3></Link><p className="mt-3 leading-7 text-ink/70">{value(course, ["description"])}</p>{value(course, ["certification_title"]) ? <p className="mt-3 text-sm font-semibold text-gold-300">Certification: {value(course, ["certification_title"])}</p> : null}</div>
+                  <div><p className="text-xs uppercase tracking-[.2em] text-gold-300">{value(course, ["department_name"], "AFF Global University")} · {canonicalCourseLessons.length} lesson{canonicalCourseLessons.length === 1 ? "" : "s"}</p><Link href={`/courses/managed/${encodeURIComponent(courseLinkKey)}`}><h3 className="mt-2 text-2xl font-semibold text-white hover:text-gold-300">{courseName}</h3></Link><p className="mt-3 leading-7 text-ink/70">{value(course, ["description"])}</p>{value(course, ["certification_title"]) ? <p className="mt-3 text-sm font-semibold text-gold-300">Certification: {value(course, ["certification_title"])}</p> : null}</div>
                   <button className="shrink-0 bg-gold-500 px-4 py-3 text-sm font-bold text-navy-950 disabled:opacity-60" disabled={enrolled} onClick={() => enroll(courseId)}>{enrolled ? "Enrolled" : "Enroll"}</button>
                 </div>
                 <div className="mt-5"><div className="mb-2 flex justify-between text-sm"><span>{percent}% complete</span><span className="text-gold-300">{value(course, ["instructor", "instructor_name"])}</span></div><ProgressBar value={percent} /></div>
@@ -524,7 +525,7 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
             {enrolled ? <div className="grid gap-px bg-gold-500/14">
               {courseSections.map((module) => {
                 const moduleId = idOf(module);
-                const moduleLessons = publishedLessons.filter((lesson) => value(lesson, ["course_id"]) === courseId);
+                const moduleLessons = canonicalCourseLessons;
                 return <section key={moduleId} className="bg-navy-950 p-5"><h4 className="text-lg font-semibold text-white">{value(module, ["module_title", "asset_title"])}</h4><p className="mt-2 text-sm text-ink/65">{value(module, ["module_description"])}</p><div className="mt-4 grid gap-3">{moduleLessons.map((lesson) => {
                   const lessonId = idOf(lesson); const done = completedLessonIds.has(lessonId);
                   const lessonHref = `/student-courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}`;

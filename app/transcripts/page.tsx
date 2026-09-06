@@ -53,6 +53,28 @@ function gradePoints(grade: string) {
   return 0;
 }
 
+function normalizedKeyPart(text: string) {
+  return text.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function isPassedAssessment(row: DbRow) {
+  const result = value(row, ["result", "pass_fail", "status"]).toLowerCase();
+  const passed = value(row, ["passed"]).toLowerCase();
+  return ["pass", "passed"].includes(result) || passed === "true" || numberValue(row, ["percentage", "score"]) >= 80;
+}
+
+function assessmentIdentity(row: DbRow, index: number) {
+  const explicitId = value(row, ["quiz_id", "exam_id", "assessment_id", "certificate_exam_id"]);
+  const title = value(row, ["exam_title", "quiz_title", "assessment_title", "title"], `assessment-${index}`);
+  const courseId = value(row, ["course_id"], "course");
+  const lessonId = value(row, ["lesson_id"], "lesson");
+  return [courseId, lessonId, explicitId || normalizedKeyPart(title)].map(normalizedKeyPart).join("::");
+}
+
+function countDistinctPassedAssessments(rows: DbRow[]) {
+  return new Set(rows.filter(isPassedAssessment).map(assessmentIdentity)).size;
+}
+
 function pdfEscape(text: string) {
   return text.replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)");
 }
@@ -164,13 +186,13 @@ export default function TranscriptsPage() {
     const gpa = gpaRows.length ? gpaRows.reduce((total, row) => total + gradePoints(value(row, ["grade"])), 0) / gpaRows.length : 0;
     const present = attendance.filter((row) => value(row, ["attendance_status", "status"]).toLowerCase() === "present").length;
     const attendancePercentage = attendance.length ? Math.round((present / attendance.length) * 100) : 0;
-    const passedExams = exams.filter((row) => value(row, ["result", "pass_fail", "status"]).toLowerCase() === "pass" || numberValue(row, ["score"]) >= 80);
+    const passedExams = countDistinctPassedAssessments(exams);
     const bestDegree = degrees.find((degree) => creditsEarned < numberValue(degree, ["credits_required"])) ?? degrees[degrees.length - 1];
     const creditsRequired = numberValue(bestDegree ?? {}, ["credits_required"], 60);
     return {
       coursesCompleted: completedCredits.length,
       certificationsEarned: certificates.length,
-      passedExams: passedExams.length,
+      passedExams,
       attendancePercentage,
       gpa: Number(gpa.toFixed(2)),
       creditsEarned,
@@ -178,7 +200,7 @@ export default function TranscriptsPage() {
       degreeName: value(bestDegree ?? {}, ["degree_name"], "Associate of Financial Markets"),
       creditsRequired,
       remainingCredits: Math.max(0, creditsRequired - creditsEarned),
-      graduationReady: creditsEarned >= creditsRequired && passedExams.length > 0
+      graduationReady: creditsEarned >= creditsRequired && passedExams > 0
     };
   }, [attendance, certificates.length, credits, degrees, exams]);
 

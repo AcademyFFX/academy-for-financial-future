@@ -66,6 +66,10 @@ assert.match(lmsCourseCenter, /const \[submittingQuizIds, setSubmittingQuizIds\]
 assert.match(lmsCourseCenter, /const \[quizSubmissionDiagnostics, setQuizSubmissionDiagnostics\]/, "student quiz submission must expose safe production diagnostics");
 assert.match(lmsCourseCenter, /function isStudentIdTypeMismatch/, "student quiz submission must detect uuid/bigint student_id mismatches");
 assert.match(lmsCourseCenter, /function isMissingColumn/, "student quiz submission must detect missing attempt metadata columns");
+assert.match(lmsCourseCenter, /\["published", "active", "available"\]\.includes\(status\.trim\(\)\.toLowerCase\(\)\)/, "managed LMS lesson/course availability must use the same published/active/available canonical status rule as progress");
+assert.match(lmsCourseCenter, /const canonicalCourseLessons = publishedLessons\.filter\(\(lesson\) => value\(lesson, \["course_id"\]\) === courseId\)/, "managed LMS course cards must derive displayed lesson count from the canonical lesson set");
+assert.match(lmsCourseCenter, /\{canonicalCourseLessons\.length\} lesson/, "managed LMS course cards must not display stale courses.duration as the lesson count");
+assert.doesNotMatch(lmsCourseCenter, /department_name"\], "AFF Global University"\)} · \{value\(course, \["duration"\]/, "managed LMS course card header must not use stale course duration for academic lesson count");
 assert.match(lmsCourseCenter, /\.from\("exams"\)\.select\("\*"\)\.eq\("auth_user_id", user\.id\)/, "student quiz attempts should load by auth_user_id when available");
 assert.match(lmsCourseCenter, /\.from\("exams"\)\.select\("\*"\)\.eq\("student_id", internalStudentId\)/, "student quiz attempts must fall back to internal students.id when production student_id is bigint");
 assert.match(lmsCourseCenter, /Answer question \$\{unanswered \+ 1\} before submitting this quiz\./, "student quiz submission must validate unanswered questions visibly");
@@ -109,6 +113,11 @@ assert.match(studentProfile, /\.from\("students"\)[\s\S]*profile_photo_url/, "st
 assert.match(studentProfile, /\.eq\("auth_user_id", authenticatedUserId\)[\s\S]*\.select\("id, student_id, auth_user_id, profile_photo_url"\)[\s\S]*\.single\(\)/, "student profile photo update must match auth_user_id, return the saved students row, and require a single row");
 assert.match(studentProfile, /verifiedUrl !== publicUrl/, "student profile photo upload must verify the saved URL equals the generated Storage URL");
 assert.doesNotMatch(studentProfile, /\.from\("student_profiles"\)|student_profiles\.profile_photo_url/, "student profile page must not reference the missing student_profiles table for photo persistence");
+
+const transcripts = read("app/transcripts/page.tsx");
+assert.match(transcripts, /function countDistinctPassedAssessments/, "transcript analytics must count distinct passed assessments rather than raw passed attempt rows");
+assert.match(transcripts, /new Set\(rows\.filter\(isPassedAssessment\)\.map\(assessmentIdentity\)\)\.size/, "transcript passed-exam count must deduplicate repeated attempts by assessment identity");
+assert.doesNotMatch(transcripts, /passedExams = exams\.filter[\s\S]*passedExams\.length/, "transcript passed-exam count must not expose passed attempt volume as academic achievement");
 
 assert.match(directoryRoute, /getAffAdminStatus\(\)/, "student directory API must check server-side admin status");
 assert.match(directoryRoute, /status: 403/, "student directory API must deny non-admin requests");

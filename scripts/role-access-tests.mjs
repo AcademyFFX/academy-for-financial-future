@@ -76,9 +76,13 @@ assert.match(lmsCourseCenter, /total_points: totalPoints/, "student quiz submiss
 assert.match(lmsCourseCenter, /earned_points: earnedPoints/, "student quiz submission must persist earned points");
 assert.match(lmsCourseCenter, /percentage/, "student quiz submission must persist and render percentage");
 assert.match(lmsCourseCenter, /retrying_internal_student_attempt/, "student quiz submission must retry with internal student id if production expects bigint student_id");
-assert.match(lmsCourseCenter, /Quiz Submission Diagnostic/, "student quiz UI must show safe production diagnostics around failed submissions");
+assert.match(lmsCourseCenter, /process\.env\.NODE_ENV !== "production" && diagnostic/, "student quiz diagnostics must be hidden from production students");
+assert.match(lmsCourseCenter, /Quiz Submission Diagnostic/, "student quiz UI may keep diagnostics for development-only troubleshooting");
 assert.match(lmsCourseCenter, /\.from\("exams"\)\.insert\([\s\S]*\.select\("\*"\)\.single\(\)/, "student quiz submission must read back the saved exam attempt before showing success");
 assert.match(lmsCourseCenter, /Quiz submitted successfully:/, "student quiz submission must display score and pass/fail after save");
+assert.match(lmsCourseCenter, /Assessment Passed/, "passing quiz results must show a polished assessment passed status");
+assert.match(lmsCourseCenter, /Assessment Not Passed — review the lesson and try again\./, "failing quiz results must explain the retry path");
+assert.match(lmsCourseCenter, /Course progress updates when the connected lesson is marked complete\./, "quiz pass messaging must preserve lesson-completion progress semantics");
 assert.match(lmsCourseCenter, /Saved Attempts/, "student quiz UI must render saved attempt history");
 assert.match(studentLessonViewer, /\.from\("students"\)[\s\S]*\.eq\("auth_user_id", user\.id\)/, "student lesson viewer must locate students by auth_user_id");
 assert.match(studentLessonViewer, /\.from\("enrollments"\)[\s\S]*\.eq\("student_id", studentId\)/, "student lesson viewer must verify enrollment through internal students.id");

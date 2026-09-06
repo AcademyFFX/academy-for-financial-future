@@ -544,18 +544,57 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
                 });
                 const submitting = submittingQuizIds.has(quizId);
                 const diagnostic = quizSubmissionDiagnostics[quizId];
-                return <article key={quizId} className="bg-navy-950 p-5"><p className="text-xs uppercase tracking-[.2em] text-gold-300">Quiz · Passing {value(quiz, ["passing_score"], "80")}% · {value(quiz, ["file_size"], "1")} points</p><h4 className="mt-2 font-semibold text-white">{value(quiz, ["quiz_title"])}</h4>{diagnostic ? <div className="mt-4 border border-gold-500/18 bg-navy-900/70 p-4 text-xs text-ink/68"><p className="font-semibold text-gold-300">Quiz Submission Diagnostic</p><p className="mt-2">Stage: {diagnostic.stage}</p><p>Authenticated user ID: {diagnostic.authUserId}</p><p>Internal student ID: {diagnostic.internalStudentId}</p><p>Course ID: {diagnostic.courseId}</p><p>Lesson ID: {diagnostic.lessonId}</p><p>Quiz ID: {diagnostic.quizId}</p><p>Insert student_id: {diagnostic.insertStudentId}</p><p>Error code: {diagnostic.errorCode}</p><p className="break-words">Error message: {diagnostic.errorMessage}</p><details className="mt-2"><summary className="cursor-pointer text-gold-300">Insert payload</summary><pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words text-[11px] text-ink/62">{diagnostic.payload}</pre></details></div> : null}{latestResult ? <div className={`mt-4 border p-4 ${value(latestResult, ["result"]) === "Pass" ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100" : "border-red-300/35 bg-red-500/10 text-red-100"}`}><p className="text-sm font-bold">Result: {value(latestResult, ["result"], "Submitted") === "Pass" ? "Passed" : "Not Passed"}</p><p className="mt-1 text-sm">Score: {value(latestResult, ["earned_points"], "0")} / {value(latestResult, ["total_points"], value(quiz, ["file_size"], "0"))}</p><p className="mt-1 text-sm">Percentage: {value(latestResult, ["percentage", "score"], "0")}%</p><p className="mt-1 text-xs opacity-80">Submitted {value(latestResult, ["submitted_at", "created_at"]) ? new Date(value(latestResult, ["submitted_at", "created_at"])).toLocaleString() : "just now"}</p></div> : null}<div className="mt-4 grid gap-4">{questionsOf(quiz).map((questionRecord, index) => {
-                console.log(questionRecord);
+                const showDiagnostic = process.env.NODE_ENV !== "production" && diagnostic;
+                const latestPassed = value(latestResult, ["result"]) === "Pass" || value(latestResult, ["passed"]) === "true";
                 return (
-                  <label key={`${quizId}-${index}`} className="grid gap-2 text-sm text-ink/72">
-                    <span>{questionRecord.questionText || questionRecord.prompt} <span className="text-gold-300">({questionRecord.points ?? 1} point{Number(questionRecord.points ?? 1) === 1 ? "" : "s"})</span></span>
-                    <div className="grid gap-1 text-xs text-ink/60">
-                      {questionRecord.options.map((option, optionIndex) => <span key={`${quizId}-${index}-display-${optionIndex}`}>Option {String.fromCharCode(65 + optionIndex)}: {option}</span>)}
-                    </div>
-                    <select className="field" value={answers[quizId]?.[index] ?? ""} onChange={(event) => setAnswers((current) => ({ ...current, [quizId]: { ...(current[quizId] ?? {}), [index]: event.target.value } }))}><option value="">Select answer</option>{questionRecord.options.map((option) => <option key={option}>{option}</option>)}</select>
-                  </label>
+                  <article key={quizId} className="bg-navy-950 p-5">
+                    <p className="text-xs uppercase tracking-[.2em] text-gold-300">Quiz · Passing {value(quiz, ["passing_score"], "80")}% · {value(quiz, ["file_size"], "1")} points</p>
+                    <h4 className="mt-2 font-semibold text-white">{value(quiz, ["quiz_title"])}</h4>
+                    {showDiagnostic ? (
+                      <div className="mt-4 border border-gold-500/18 bg-navy-900/70 p-4 text-xs text-ink/68">
+                        <p className="font-semibold text-gold-300">Quiz Submission Diagnostic</p>
+                        <p className="mt-2">Stage: {diagnostic.stage}</p>
+                        <p>Authenticated user ID: {diagnostic.authUserId}</p>
+                        <p>Internal student ID: {diagnostic.internalStudentId}</p>
+                        <p>Course ID: {diagnostic.courseId}</p>
+                        <p>Lesson ID: {diagnostic.lessonId}</p>
+                        <p>Quiz ID: {diagnostic.quizId}</p>
+                        <p>Insert student_id: {diagnostic.insertStudentId}</p>
+                        <p>Error code: {diagnostic.errorCode}</p>
+                        <p className="break-words">Error message: {diagnostic.errorMessage}</p>
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-gold-300">Insert payload</summary>
+                          <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words text-[11px] text-ink/62">{diagnostic.payload}</pre>
+                        </details>
+                      </div>
+                    ) : null}
+                    {latestResult ? (
+                      <div className={`mt-4 border p-4 ${latestPassed ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100" : "border-red-300/35 bg-red-500/10 text-red-100"}`}>
+                        <p className="text-xs uppercase tracking-[.18em]">{latestPassed ? "Assessment Passed" : "Assessment Not Passed"}</p>
+                        <p className="mt-2 text-sm font-bold">Result: {latestPassed ? "Passed" : "Not Passed"}</p>
+                        <p className="mt-1 text-sm">Score: {value(latestResult, ["earned_points"], "0")} / {value(latestResult, ["total_points"], value(quiz, ["file_size"], "0"))}</p>
+                        <p className="mt-1 text-sm">Percentage: {value(latestResult, ["percentage", "score"], "0")}%</p>
+                        <p className="mt-1 text-xs opacity-80">Submitted {value(latestResult, ["submitted_at", "created_at"]) ? new Date(value(latestResult, ["submitted_at", "created_at"])).toLocaleString() : "just now"}</p>
+                        {!latestPassed ? <p className="mt-2 text-sm">Assessment Not Passed — review the lesson and try again.</p> : null}
+                      </div>
+                    ) : null}
+                    <div className="mt-4 grid gap-4">{questionsOf(quiz).map((questionRecord, index) => (
+                      <label key={`${quizId}-${index}`} className="grid gap-2 text-sm text-ink/72">
+                        <span>{questionRecord.questionText || questionRecord.prompt} <span className="text-gold-300">({questionRecord.points ?? 1} point{Number(questionRecord.points ?? 1) === 1 ? "" : "s"})</span></span>
+                        <div className="grid gap-1 text-xs text-ink/60">
+                          {questionRecord.options.map((option, optionIndex) => <span key={`${quizId}-${index}-display-${optionIndex}`}>Option {String.fromCharCode(65 + optionIndex)}: {option}</span>)}
+                        </div>
+                        <select className="field" value={answers[quizId]?.[index] ?? ""} onChange={(event) => setAnswers((current) => ({ ...current, [quizId]: { ...(current[quizId] ?? {}), [index]: event.target.value } }))}>
+                          <option value="">Select answer</option>
+                          {questionRecord.options.map((option) => <option key={option}>{option}</option>)}
+                        </select>
+                      </label>
+                    ))}</div>
+                    <button className="mt-4 bg-gold-500 px-4 py-2 text-sm font-bold text-navy-950 disabled:cursor-not-allowed disabled:opacity-60" type="button" disabled={submitting} onClick={() => submitQuiz(course, quiz)}>{submitting ? "Submitting..." : "Submit Quiz"}</button>
+                    {latestPassed ? <p className="mt-3 text-sm text-emerald-100">Quiz requirement complete. Course progress updates when the connected lesson is marked complete.</p> : null}
+                    {quizAttempts.length ? <div className="mt-5 border-t border-gold-500/15 pt-4"><p className="text-xs uppercase tracking-[.18em] text-gold-300">Saved Attempts</p><div className="mt-3 grid gap-2">{quizAttempts.slice(0, 5).map((attempt, index) => <div key={value(attempt, ["id"], `${quizId}-${index}`)} className="flex flex-col gap-1 border border-gold-500/12 bg-navy-900/70 p-3 text-sm text-ink/72 sm:flex-row sm:items-center sm:justify-between"><span>Attempt {value(attempt, ["attempt_number"], String(quizAttempts.length - index))} · {value(attempt, ["result"], "Submitted") === "Pass" ? "Passed" : "Not Passed"}</span><span className="text-gold-300">{value(attempt, ["earned_points"], "0")} / {value(attempt, ["total_points"], value(quiz, ["file_size"], "0"))} · {value(attempt, ["percentage", "score"], "0")}%</span></div>)}</div></div> : null}
+                  </article>
                 );
-              })}</div><button className="mt-4 bg-gold-500 px-4 py-2 text-sm font-bold text-navy-950 disabled:cursor-not-allowed disabled:opacity-60" type="button" disabled={submitting} onClick={() => submitQuiz(course, quiz)}>{submitting ? "Submitting..." : "Submit Quiz"}</button>{quizAttempts.length ? <div className="mt-5 border-t border-gold-500/15 pt-4"><p className="text-xs uppercase tracking-[.18em] text-gold-300">Saved Attempts</p><div className="mt-3 grid gap-2">{quizAttempts.slice(0, 5).map((attempt, index) => <div key={value(attempt, ["id"], `${quizId}-${index}`)} className="flex flex-col gap-1 border border-gold-500/12 bg-navy-900/70 p-3 text-sm text-ink/72 sm:flex-row sm:items-center sm:justify-between"><span>Attempt {value(attempt, ["attempt_number"], String(quizAttempts.length - index))} · {value(attempt, ["result"], "Submitted")}</span><span className="text-gold-300">{value(attempt, ["earned_points"], "0")}/{value(attempt, ["total_points"], value(quiz, ["file_size"], "0"))} · {value(attempt, ["percentage", "score"], "0")}%</span></div>)}</div></div> : null}</article>;
               })}
             </div> : null}
           </article>

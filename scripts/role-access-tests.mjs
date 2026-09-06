@@ -70,6 +70,8 @@ assert.match(lmsCourseCenter, /\["published", "active", "available"\]\.includes\
 assert.match(lmsCourseCenter, /const canonicalCourseLessons = publishedLessons\.filter\(\(lesson\) => value\(lesson, \["course_id"\]\) === courseId\)/, "managed LMS course cards must derive displayed lesson count from the canonical lesson set");
 assert.match(lmsCourseCenter, /\{canonicalCourseLessons\.length\} lesson/, "managed LMS course cards must not display stale courses.duration as the lesson count");
 assert.doesNotMatch(lmsCourseCenter, /department_name"\], "AFF Global University"\)} · \{value\(course, \["duration"\]/, "managed LMS course card header must not use stale course duration for academic lesson count");
+assert.match(lmsCourseCenter, /moduleLessons\.map\(\(lesson, index\) =>/, "managed LMS lesson list must derive visible lesson sequence from the canonical sorted array index");
+assert.match(lmsCourseCenter, /Lesson \{index \+ 1\}/, "managed LMS lesson list must not display duplicated stored lesson_order values");
 assert.match(lmsCourseCenter, /\.from\("exams"\)\.select\("\*"\)\.eq\("auth_user_id", user\.id\)/, "student quiz attempts should load by auth_user_id when available");
 assert.match(lmsCourseCenter, /\.from\("exams"\)\.select\("\*"\)\.eq\("student_id", internalStudentId\)/, "student quiz attempts must fall back to internal students.id when production student_id is bigint");
 assert.match(lmsCourseCenter, /Answer question \$\{unanswered \+ 1\} before submitting this quiz\./, "student quiz submission must validate unanswered questions visibly");
@@ -161,6 +163,8 @@ assert.match(adminLmsManager, /javascript\|data/, "admin course manager must rej
 assert.match(adminLmsManager, /Local file paths cannot be saved/, "admin course manager must reject accidental local file paths");
 assert.match(adminLmsManager, /Use a temporary public test video URL for technical verification/, "admin course manager must explain the temporary test video workflow");
 assert.match(adminLmsManager, /\.from\("lessons"\)\.update\(payload\)\.eq\("id", Number\(lessonForm\.lessonId\)\)\.select/, "admin course manager must update the existing lesson row and read it back");
+assert.match(adminLmsManager, /selectedCourseLessons = useMemo\(\(\) => lessons[\s\S]*\.sort\(\(left, right\) => numberValue\(left, \["lesson_order", "display_order", "sort_order"\]\)[\s\S]*numberValue\(left, \["id"\]\) - numberValue\(right, \["id"\]\)/, "admin lesson list must use the same canonical lesson ordering as student navigation");
+assert.match(adminLmsManager, /selectedCourseLessons\.map\(\(lesson, index\) =>[\s\S]*meta=\{`Lesson \$\{index \+ 1\}/, "admin lesson sequence labels must use canonical display index instead of raw duplicated lesson_order");
 assert.match(adminLmsManager, /Lesson media saved successfully\./, "admin course manager must show verified media save confirmation");
 assert.match(adminLmsManager, /savedProvider !== lessonForm\.videoProvider \|\| savedUrl !== expectedUrl/, "admin course manager must verify returned database media fields before reporting success");
 assert.match(adminLmsManager, /resetLessonPlaybackProgress/, "admin course manager must expose an optional reset playback progress action");

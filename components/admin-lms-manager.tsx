@@ -480,7 +480,9 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
   )), [courses]);
 
   const selectedCourseModules = useMemo(() => modules.filter((moduleRow) => value(moduleRow, ["course_id"]) === selectedCourseId), [modules, selectedCourseId]);
-  const selectedCourseLessons = useMemo(() => lessons.filter((lesson) => value(lesson, ["course_id"]) === selectedCourseId), [lessons, selectedCourseId]);
+  const selectedCourseLessons = useMemo(() => lessons
+    .filter((lesson) => value(lesson, ["course_id"]) === selectedCourseId)
+    .sort((left, right) => numberValue(left, ["lesson_order", "display_order", "sort_order"]) - numberValue(right, ["lesson_order", "display_order", "sort_order"]) || numberValue(left, ["id"]) - numberValue(right, ["id"])), [lessons, selectedCourseId]);
   const selectedCourseResources = useMemo(() => resources.filter((asset) => value(asset, ["course_id"]) === selectedCourseId), [resources, selectedCourseId]);
   const selectedCourseAssignments = useMemo(() => assignments.filter((asset) => value(asset, ["course_id"]) === selectedCourseId), [assignments, selectedCourseId]);
   const selectedCourseQuizzes = useMemo(() => quizAssets.filter((asset) => value(asset, ["course_id"]) === selectedCourseId), [quizAssets, selectedCourseId]);
@@ -1483,8 +1485,8 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
                 </div>
               </FormPanel>
               <ItemList empty="No lessons created for this course yet.">
-                {selectedCourseLessons.map((lesson) => (
-                  <AdminItem key={value(lesson, ["id"])} title={value(lesson, ["lesson_title", "title"])} meta={`Lesson ${value(lesson, ["lesson_order"], "1")} · ${value(lesson, ["video_type"], "Text-only lesson")}`} status={statusOf(lesson)}>
+                {selectedCourseLessons.map((lesson, index) => (
+                  <AdminItem key={value(lesson, ["id"])} title={value(lesson, ["lesson_title", "title"])} meta={`Lesson ${index + 1} · ${value(lesson, ["video_type"], "Text-only lesson")}`} status={statusOf(lesson)}>
                     <button onClick={() => editLesson(lesson)} className="mini-button" type="button">Edit</button>
                     <button onClick={() => duplicateLesson(lesson)} className="mini-button" type="button"><Copy size={14} /></button>
                     <button onClick={() => moveLesson(lesson, -1)} className="mini-button" type="button"><ArrowUp size={14} /></button>

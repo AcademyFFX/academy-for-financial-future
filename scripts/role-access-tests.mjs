@@ -254,6 +254,14 @@ assert.match(courseUploadCenter, /setQuestions\(\(current\) => \[\.\.\.current, 
 assert.match(courseUploadCenter, /Question \$\{questions\.length \+ 1\} prepared successfully\./, "adding 1, 4, 5, and later questions must surface a success message");
 assert.match(courseUploadCenter, /\{questions\.map\(\(question, index\) =>/, "prepared questions must render before publish for preview verification");
 assert.match(courseUploadCenter, /signed_url: JSON\.stringify\(\{ quizTitle: quizForm\.title, quiz_title: quizForm\.title, questions, passingScore: Number\(quizForm\.passingScore\) \}\)/, "publishing must save all prepared questions in the quiz payload");
+assert.match(adminLmsManager, /const \[quizStatusMessage, setQuizStatusMessage\]/, "course editor quiz builder must show question-save success and error messages inside the quiz panel");
+assert.match(adminLmsManager, /const \[savingQuizQuestion, setSavingQuizQuestion\]/, "course editor quiz builder must guard against duplicate question-save clicks");
+assert.match(adminLmsManager, /\.insert\(withUrl\)\.select\("\*"\)\.single\(\)/, "course editor question inserts must read back the saved course_assets row");
+assert.match(adminLmsManager, /\.eq\("id", editingQuestionId\)\.select\("\*"\)\.single\(\)/, "course editor question updates must read back the saved course_assets row");
+assert.match(adminLmsManager, /Supabase did not return the saved question row/, "course editor quiz builder must treat missing insert read-back as a visible failure");
+assert.match(adminLmsManager, /setQuizForm\(\(current\) => \(\{ \.\.\.current, prompt: "", options: "", correctAnswer: "", points: "1" \}\)\)/, "Save and Add Another must clear only question fields while preserving course, module, lesson, and title context");
+assert.doesNotMatch(adminLmsManager, /prompt: addAnother \? "" : ""/, "Save Question must not use the old unconditional field-clearing expression");
+assert.match(adminLmsManager, /disabled=\{savingQuizQuestion\} onClick=\{\(\) => saveQuizQuestion\(true\)\}/, "Save and Add Another must be disabled while a question save is in progress");
 assert.match(lessonVideoPersistenceMigration, /alter table public\.lessons add column if not exists video_provider text/, "lesson video persistence migration must add missing provider column idempotently");
 assert.match(lessonVideoPersistenceMigration, /grant update \([\s\S]*video_provider[\s\S]*video_url[\s\S]*video_duration_seconds[\s\S]*\) on public\.lessons to authenticated/, "lesson video persistence migration must grant only required update columns");
 assert.match(lessonVideoPersistenceMigration, /create policy "AFF admins can update lesson video metadata"[\s\S]*for update[\s\S]*using \(public\.is_aff_admin\(\)\)[\s\S]*with check \(public\.is_aff_admin\(\)\)/, "lesson video persistence migration must restrict lesson metadata updates to active AFF admins");

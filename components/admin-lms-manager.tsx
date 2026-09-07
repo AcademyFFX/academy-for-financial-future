@@ -378,10 +378,10 @@ async function insertCourseAsset(asset: CourseAssetInput) {
   };
 
   const withUrl = { ...base, url: asset.url, public_url: asset.url };
-  const first = await supabase.from("course_assets").insert(withUrl);
+  const first = await supabase.from("course_assets").insert(withUrl).select("*").single();
   if (!first.error) return first;
   if (!isMissingUrlColumn(first.error)) return first;
-  return supabase.from("course_assets").insert({ ...base, public_url: asset.url });
+  return supabase.from("course_assets").insert({ ...base, public_url: asset.url }).select("*").single();
 }
 
 export function AdminLmsManager({ initialCourseId = "", createMode = false }: { initialCourseId?: string; createMode?: boolean } = {}) {
@@ -406,6 +406,8 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
   const [quizForm, setQuizForm] = useState(emptyQuizForm);
   const [editingQuestionId, setEditingQuestionId] = useState("");
   const [showQuizPreview, setShowQuizPreview] = useState(false);
+  const [quizStatusMessage, setQuizStatusMessage] = useState("Each saved question is stored immediately. Publish the quiz after the question bank is ready.");
+  const [savingQuizQuestion, setSavingQuizQuestion] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1061,29 +1063,35 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
   function validateQuizQuestion() {
     const options = normalizeQuizOptions(quizForm.options);
     const correctAnswer = cleanQuizAnswerText(quizForm.correctAnswer);
+    const points = Number(quizForm.points || 1);
     if (!quizForm.courseId) return { error: "Select a course before saving a quiz question.", options };
+    if (Number.isNaN(Number(quizForm.courseId))) return { error: "Selected course is invalid. Reselect the course before saving.", options };
     if (!quizForm.title.trim()) return { error: "Quiz title is required.", options };
     if (!quizForm.prompt.trim()) return { error: "Question cannot be blank.", options };
     if (options.length < 2) return { error: "Enter at least two answer options separated by commas.", options };
     if (!correctAnswer) return { error: "Correct answer cannot be blank.", options };
     if (!options.includes(correctAnswer)) return { error: "Correct answer must exactly match one of the listed options after prefix cleanup.", options };
-    if (Number(quizForm.points) <= 0) return { error: "Point value must be at least 1.", options };
+    if (!Number.isFinite(points) || points <= 0) return { error: "Point value must be at least 1.", options };
     if (!editingQuestionId && savedQuestions.length >= 20) return { error: "This quiz already has 20 questions.", options };
-    return { error: "", options, correctAnswer };
+    return { error: "", options, correctAnswer, points };
   }
 
   async function saveQuizQuestion(addAnother = false) {
+    if (savingQuizQuestion) return;
     const validation = validateQuizQuestion();
     if (validation.error) {
       setMessage(validation.error);
+      setQuizStatusMessage(validation.error);
       return;
     }
+    setSavingQuizQuestion(true);
+    setQuizStatusMessage(addAnother ? "Saving question and preparing the next question..." : "Saving question...");
     const moduleTitle = value(selectedCourseModules.find((moduleRow) => value(moduleRow, ["module_id", "id"]) === quizForm.moduleId), ["module_title", "asset_title"]);
     const questionData = serializeQuizQuestion({
       questionText: quizForm.prompt.trim(),
       options: validation.options,
       correctAnswer: validation.correctAnswer ?? "",
-      points: Number(quizForm.points || 1)
+      points: validation.points ?? 1
     });
     const payload = {
       course_id: Number(quizForm.courseId),
@@ -1102,29 +1110,53 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
       asset_status: "Draft" as Status
     } satisfies CourseAssetInput;
 
-    const supabase = createClient();
-    const result = editingQuestionId
-      ? await supabase.from("course_assets").update({
-          course_id: payload.course_id,
-          module_id: payload.module_id,
-          module_title: payload.module_title,
-          lesson_id: payload.lesson_id,
-          asset_title: payload.asset_title,
-          file_name: payload.file_name,
-          file_type: payload.file_type,
-          signed_url: payload.signed_url,
-          mime_type: payload.mime_type,
-          file_size: payload.file_size,
-          asset_status: "Draft",
-          updated_at: new Date().toISOString()
-        }).eq("id", editingQuestionId)
-      : await insertCourseAsset(payload);
+    try {
+      const supabase = createClient();
+      const result = editingQuestionId
+        ? await supabase.from("course_assets").update({
+            course_id: payload.course_id,
+            module_id: payload.module_id,
+            module_title: payload.module_title,
+            lesson_id: payload.lesson_id,
+            asset_title: payload.asset_title,
+            file_name: payload.file_name,
+            file_type: payload.file_type,
+            signed_url: payload.signed_url,
+            mime_type: payload.mime_type,
+            file_size: payload.file_size,
+            asset_status: "Draft",
+            updated_at: new Date().toISOString()
+          }).eq("id", editingQuestionId).select("*").single()
+        : await insertCourseAsset(payload);
 
-    setMessage(result.error ? friendlyDatabaseError(result.error, "Unable to save quiz question.") : "Question saved successfully.");
-    if (!result.error) {
+      if (result.error) {
+        const detail = friendlyDatabaseError(result.error, "Unable to save quiz question.");
+        setMessage(detail);
+        setQuizStatusMessage(detail);
+        return;
+      }
+
+      if (!result.data) {
+        const detail = "Unable to save quiz question: Supabase did not return the saved question row.";
+        setMessage(detail);
+        setQuizStatusMessage(detail);
+        return;
+      }
+
+      const nextMessage = addAnother ? "Question saved successfully. Add the next question." : "Question saved successfully.";
+      setMessage(nextMessage);
+      setQuizStatusMessage(nextMessage);
       setEditingQuestionId("");
-      setQuizForm((current) => ({ ...current, prompt: addAnother ? "" : "", options: "", correctAnswer: "", points: "1" }));
+      if (addAnother) {
+        setQuizForm((current) => ({ ...current, prompt: "", options: "", correctAnswer: "", points: "1" }));
+      }
       await load();
+    } catch (error) {
+      const detail = errorMessage(error, "Unable to save quiz question.");
+      setMessage(detail);
+      setQuizStatusMessage(detail);
+    } finally {
+      setSavingQuizQuestion(false);
     }
   }
 
@@ -1152,7 +1184,9 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
       .neq("asset_status", "Published");
     if (quizForm.lessonId) query = query.eq("lesson_id", Number(quizForm.lessonId));
     const { error } = await query;
-    setMessage(error ? friendlyDatabaseError(error, "Unable to publish quiz.") : "Quiz published.");
+    const nextMessage = error ? friendlyDatabaseError(error, "Unable to publish quiz.") : "Quiz published.";
+    setMessage(nextMessage);
+    setQuizStatusMessage(nextMessage);
     if (!error) await load();
   }
 
@@ -1590,8 +1624,9 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
                 <input className="field" placeholder="Correct answer" value={quizForm.correctAnswer} onChange={(event) => setQuizForm({ ...quizForm, correctAnswer: event.target.value })} required />
                 <input className="field" type="number" min="1" placeholder="Point value" value={quizForm.points} onChange={(event) => setQuizForm({ ...quizForm, points: event.target.value })} />
                 <p className="text-sm font-semibold text-gold-300">Questions created: {savedQuestions.length} of 20</p>
+                <p className="border border-gold-500/16 bg-navy-950 p-3 text-sm text-ink/72">{quizStatusMessage}</p>
                 <div className="grid gap-3 sm:grid-cols-4">
-                  <button className="border border-gold-500/45 px-4 py-3 text-sm font-bold text-gold-300" type="button" onClick={() => saveQuizQuestion(true)}>Save and Add Another</button>
+                  <button className="border border-gold-500/45 px-4 py-3 text-sm font-bold text-gold-300 disabled:cursor-not-allowed disabled:opacity-45" type="button" disabled={savingQuizQuestion} onClick={() => saveQuizQuestion(true)}>{savingQuizQuestion ? "Saving..." : "Save and Add Another"}</button>
                   <button className="border border-gold-500/45 px-4 py-3 text-sm font-bold text-gold-300" type="button" onClick={() => setShowQuizPreview((current) => !current)}>Preview Quiz</button>
                   <button className="border border-gold-500/45 px-4 py-3 text-sm font-bold text-gold-300 disabled:cursor-not-allowed disabled:opacity-45" type="button" onClick={publishQuiz} disabled={selectedQuizPublished}>{selectedQuizPublished ? "Published" : "Publish Quiz"}</button>
                   <Link href="/admin/course-management?quiz-builder=future" className="border border-gold-500/45 px-4 py-3 text-center text-sm font-bold text-gold-300">Create Quiz</Link>

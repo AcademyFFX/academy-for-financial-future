@@ -303,6 +303,16 @@ function assignmentMatchesLesson(row: DbRow, course: DbRow, lesson: DbRow) {
   );
 }
 
+function uniqueAssignments(rows: DbRow[]) {
+  const seen = new Set<string>();
+  return rows.filter((row, index) => {
+    const key = `${value(row, ["asset_type"], "assignment")}::${idOf(row) || value(row, ["asset_title", "title"], String(index))}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function assetMatchesLesson(asset: DbRow, course: DbRow, lesson: DbRow) {
   const assetCourseId = value(asset, ["course_id"]);
   const assetLessonId = value(asset, ["lesson_id"]);
@@ -521,9 +531,11 @@ export default function StudentLessonViewerPage() {
 
       const assets = ((assetResult.data ?? []) as DbRow[]).filter((asset) => assetMatchesLessonOrSharedResource(asset, course, lesson));
 
-      const assignments = assignmentResult.error
-        ? assets.filter((asset) => resourceGroupFor(asset) === "Homework Files")
+      const assignmentAssets = assets.filter((asset) => resourceGroupFor(asset) === "Homework Files");
+      const assignmentRows = assignmentResult.error
+        ? []
         : ((assignmentResult.data ?? []) as DbRow[]).filter((assignment) => assignmentMatchesLesson(assignment, course, lesson));
+      const assignments = uniqueAssignments([...assignmentRows, ...assignmentAssets]);
       const submissions = homeworkResult.error ? [] : ((homeworkResult.data ?? []) as DbRow[]).filter((submission) => assignmentMatchesLesson(submission, course, lesson));
       let loadedVideoProgress: DbRow | null = null;
       if (!isAdmin) {
@@ -1366,6 +1378,9 @@ function HomeworkPanel({ assignments, submission, course, lesson }: { assignment
         const dueDate = assignmentDueLabel(assignment, payload);
         const instructions = value(assignment, ["instructions", "student_notes", "description"], value(payload, ["instructions"], fileDescription(assignment)));
         const title = value(assignment, ["title", "asset_title", "file_name"], `${lessonTitle(lesson)} Homework`);
+        const maxScore = value(assignment, ["maximum_score", "max_score"], value(payload, ["maximumScore", "maximum_score"], "100"));
+        const required = booleanValue(assignment, ["required"]) || booleanValue(payload, ["required"]) ? "Required" : "Optional";
+        const fileTypes = value(assignment, ["permitted_file_types"], value(payload, ["submissionFileTypes", "submission_file_types"], "PDF, DOCX, screenshots, chart analysis"));
         return (
           <article key={idOf(assignment) || `${title}-${index}`} className="border border-gold-500/16 bg-navy-950 p-4">
             <p className="text-xs uppercase tracking-[.18em] text-gold-300">{value(assignment, ["homework_type", "asset_type"], "Homework Assignment")}</p>
@@ -1375,9 +1390,9 @@ function HomeworkPanel({ assignments, submission, course, lesson }: { assignment
               <InfoPill label="Course" value={courseTitle(course)} />
               <InfoPill label="Lesson" value={lessonTitle(lesson)} />
               <InfoPill label="Due Date" value={dueDate || "No Due Date"} />
-              <InfoPill label="Max Score" value={value(assignment, ["maximum_score", "max_score"], "100")} />
-              <InfoPill label="Required" value={value(assignment, ["required"], "Required")} />
-              <InfoPill label="File Types" value={value(assignment, ["permitted_file_types"], "PDF, DOCX, screenshots, chart analysis")} />
+              <InfoPill label="Max Score" value={maxScore} />
+              <InfoPill label="Required" value={required} />
+              <InfoPill label="File Types" value={fileTypes} />
             </div>
             {submission ? (
               <div className="mt-4 border border-gold-500/18 p-3 text-sm text-ink/72">

@@ -62,7 +62,6 @@ type DbLessonRow = {
 type EnrollmentRow = {
   course_id?: number | string | null;
   enrollment_status?: string | null;
-  status?: string | null;
 };
 
 function value(row: Record<string, unknown> | null | undefined, keys: string[], fallback = "") {
@@ -81,7 +80,7 @@ function isPublished(row: Record<string, unknown>) {
 }
 
 function isActiveEnrollment(row: EnrollmentRow) {
-  const status = String(row.enrollment_status ?? row.status ?? "Active").trim().toLowerCase();
+  const status = String(row.enrollment_status ?? "Active").trim().toLowerCase();
   return ["active", "approved", "enrolled", "in progress"].includes(status);
 }
 
@@ -180,7 +179,7 @@ export default function AssignmentsPage() {
         }
 
         const [enrollmentsResult, coursesResult, lessonsResult] = await Promise.all([
-          supabase.from("enrollments").select("course_id,enrollment_status,status").eq("student_id", internalStudentId),
+          supabase.from("enrollments").select("course_id,enrollment_status").eq("student_id", internalStudentId),
           supabase.from("courses").select("*"),
           supabase.from("lessons").select("*").order("lesson_order", { ascending: true })
         ]);

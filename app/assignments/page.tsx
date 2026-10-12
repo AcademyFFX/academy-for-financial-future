@@ -2,10 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { ExternalLink, FileUp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
-import { courseCatalog } from "@/lib/course-catalog";
 import { createClient } from "@/lib/supabase";
 
 type AssignmentSubmission = {
@@ -42,6 +41,9 @@ const initialForm = {
 type DbCourseRow = {
   id: number | string;
   course_name: string | null;
+  title?: string | null;
+  status?: string | null;
+  publication_status?: string | null;
 };
 
 type DbLessonRow = {
@@ -49,19 +51,73 @@ type DbLessonRow = {
   title?: string | null;
   lesson_title?: string | null;
   course_id?: number | string | null;
+  lesson_order?: number | string | null;
+  display_order?: number | string | null;
+  sort_order?: number | string | null;
+  status?: string | null;
+  lesson_status?: string | null;
+  publication_status?: string | null;
 };
+
+type EnrollmentRow = {
+  course_id?: number | string | null;
+  enrollment_status?: string | null;
+  status?: string | null;
+};
+
+function value(row: Record<string, unknown> | null | undefined, keys: string[], fallback = "") {
+  if (!row) return fallback;
+  for (const key of keys) {
+    const current = row[key];
+    if (current !== null && current !== undefined && String(current).trim()) return String(current);
+  }
+  return fallback;
+}
+
+function isPublished(row: Record<string, unknown>) {
+  const status = value(row, ["publication_status", "status", "lesson_status"]);
+  if (!status) return true;
+  return ["published", "active", "available"].includes(status.trim().toLowerCase());
+}
+
+function isActiveEnrollment(row: EnrollmentRow) {
+  const status = String(row.enrollment_status ?? row.status ?? "Active").trim().toLowerCase();
+  return ["active", "approved", "enrolled", "in progress"].includes(status);
+}
+
+function lessonTitle(lesson: DbLessonRow) {
+  return value(lesson as Record<string, unknown>, ["lesson_title", "title"], "Academy Lesson");
+}
+
+function courseTitle(course: DbCourseRow) {
+  return value(course as Record<string, unknown>, ["course_name", "title"], "Academy Course");
+}
+
+function lessonOrder(lesson: DbLessonRow) {
+  const parsed = Number(value(lesson as Record<string, unknown>, ["lesson_order", "display_order", "sort_order"], "0"));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function safeSlug(text: string) {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
 
 export default function AssignmentsPage() {
   const router = useRouter();
   const [studentId, setStudentId] = useState<string | null>(null);
   const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([]);
   const [form, setForm] = useState(initialForm);
-  const [dbCourseIdsByTitle, setDbCourseIdsByTitle] = useState<Record<string, number>>({});
-  const [dbLessonIdsByCourseAndTitle, setDbLessonIdsByCourseAndTitle] = useState<Record<string, number>>({});
+  const [courses, setCourses] = useState<DbCourseRow[]>([]);
+  const [lessons, setLessons] = useState<DbLessonRow[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("Submit completed coursework for review.");
+  const selectedCourse = useMemo(() => courses.find((course) => String(course.id) === form.course_slug) ?? null, [courses, form.course_slug]);
+  const selectedLessons = useMemo(() => lessons
+    .filter((lesson) => String(lesson.course_id) === form.course_slug)
+    .sort((left, right) => lessonOrder(left) - lessonOrder(right) || Number(left.id) - Number(right.id)), [lessons, form.course_slug]);
+  const selectedLesson = useMemo(() => selectedLessons.find((lesson) => String(lesson.id) === form.lesson_slug) ?? null, [selectedLessons, form.lesson_slug]);
 
   function getErrorMessage(error: unknown, fallback: string) {
     if (error instanceof Error) return error.message;
@@ -91,27 +147,6 @@ export default function AssignmentsPage() {
     };
   }
 
-  function getSelectedLesson(courseId: string, lessonId: string) {
-    const course = courseCatalog.find((item) => item.id === courseId);
-    const lesson = course?.lessons.find((item) => item.id === lessonId);
-    return { course, lesson };
-  }
-
-  function getDatabaseCourseId(courseSlug: string) {
-    const course = courseCatalog.find((item) => item.id === courseSlug);
-    if (!course) return null;
-    return dbCourseIdsByTitle[course.title] ?? null;
-  }
-
-  function getDatabaseLessonId(courseSlug: string, lessonSlug: string) {
-    const { course, lesson } = getSelectedLesson(courseSlug, lessonSlug);
-    if (!course || !lesson) return null;
-
-    const databaseCourseId = getDatabaseCourseId(courseSlug);
-    const lessonKey = databaseCourseId ? `${databaseCourseId}:${lesson.title}` : "";
-    return dbLessonIdsByCourseAndTitle[lessonKey] ?? lesson.dbId;
-  }
-
   useEffect(() => {
     async function loadSubmissions() {
       try {
@@ -127,29 +162,43 @@ export default function AssignmentsPage() {
 
         setStudentId(user.id);
 
-        const coursesResult = await supabase.from("courses").select("id, course_name");
-        if (!coursesResult.error) {
-          const idsByTitle = ((coursesResult.data ?? []) as DbCourseRow[]).reduce<Record<string, number>>((accumulator, course) => {
-            const id = Number(course.id);
-            if (course.course_name && Number.isFinite(id)) accumulator[course.course_name] = id;
-            return accumulator;
-          }, {});
-          setDbCourseIdsByTitle(idsByTitle);
+        const studentResult = await supabase
+          .from("students")
+          .select("id")
+          .eq("auth_user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (studentResult.error) throw studentResult.error;
 
-          const lessonsResult = await supabase.from("lessons").select("id, title, lesson_title, course_id");
-          if (!lessonsResult.error) {
-            const idsByCourseAndTitle = ((lessonsResult.data ?? []) as DbLessonRow[]).reduce<Record<string, number>>((accumulator, lesson) => {
-              const id = Number(lesson.id);
-              const courseId = Number(lesson.course_id);
-              const title = lesson.title ?? lesson.lesson_title;
-              if (title && Number.isFinite(id) && Number.isFinite(courseId)) {
-                accumulator[`${courseId}:${title}`] = id;
-              }
-              return accumulator;
-            }, {});
-            setDbLessonIdsByCourseAndTitle(idsByCourseAndTitle);
-          }
+        const internalStudentId = studentResult.data?.id ? String(studentResult.data.id) : "";
+        if (!internalStudentId) {
+          setCourses([]);
+          setLessons([]);
+          setMessage("Your student record is not active yet.");
+          return;
         }
+
+        const [enrollmentsResult, coursesResult, lessonsResult] = await Promise.all([
+          supabase.from("enrollments").select("course_id,enrollment_status,status").eq("student_id", internalStudentId),
+          supabase.from("courses").select("*"),
+          supabase.from("lessons").select("*").order("lesson_order", { ascending: true })
+        ]);
+        if (enrollmentsResult.error) throw enrollmentsResult.error;
+        if (coursesResult.error) throw coursesResult.error;
+        if (lessonsResult.error) throw lessonsResult.error;
+
+        const enrolledCourseIds = new Set(((enrollmentsResult.data ?? []) as EnrollmentRow[])
+          .filter((enrollment) => enrollment.course_id !== null && enrollment.course_id !== undefined && isActiveEnrollment(enrollment))
+          .map((enrollment) => String(enrollment.course_id)));
+        const loadedCourses = ((coursesResult.data ?? []) as DbCourseRow[])
+          .filter((course) => enrolledCourseIds.has(String(course.id)) && isPublished(course as Record<string, unknown>))
+          .sort((left, right) => courseTitle(left).localeCompare(courseTitle(right)));
+        const loadedLessons = ((lessonsResult.data ?? []) as DbLessonRow[])
+          .filter((lesson) => enrolledCourseIds.has(String(lesson.course_id)) && isPublished(lesson as Record<string, unknown>))
+          .sort((left, right) => lessonOrder(left) - lessonOrder(right) || Number(left.id) - Number(right.id));
+        setCourses(loadedCourses);
+        setLessons(loadedLessons);
 
         const { data, error } = await supabase
           .from("assignments")
@@ -168,35 +217,45 @@ export default function AssignmentsPage() {
 
     loadSubmissions();
 
+  }, [router]);
+
+  useEffect(() => {
+    if (!courses.length || !lessons.length) return;
     const params = new URLSearchParams(window.location.search);
-    const courseId = params.get("courseId") ?? "";
-    const lessonId = params.get("lessonId") ?? "";
-    const { course, lesson } = getSelectedLesson(courseId, lessonId);
+    const courseParam = params.get("courseId") ?? "";
+    const lessonParam = params.get("lessonId") ?? "";
+    if (!courseParam && !lessonParam) return;
+
+    const course = courses.find((item) => String(item.id) === courseParam || safeSlug(courseTitle(item)) === safeSlug(courseParam));
+    const courseLessons = course ? lessons.filter((lesson) => String(lesson.course_id) === String(course.id)) : [];
+    const lesson = courseLessons.find((item) => String(item.id) === lessonParam || safeSlug(lessonTitle(item)) === safeSlug(lessonParam));
 
     if (course && lesson) {
       setForm((current) => ({
         ...current,
-        title: `${lesson.title} Assignment`,
-        course_slug: course.id,
-        lesson_slug: lesson.id,
-        course_module: `${course.title} / ${lesson.title}`
+        title: `${lessonTitle(lesson)} Assignment`,
+        course_slug: String(course.id),
+        lesson_slug: String(lesson.id),
+        course_module: `${courseTitle(course)} / ${lessonTitle(lesson)}`
       }));
     }
-  }, [router]);
+  }, [courses, lessons]);
 
   function updateField(name: keyof typeof initialForm, value: string) {
     setForm((current) => {
       if (name === "course_slug") {
-        return { ...current, course_slug: value, lesson_slug: "", course_module: courseCatalog.find((course) => course.id === value)?.title ?? "" };
+        const course = courses.find((item) => String(item.id) === value);
+        return { ...current, course_slug: value, lesson_slug: "", course_module: course ? courseTitle(course) : "" };
       }
 
       if (name === "lesson_slug") {
-        const { course, lesson } = getSelectedLesson(current.course_slug, value);
+        const course = courses.find((item) => String(item.id) === current.course_slug);
+        const lesson = lessons.find((item) => String(item.id) === value && String(item.course_id) === current.course_slug);
         return {
           ...current,
           lesson_slug: value,
-          title: lesson ? `${lesson.title} Assignment` : current.title,
-          course_module: course && lesson ? `${course.title} / ${lesson.title}` : current.course_module
+          title: lesson ? `${lessonTitle(lesson)} Assignment` : current.title,
+          course_module: course && lesson ? `${courseTitle(course)} / ${lessonTitle(lesson)}` : current.course_module
         };
       }
 
@@ -219,12 +278,11 @@ export default function AssignmentsPage() {
       const supabase = createClient();
       let fileUrl: string | null = null;
       let filePath: string | null = null;
-      const { course, lesson } = getSelectedLesson(form.course_slug, form.lesson_slug);
-      const databaseCourseId = getDatabaseCourseId(form.course_slug);
-      const databaseLessonId = getDatabaseLessonId(form.course_slug, form.lesson_slug);
+      const databaseCourseId = Number(form.course_slug);
+      const databaseLessonId = Number(form.lesson_slug);
 
-      if (!course || !lesson || !databaseCourseId || !databaseLessonId) {
-        setMessage("This course is not seeded in Supabase yet. Run the AFF course seed migration, then try again.");
+      if (!selectedCourse || !selectedLesson || !Number.isFinite(databaseCourseId) || !Number.isFinite(databaseLessonId)) {
+        setMessage("Select an enrolled course and a published lesson before submitting your assignment.");
         setSaving(false);
         return;
       }
@@ -248,7 +306,7 @@ export default function AssignmentsPage() {
         title: form.title.trim(),
         course_id: databaseCourseId,
         lesson_id: databaseLessonId,
-        lesson_title: lesson?.title ?? null,
+        lesson_title: lessonTitle(selectedLesson),
         course_module: form.course_module.trim() || null,
         student_notes: form.student_notes.trim() || null,
         file_url: fileUrl,
@@ -305,8 +363,8 @@ export default function AssignmentsPage() {
                 required
               >
                 <option value="">Select course</option>
-                {courseCatalog.map((course) => (
-                  <option key={course.id} value={course.id}>{course.title}</option>
+                {courses.map((course) => (
+                  <option key={course.id} value={course.id}>{courseTitle(course)}</option>
                 ))}
               </select>
             </label>
@@ -320,11 +378,9 @@ export default function AssignmentsPage() {
                 required
               >
                 <option value="">Select lesson</option>
-                {courseCatalog
-                  .find((course) => course.id === form.course_slug)
-                  ?.lessons.map((lesson) => (
-                    <option key={lesson.id} value={lesson.id}>{lesson.title}</option>
-                  ))}
+                {selectedLessons.map((lesson, index) => (
+                  <option key={lesson.id} value={lesson.id}>Lesson {index + 1}: {lessonTitle(lesson)}</option>
+                ))}
               </select>
             </label>
 

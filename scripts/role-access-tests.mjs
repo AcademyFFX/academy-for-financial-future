@@ -9,6 +9,7 @@ const middleware = read("middleware.ts");
 const studentDashboard = read("app/student-dashboard/page.tsx");
 const studentCourses = read("app/student-courses/page.tsx");
 const studentLessonViewer = read("app/student-courses/[courseId]/lessons/[lessonId]/page.tsx");
+const assignmentsPage = read("app/assignments/page.tsx");
 const studentProfile = read("app/student-profile/page.tsx");
 const billing = read("app/billing/page.tsx");
 const siteShell = read("components/site-shell.tsx");
@@ -110,6 +111,10 @@ assert.match(studentLessonViewer, /function assignmentDueLabel/, "student lesson
 assert.match(studentLessonViewer, /booleanValue\(assignment, \["no_due_date", "noDueDate"\]\)/, "student lesson viewer must honor no_due_date before displaying due-date fallbacks");
 assert.match(studentLessonViewer, /const assignmentAssets = assets\.filter\(\(asset\) => resourceGroupFor\(asset\) === "Homework Files"\)/, "student lesson viewer must include published Course Builder assignment assets in lesson homework");
 assert.match(studentLessonViewer, /const assignments = uniqueAssignments\(\[\.\.\.assignmentRows, \.\.\.assignmentAssets\]\)/, "student lesson viewer must merge legacy assignment rows with Course Builder assignment assets");
+assert.doesNotMatch(assignmentsPage, /courseCatalog/, "assignment center must not use the stale static course catalog for course or lesson dropdowns");
+assert.match(assignmentsPage, /supabase\.from\("lessons"\)\.select\("\*"\)\.order\("lesson_order"/, "assignment center must load current lessons from Supabase");
+assert.match(assignmentsPage, /selectedLessons = useMemo\(\(\) => lessons[\s\S]*\.filter\(\(lesson\) => String\(lesson\.course_id\) === form\.course_slug\)[\s\S]*\.sort\(\(left, right\) => lessonOrder\(left\) - lessonOrder\(right\)/, "assignment center lesson dropdown must filter by real course_id and canonical lesson order");
+assert.match(assignmentsPage, /<option key=\{lesson\.id\} value=\{lesson\.id\}>Lesson \{index \+ 1\}: \{lessonTitle\(lesson\)\}<\/option>/, "assignment center lesson options must use the real database lesson id as the option value");
 assert.match(studentLessonViewer, /Playback tracking is available for direct Academy video files\./, "iframe providers must not claim precise playback tracking without provider APIs");
 assert.match(studentLessonViewer, /\.from\("video_progress"\)[\s\S]*\.eq\("auth_user_id", user\.id\)[\s\S]*\.eq\("course_id", Number\(idOf\(course\)\)\)[\s\S]*\.eq\("lesson_id", Number\(idOf\(lesson\)\)\)/, "student lesson viewer must load playback progress for only the authenticated student");
 assert.match(studentLessonViewer, /\.from\("video_progress"\)[\s\S]*\.upsert\([\s\S]*onConflict: "auth_user_id,course_id,lesson_id"/, "student lesson viewer must upsert playback progress through the video_progress composite key");

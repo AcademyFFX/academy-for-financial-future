@@ -175,6 +175,8 @@ export default function AdminPage() {
   const [applications, setApplications] = useState<StudentApplication[]>([]);
   const [mentorDrafts, setMentorDrafts] = useState<Record<string, string>>({});
   const [approvalStates, setApprovalStates] = useState<Record<string, ApprovalState>>({});
+  const [savingAssignmentReviews, setSavingAssignmentReviews] = useState<Record<string, boolean>>({});
+  const [assignmentReviewMessages, setAssignmentReviewMessages] = useState<Record<string, string>>({});
 
   const studentMap = useMemo(() => {
     return new Map(students.map((student) => [student.id, student]));
@@ -570,25 +572,40 @@ export default function AdminPage() {
   async function saveAssignmentReview(assignmentId: string) {
     const review = assignmentReviews[assignmentId];
     if (!review) return;
+    if (savingAssignmentReviews[assignmentId]) return;
 
     setMessage("Saving assignment review...");
+    setAssignmentReviewMessages((current) => ({ ...current, [assignmentId]: "Saving review..." }));
+    setSavingAssignmentReviews((current) => ({ ...current, [assignmentId]: true }));
 
     try {
       const assignment = assignments.find((item) => item.id === assignmentId);
+      if (!assignment) throw new Error("Unable to locate the selected assignment submission.");
       const grade = review.grade.trim().length > 0 ? Number(review.grade) : null;
 
       if (grade !== null && (!Number.isFinite(grade) || grade < 0 || grade > 100)) {
         setMessage("Grade must be a number from 0 to 100.");
+        setAssignmentReviewMessages((current) => ({ ...current, [assignmentId]: "Grade must be a number from 0 to 100." }));
         return;
       }
 
       const supabase = createClient();
+      const {
+        data: { user },
+        error: userError
+      } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user) throw new Error("Admin review requires an authenticated Supabase session.");
+      if (!(await getClientAdminStatus())) {
+        throw new Error("Save Review requires an active AFF administrator account.");
+      }
+      const authenticatedAdminEmail = user.email ?? adminEmail;
       const reviewedAt = new Date().toISOString();
       const historyEntry: GradingHistoryEntry = {
         status: review.status,
         grade,
         feedback: review.instructorFeedback.trim(),
-        reviewedBy: adminEmail,
+        reviewedBy: authenticatedAdminEmail,
         reviewedAt
       };
 
@@ -596,7 +613,7 @@ export default function AdminPage() {
         status: review.status,
         grade,
         instructor_feedback: review.instructorFeedback.trim() || null,
-        reviewed_by: adminEmail,
+        reviewed_by: authenticatedAdminEmail,
         reviewed_at: reviewedAt,
         grading_history: [...(assignment?.gradingHistory ?? []), historyEntry]
       };
@@ -609,11 +626,27 @@ export default function AdminPage() {
         .single();
 
       if (error) throw error;
+      if (!data) throw new Error("Assignment review update returned no saved row.");
 
-      setAssignments((current) => current.map((assignment) => (assignment.id === assignmentId ? normalizeAssignment(data as DbRow) : assignment)));
-      setMessage(review.status === "Approved" ? "Assignment approved. Certification requirements updated." : "Assignment review saved.");
+      const savedAssignment = normalizeAssignment(data as DbRow);
+      setAssignments((current) => current.map((assignment) => (assignment.id === assignmentId ? savedAssignment : assignment)));
+      setAssignmentReviews((current) => ({
+        ...current,
+        [assignmentId]: {
+          status: savedAssignment.status,
+          grade: savedAssignment.grade === null ? "" : String(savedAssignment.grade),
+          instructorFeedback: savedAssignment.instructorFeedback
+        }
+      }));
+      const successMessage = review.status === "Approved" ? "Assignment approved. Certification requirements updated." : "Assignment review saved.";
+      setAssignmentReviewMessages((current) => ({ ...current, [assignmentId]: `${successMessage} Grading history updated.` }));
+      setMessage(successMessage);
     } catch (error) {
-      setMessage(getErrorMessage(error, "Unable to save assignment review."));
+      const errorMessage = getErrorMessage(error, "Unable to save assignment review.");
+      setMessage(errorMessage);
+      setAssignmentReviewMessages((current) => ({ ...current, [assignmentId]: `Review save failed: ${errorMessage}` }));
+    } finally {
+      setSavingAssignmentReviews((current) => ({ ...current, [assignmentId]: false }));
     }
   }
 
@@ -1393,9 +1426,12 @@ export default function AdminPage() {
                             <FileX size={15} /> Reject
                           </button>
                         </div>
-                        <button className="bg-gold-500 px-4 py-2 text-sm font-bold text-navy-950" type="button" onClick={() => saveAssignmentReview(assignment.id)}>
-                          Save Review
+                        <button className="bg-gold-500 px-4 py-2 text-sm font-bold text-navy-950 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={() => saveAssignmentReview(assignment.id)} disabled={Boolean(savingAssignmentReviews[assignment.id])}>
+                          {savingAssignmentReviews[assignment.id] ? "Saving Review..." : "Save Review"}
                         </button>
+                        {assignmentReviewMessages[assignment.id] ? (
+                          <p className="border border-gold-500/18 bg-navy-900 px-3 py-2 text-xs leading-5 text-gold-100">{assignmentReviewMessages[assignment.id]}</p>
+                        ) : null}
                         <div className="border-t border-gold-500/15 pt-3">
                           <p className="text-xs uppercase tracking-[.18em] text-gold-300">Grading History</p>
                           {assignment.gradingHistory.length > 0 ? (

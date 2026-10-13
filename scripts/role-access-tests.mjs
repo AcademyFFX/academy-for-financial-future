@@ -111,6 +111,12 @@ assert.match(studentLessonViewer, /function assetMatchesLessonOrSharedResource/,
 assert.match(studentLessonViewer, /if \(type === "Quiz" \|\| resourceGroupFor\(asset\) === "Homework Files"\) return assetMatchesLesson\(asset, course, lesson\)/, "student lesson viewer must not fall back to course-level quiz or homework assets on lesson pages");
 assert.match(studentLessonViewer, /function assignmentDueLabel/, "student lesson viewer must centralize assignment due-date display");
 assert.match(studentLessonViewer, /booleanValue\(assignment, \["no_due_date", "noDueDate"\]\)/, "student lesson viewer must honor no_due_date before displaying due-date fallbacks");
+assert.match(studentLessonViewer, /function assignmentDisplayTitle/, "student lesson viewer must centralize canonical homework title display");
+assert.match(studentLessonViewer, /`\$\{lessonTitle\(lesson\)\} Assignment`/, "canonical homework title fallback must use the lesson assignment naming convention");
+assert.match(studentLessonViewer, /function assignmentRequiredLabel/, "student lesson viewer must centralize assignment required metadata");
+assert.match(studentLessonViewer, /resourceType\(assignment\)\.toLowerCase\(\)\.includes\("assignment"\) \? "Required" : "Optional"/, "published assignment definitions must default to required when no explicit flag exists");
+assert.match(studentLessonViewer, /function assignmentAllowedFileTypes/, "student lesson viewer must centralize assignment allowed file types");
+assert.match(studentLessonViewer, /"PDF,DOCX,PNG,JPG"/, "student lesson viewer must use the AFF assignment upload file type standard");
 assert.match(studentLessonViewer, /const assignmentAssets = assets\.filter\(\(asset\) => resourceGroupFor\(asset\) === "Homework Files"\)/, "student lesson viewer must include published Course Builder assignment assets in lesson homework");
 assert.match(studentLessonViewer, /function canonicalLessonAssignments/, "student lesson viewer must canonicalize duplicate homework sources");
 assert.match(studentLessonViewer, /function assignmentDefinitionLink/, "student lesson viewer must prefer stable assignment-definition linkage over title-only dedupe");
@@ -121,6 +127,9 @@ assert.match(studentLessonViewer, /\.\.\.submission,[\s\S]*\.\.\.definition,[\s\
 assert.match(studentLessonViewer, /const assignments = canonicalLessonAssignments\(assignmentRows, assignmentAssets, course, lesson\)/, "student lesson viewer must merge submission and review state with Course Builder assignment assets into one card");
 assert.match(studentLessonViewer, /const dueDate = value\(assignment, \["due_date"\], value\(payload, \["due_date"\]\)\)/, "student lesson viewer must not treat submission_date as homework due date");
 assert.match(studentLessonViewer, /const reviewSource = submission \?\? linkedSubmission \?\? assignment/, "student lesson viewer must preserve saved assignment review status on the canonical homework card");
+assert.match(studentLessonViewer, /Current Score:/, "student-facing homework card must label saved grade as Current Score");
+assert.match(studentLessonViewer, /Reviewed: \{formatDateTime\(reviewedAt\)\}/, "student-facing homework card must display reviewed date when present");
+assert.match(studentLessonViewer, /Instructor Feedback:/, "student-facing homework card must display instructor feedback when present");
 assert.doesNotMatch(assignmentsPage, /courseCatalog/, "assignment center must not use the stale static course catalog for course or lesson dropdowns");
 assert.match(assignmentsPage, /supabase\.from\("enrollments"\)\.select\("course_id,enrollment_status"\)\.eq\("student_id", internalStudentId\)/, "assignment center must query only real enrollment columns for student scoping");
 assert.doesNotMatch(assignmentsPage, /select\("course_id,enrollment_status,status"\)/, "assignment center must not query nonexistent enrollments.status");

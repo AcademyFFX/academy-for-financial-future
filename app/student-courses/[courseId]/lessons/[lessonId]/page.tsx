@@ -421,6 +421,19 @@ function assignmentDueLabel(assignment: DbRow, payload: DbRow) {
   return dueDate || "No Due Date";
 }
 
+function assignmentDisplayTitle(assignment: DbRow, lesson: DbRow) {
+  return value(assignment, ["title", "asset_title", "file_name"], `${lessonTitle(lesson)} Assignment`);
+}
+
+function assignmentRequiredLabel(assignment: DbRow, payload: DbRow) {
+  if (booleanValue(assignment, ["required"]) || booleanValue(payload, ["required"])) return "Required";
+  return resourceType(assignment).toLowerCase().includes("assignment") ? "Required" : "Optional";
+}
+
+function assignmentAllowedFileTypes(assignment: DbRow, payload: DbRow) {
+  return value(assignment, ["permitted_file_types"], value(payload, ["submissionFileTypes", "submission_file_types"], "PDF,DOCX,PNG,JPG"));
+}
+
 function resourceGroupFor(asset: DbRow) {
   const type = resourceType(asset).toLowerCase();
   const title = `${fileName(asset)} ${value(asset, ["asset_title"])}`.toLowerCase();
@@ -1453,15 +1466,16 @@ function HomeworkPanel({ assignments, submission, course, lesson }: { assignment
         const payload = parseAssetPayload(assignment);
         const dueDate = assignmentDueLabel(assignment, payload);
         const instructions = value(assignment, ["instructions", "student_notes", "description"], value(payload, ["instructions"], fileDescription(assignment)));
-        const title = value(assignment, ["title", "asset_title", "file_name"], `${lessonTitle(lesson)} Homework`);
+        const title = assignmentDisplayTitle(assignment, lesson);
         const maxScore = value(assignment, ["maximum_score", "max_score"], value(payload, ["maximumScore", "maximum_score"], "100"));
-        const required = booleanValue(assignment, ["required"]) || booleanValue(payload, ["required"]) ? "Required" : "Optional";
-        const fileTypes = value(assignment, ["permitted_file_types"], value(payload, ["submissionFileTypes", "submission_file_types"], "PDF, DOCX, screenshots, chart analysis"));
+        const required = assignmentRequiredLabel(assignment, payload);
+        const fileTypes = assignmentAllowedFileTypes(assignment, payload);
         const linkedSubmission = assignmentSubmissionState(assignment);
         const reviewSource = submission ?? linkedSubmission ?? assignment;
         const reviewStatus = value(reviewSource, ["status"]);
         const reviewScore = value(reviewSource, ["grade", "score"]);
         const reviewFeedback = value(reviewSource, ["instructor_feedback", "instructor_comments"]);
+        const reviewedAt = value(reviewSource, ["reviewed_at"]);
         const hasReview = Boolean(linkedSubmission || submission || ["approved", "rejected", "needs revision", "in review"].includes(reviewStatus.toLowerCase()) || reviewScore || reviewFeedback);
         return (
           <article key={idOf(assignment) || `${title}-${index}`} className="border border-gold-500/16 bg-navy-950 p-4">
@@ -1479,8 +1493,9 @@ function HomeworkPanel({ assignments, submission, course, lesson }: { assignment
             {hasReview ? (
               <div className="mt-4 border border-gold-500/18 p-3 text-sm text-ink/72">
                 <p className="font-semibold text-gold-300">Submission Status: {reviewStatus || "Submitted"}</p>
-                {reviewScore ? <p className="mt-1">Score: {reviewScore}</p> : null}
-                {reviewFeedback ? <p className="mt-1">Feedback: {reviewFeedback}</p> : null}
+                {reviewScore ? <p className="mt-1">Current Score: {reviewScore}</p> : null}
+                {reviewedAt ? <p className="mt-1">Reviewed: {formatDateTime(reviewedAt)}</p> : null}
+                {reviewFeedback ? <p className="mt-1">Instructor Feedback: {reviewFeedback}</p> : null}
               </div>
             ) : (
               <p className="mt-4 text-sm text-ink/65">Homework submission will open in the Assignment Center.</p>

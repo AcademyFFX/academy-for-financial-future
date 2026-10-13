@@ -113,8 +113,10 @@ assert.match(studentLessonViewer, /function assignmentDueLabel/, "student lesson
 assert.match(studentLessonViewer, /booleanValue\(assignment, \["no_due_date", "noDueDate"\]\)/, "student lesson viewer must honor no_due_date before displaying due-date fallbacks");
 assert.match(studentLessonViewer, /const assignmentAssets = assets\.filter\(\(asset\) => resourceGroupFor\(asset\) === "Homework Files"\)/, "student lesson viewer must include published Course Builder assignment assets in lesson homework");
 assert.match(studentLessonViewer, /function canonicalLessonAssignments/, "student lesson viewer must canonicalize duplicate homework sources");
-assert.match(studentLessonViewer, /rowsByFallbackKey\.get\(assignmentFallbackKey\(asset, course, lesson\)\)/, "student lesson viewer must dedupe legacy assignment rows against LMS assignment assets by course, lesson, and normalized title");
-assert.match(studentLessonViewer, /const assignments = canonicalLessonAssignments\(assignmentRows, assignmentAssets, course, lesson\)/, "student lesson viewer must merge legacy assignment rows with Course Builder assignment assets into one card");
+assert.match(studentLessonViewer, /function assignmentDefinitionLink/, "student lesson viewer must prefer stable assignment-definition linkage over title-only dedupe");
+assert.match(studentLessonViewer, /assignmentAssets\.length === 1 \? latestAssignmentRow\(assignmentRows\) : null/, "one canonical homework asset plus one student submission row must merge into one homework card");
+assert.match(studentLessonViewer, /if \(assignmentAssets\.length > 0\) return canonical;/, "student lesson viewer must not append legacy submission rows as duplicate definitions when canonical homework assets exist");
+assert.match(studentLessonViewer, /const assignments = canonicalLessonAssignments\(assignmentRows, assignmentAssets, course, lesson\)/, "student lesson viewer must merge submission and review state with Course Builder assignment assets into one card");
 assert.match(studentLessonViewer, /const dueDate = value\(assignment, \["due_date"\], value\(payload, \["due_date"\]\)\)/, "student lesson viewer must not treat submission_date as homework due date");
 assert.match(studentLessonViewer, /const reviewSource = submission \?\? assignment/, "student lesson viewer must preserve saved assignment review status on the canonical homework card");
 assert.doesNotMatch(assignmentsPage, /courseCatalog/, "assignment center must not use the stale static course catalog for course or lesson dropdowns");

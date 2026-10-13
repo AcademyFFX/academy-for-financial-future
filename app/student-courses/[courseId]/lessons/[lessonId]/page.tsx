@@ -319,6 +319,20 @@ function assignmentFallbackKey(row: DbRow, course: DbRow, lesson: DbRow) {
   ].join("::");
 }
 
+function assignmentDefinitionLink(row: DbRow) {
+  return value(row, ["assignment_asset_id", "course_asset_id", "asset_id", "assignment_definition_id"]);
+}
+
+function assignmentReviewTimestamp(row: DbRow) {
+  const date = value(row, ["reviewed_at", "submitted_at", "submission_date", "updated_at", "created_at"]);
+  const parsed = Date.parse(date);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function latestAssignmentRow(rows: DbRow[]) {
+  return [...rows].sort((left, right) => assignmentReviewTimestamp(right) - assignmentReviewTimestamp(left))[0] ?? null;
+}
+
 function mergeAssignmentDefinition(definition: DbRow, submission: DbRow) {
   return {
     ...definition,
@@ -334,32 +348,34 @@ function mergeAssignmentDefinition(definition: DbRow, submission: DbRow) {
 }
 
 function canonicalLessonAssignments(assignmentRows: DbRow[], assignmentAssets: DbRow[], course: DbRow, lesson: DbRow) {
-  const rowsById = new Map<string, DbRow>();
+  const rowsByDefinitionId = new Map<string, DbRow>();
   const rowsByFallbackKey = new Map<string, DbRow>();
   for (const row of assignmentRows) {
-    const rowId = idOf(row);
-    if (rowId) rowsById.set(rowId, row);
-    rowsByFallbackKey.set(assignmentFallbackKey(row, course, lesson), row);
+    const linkedDefinitionId = assignmentDefinitionLink(row);
+    if (linkedDefinitionId) rowsByDefinitionId.set(linkedDefinitionId, row);
+    const key = assignmentFallbackKey(row, course, lesson);
+    if (!rowsByFallbackKey.has(key)) rowsByFallbackKey.set(key, row);
   }
 
-  const renderedKeys = new Set<string>();
   const canonical = assignmentAssets.map((asset) => {
     const assetId = idOf(asset);
-    const match = (assetId ? rowsById.get(assetId) : undefined) ?? rowsByFallbackKey.get(assignmentFallbackKey(asset, course, lesson));
-    const key = assignmentFallbackKey(asset, course, lesson);
-    renderedKeys.add(key);
+    const match =
+      (assetId ? rowsByDefinitionId.get(assetId) : undefined) ??
+      rowsByFallbackKey.get(assignmentFallbackKey(asset, course, lesson)) ??
+      (assignmentAssets.length === 1 ? latestAssignmentRow(assignmentRows) : null);
     return match ? mergeAssignmentDefinition(asset, match) : asset;
   });
 
+  if (assignmentAssets.length > 0) return canonical;
+
+  const legacyRowsByKey = new Map<string, DbRow>();
   for (const row of assignmentRows) {
     const key = assignmentFallbackKey(row, course, lesson);
-    if (!renderedKeys.has(key)) {
-      renderedKeys.add(key);
-      canonical.push(row);
-    }
+    const previous = legacyRowsByKey.get(key);
+    if (!previous || assignmentReviewTimestamp(row) > assignmentReviewTimestamp(previous)) legacyRowsByKey.set(key, row);
   }
 
-  return canonical;
+  return Array.from(legacyRowsByKey.values());
 }
 
 function assetMatchesLesson(asset: DbRow, course: DbRow, lesson: DbRow) {

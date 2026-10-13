@@ -303,14 +303,63 @@ function assignmentMatchesLesson(row: DbRow, course: DbRow, lesson: DbRow) {
   );
 }
 
-function uniqueAssignments(rows: DbRow[]) {
-  const seen = new Set<string>();
-  return rows.filter((row, index) => {
-    const key = `${value(row, ["asset_type"], "assignment")}::${idOf(row) || value(row, ["asset_title", "title"], String(index))}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+function normalizedAssignmentTitle(row: DbRow) {
+  return value(row, ["title", "asset_title", "file_name"], "assignment")
+    .replace(/\.(json|pdf|docx?|pptx?|xlsx?|zip)$/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function assignmentFallbackKey(row: DbRow, course: DbRow, lesson: DbRow) {
+  return [
+    value(row, ["course_id"], idOf(course)),
+    value(row, ["lesson_id"], idOf(lesson)),
+    normalizedAssignmentTitle(row)
+  ].join("::");
+}
+
+function mergeAssignmentDefinition(definition: DbRow, submission: DbRow) {
+  return {
+    ...definition,
+    ...submission,
+    asset_title: value(definition, ["asset_title"], value(submission, ["title"])),
+    asset_type: value(definition, ["asset_type"], value(submission, ["homework_type"], "Assignment")),
+    description: value(definition, ["description"], value(submission, ["student_notes"])),
+    signed_url: value(definition, ["signed_url"], value(submission, ["signed_url"])),
+    url: value(definition, ["url", "public_url"], value(submission, ["file_url"])),
+    public_url: value(definition, ["public_url", "url"], value(submission, ["file_url"])),
+    linked_assignment_id: idOf(submission)
+  };
+}
+
+function canonicalLessonAssignments(assignmentRows: DbRow[], assignmentAssets: DbRow[], course: DbRow, lesson: DbRow) {
+  const rowsById = new Map<string, DbRow>();
+  const rowsByFallbackKey = new Map<string, DbRow>();
+  for (const row of assignmentRows) {
+    const rowId = idOf(row);
+    if (rowId) rowsById.set(rowId, row);
+    rowsByFallbackKey.set(assignmentFallbackKey(row, course, lesson), row);
+  }
+
+  const renderedKeys = new Set<string>();
+  const canonical = assignmentAssets.map((asset) => {
+    const assetId = idOf(asset);
+    const match = (assetId ? rowsById.get(assetId) : undefined) ?? rowsByFallbackKey.get(assignmentFallbackKey(asset, course, lesson));
+    const key = assignmentFallbackKey(asset, course, lesson);
+    renderedKeys.add(key);
+    return match ? mergeAssignmentDefinition(asset, match) : asset;
   });
+
+  for (const row of assignmentRows) {
+    const key = assignmentFallbackKey(row, course, lesson);
+    if (!renderedKeys.has(key)) {
+      renderedKeys.add(key);
+      canonical.push(row);
+    }
+  }
+
+  return canonical;
 }
 
 function assetMatchesLesson(asset: DbRow, course: DbRow, lesson: DbRow) {
@@ -341,7 +390,7 @@ function booleanValue(row: DbRow | null | undefined, keys: string[]) {
 
 function assignmentDueLabel(assignment: DbRow, payload: DbRow) {
   if (booleanValue(assignment, ["no_due_date", "noDueDate"]) || booleanValue(payload, ["no_due_date", "noDueDate"])) return "No Due Date";
-  const dueDate = value(assignment, ["due_date", "submission_date"], value(payload, ["due_date"]));
+  const dueDate = value(assignment, ["due_date"], value(payload, ["due_date"]));
   return dueDate || "No Due Date";
 }
 
@@ -535,7 +584,7 @@ export default function StudentLessonViewerPage() {
       const assignmentRows = assignmentResult.error
         ? []
         : ((assignmentResult.data ?? []) as DbRow[]).filter((assignment) => assignmentMatchesLesson(assignment, course, lesson));
-      const assignments = uniqueAssignments([...assignmentRows, ...assignmentAssets]);
+      const assignments = canonicalLessonAssignments(assignmentRows, assignmentAssets, course, lesson);
       const submissions = homeworkResult.error ? [] : ((homeworkResult.data ?? []) as DbRow[]).filter((submission) => assignmentMatchesLesson(submission, course, lesson));
       let loadedVideoProgress: DbRow | null = null;
       if (!isAdmin) {
@@ -1381,6 +1430,11 @@ function HomeworkPanel({ assignments, submission, course, lesson }: { assignment
         const maxScore = value(assignment, ["maximum_score", "max_score"], value(payload, ["maximumScore", "maximum_score"], "100"));
         const required = booleanValue(assignment, ["required"]) || booleanValue(payload, ["required"]) ? "Required" : "Optional";
         const fileTypes = value(assignment, ["permitted_file_types"], value(payload, ["submissionFileTypes", "submission_file_types"], "PDF, DOCX, screenshots, chart analysis"));
+        const reviewSource = submission ?? assignment;
+        const reviewStatus = value(reviewSource, ["status"]);
+        const reviewScore = value(reviewSource, ["grade", "score"]);
+        const reviewFeedback = value(reviewSource, ["instructor_feedback", "instructor_comments"]);
+        const hasReview = Boolean(submission || ["approved", "rejected", "needs revision", "in review"].includes(reviewStatus.toLowerCase()) || reviewScore || reviewFeedback);
         return (
           <article key={idOf(assignment) || `${title}-${index}`} className="border border-gold-500/16 bg-navy-950 p-4">
             <p className="text-xs uppercase tracking-[.18em] text-gold-300">{value(assignment, ["homework_type", "asset_type"], "Homework Assignment")}</p>
@@ -1394,11 +1448,11 @@ function HomeworkPanel({ assignments, submission, course, lesson }: { assignment
               <InfoPill label="Required" value={required} />
               <InfoPill label="File Types" value={fileTypes} />
             </div>
-            {submission ? (
+            {hasReview ? (
               <div className="mt-4 border border-gold-500/18 p-3 text-sm text-ink/72">
-                <p className="font-semibold text-gold-300">Submission Status: {value(submission, ["status"], "Submitted")}</p>
-                {value(submission, ["score"]) ? <p className="mt-1">Score: {value(submission, ["score"])}</p> : null}
-                {value(submission, ["instructor_comments"]) ? <p className="mt-1">Feedback: {value(submission, ["instructor_comments"])}</p> : null}
+                <p className="font-semibold text-gold-300">Submission Status: {reviewStatus || "Submitted"}</p>
+                {reviewScore ? <p className="mt-1">Score: {reviewScore}</p> : null}
+                {reviewFeedback ? <p className="mt-1">Feedback: {reviewFeedback}</p> : null}
               </div>
             ) : (
               <p className="mt-4 text-sm text-ink/65">Homework submission will open in the Assignment Center.</p>

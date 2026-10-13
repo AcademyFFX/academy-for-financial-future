@@ -333,17 +333,28 @@ function latestAssignmentRow(rows: DbRow[]) {
   return [...rows].sort((left, right) => assignmentReviewTimestamp(right) - assignmentReviewTimestamp(left))[0] ?? null;
 }
 
+function assignmentSubmissionState(row: DbRow) {
+  const submission = row.__submission_record;
+  return submission && typeof submission === "object" && !Array.isArray(submission) ? (submission as DbRow) : null;
+}
+
 function mergeAssignmentDefinition(definition: DbRow, submission: DbRow) {
   return {
-    ...definition,
     ...submission,
+    ...definition,
+    __submission_record: submission,
     asset_title: value(definition, ["asset_title"], value(submission, ["title"])),
     asset_type: value(definition, ["asset_type"], value(submission, ["homework_type"], "Assignment")),
     description: value(definition, ["description"], value(submission, ["student_notes"])),
     signed_url: value(definition, ["signed_url"], value(submission, ["signed_url"])),
     url: value(definition, ["url", "public_url"], value(submission, ["file_url"])),
     public_url: value(definition, ["public_url", "url"], value(submission, ["file_url"])),
-    linked_assignment_id: idOf(submission)
+    linked_assignment_id: idOf(submission),
+    submission_status: value(submission, ["status"]),
+    submission_grade: value(submission, ["grade", "score"]),
+    submission_feedback: value(submission, ["instructor_feedback", "instructor_comments"]),
+    submission_reviewed_at: value(submission, ["reviewed_at"]),
+    submission_grading_history: submission.grading_history
   };
 }
 
@@ -1446,11 +1457,12 @@ function HomeworkPanel({ assignments, submission, course, lesson }: { assignment
         const maxScore = value(assignment, ["maximum_score", "max_score"], value(payload, ["maximumScore", "maximum_score"], "100"));
         const required = booleanValue(assignment, ["required"]) || booleanValue(payload, ["required"]) ? "Required" : "Optional";
         const fileTypes = value(assignment, ["permitted_file_types"], value(payload, ["submissionFileTypes", "submission_file_types"], "PDF, DOCX, screenshots, chart analysis"));
-        const reviewSource = submission ?? assignment;
+        const linkedSubmission = assignmentSubmissionState(assignment);
+        const reviewSource = submission ?? linkedSubmission ?? assignment;
         const reviewStatus = value(reviewSource, ["status"]);
         const reviewScore = value(reviewSource, ["grade", "score"]);
         const reviewFeedback = value(reviewSource, ["instructor_feedback", "instructor_comments"]);
-        const hasReview = Boolean(submission || ["approved", "rejected", "needs revision", "in review"].includes(reviewStatus.toLowerCase()) || reviewScore || reviewFeedback);
+        const hasReview = Boolean(linkedSubmission || submission || ["approved", "rejected", "needs revision", "in review"].includes(reviewStatus.toLowerCase()) || reviewScore || reviewFeedback);
         return (
           <article key={idOf(assignment) || `${title}-${index}`} className="border border-gold-500/16 bg-navy-950 p-4">
             <p className="text-xs uppercase tracking-[.18em] text-gold-300">{value(assignment, ["homework_type", "asset_type"], "Homework Assignment")}</p>

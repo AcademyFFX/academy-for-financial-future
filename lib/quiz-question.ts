@@ -131,8 +131,20 @@ export function auditQuizCorrectAnswer(questionValue: unknown, payloadValue?: un
   const question = questionValue && typeof questionValue === "object" ? questionValue as QuestionRecord : {};
   const payload = payloadValue && typeof payloadValue === "object" ? payloadValue as QuestionRecord : {};
   const options = normalizeQuizOptions(question.options ?? question.choices ?? question.answers ?? question.answer_options ?? question.answerOptions);
-  const records = [{ label: "question", record: question }];
-  if (payload !== question) records.push({ label: "payload", record: payload });
+  const records: Array<{ label: string; record: QuestionRecord }> = [];
+  const seen = new Set<object>();
+  const nestedAnswerContainers = ["question", "answerKey", "answer_key", "grading", "metadata", "quiz", "data"];
+  const collectRecords = (label: string, record: QuestionRecord, depth: number) => {
+    if (seen.has(record) || depth > 4) return;
+    seen.add(record);
+    records.push({ label, record });
+    for (const key of nestedAnswerContainers) {
+      const nested = record[key];
+      if (nested && typeof nested === "object" && !Array.isArray(nested)) collectRecords(`${label}.${key}`, nested as QuestionRecord, depth + 1);
+    }
+  };
+  collectRecords("question", question, 0);
+  if (payload !== question) collectRecords("payload", payload, 0);
 
   const candidates: QuizAnswerKeyAudit["candidates"] = [];
   for (const { label, record } of records) {
@@ -164,12 +176,12 @@ export function quizAnswerIsCorrect(selectedAnswer: unknown, correctAnswer: unkn
   return Boolean(selected && correct && normalizeQuizAnswerForComparison(selected) === normalizeQuizAnswerForComparison(correct));
 }
 
-export function normalizeQuizQuestionRecord(record: unknown, fallbackTitle = ""): NormalizedQuizQuestion {
+export function normalizeQuizQuestionRecord(record: unknown, fallbackTitle = "", payloadValue?: unknown): NormalizedQuizQuestion {
   const source = record && typeof record === "object" ? record as QuestionRecord : {};
   const questionText = textValue(source, ["prompt", "question", "question_text", "questionText", "text", "title"], fallbackTitle);
   const optionSource = source.options ?? source.choices ?? source.answers ?? source.answer_options ?? source.answerOptions;
   const options = normalizeQuizOptions(optionSource);
-  const correctAnswer = auditQuizCorrectAnswer(source).correctAnswer;
+  const correctAnswer = auditQuizCorrectAnswer(source, payloadValue).correctAnswer;
   const points = Number(source.points ?? source.point_value ?? source.pointValue ?? 1) || 1;
 
   return {

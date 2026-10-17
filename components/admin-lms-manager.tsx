@@ -90,6 +90,9 @@ type SavedQuizQuestion = {
   answerKeyIssue: "" | "missing" | "conflict";
   storedAnswerKeys: Array<{ source: string; rawValue: string; resolvedValue: string; valid: boolean }>;
   canEditIndividually: boolean;
+  assetId: string;
+  assetTitle: string;
+  rawSignedUrl: string;
   raw: unknown;
 };
 
@@ -345,9 +348,10 @@ function parseQuizPayload(row: DbRow) {
   const parsed = parseJson(row);
   const questions = Array.isArray(parsed.questions) ? parsed.questions : [parsed.question ?? parsed];
   return questions.flatMap((question) => {
-    const normalized = normalizeQuizQuestionRecord(question, value(row, ["asset_title"]));
+    const payloadContext = questions.length === 1 ? parsed : undefined;
+    const normalized = normalizeQuizQuestionRecord(question, value(row, ["asset_title"]), payloadContext);
     if (!normalized.questionText && !normalized.prompt) return [];
-    const answerAudit = auditQuizCorrectAnswer(question, questions.length === 1 ? parsed : undefined);
+    const answerAudit = auditQuizCorrectAnswer(question, payloadContext);
     return [{
       quizTitle: value(parsed, ["quizTitle", "quiz_title"], value(row, ["asset_title"])),
       prompt: normalized.prompt,
@@ -546,6 +550,9 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
           answerKeyIssue: payload.answerKeyIssue,
           storedAnswerKeys: payload.storedAnswerKeys,
           canEditIndividually: payload.canEditIndividually,
+          assetId: value(asset, ["id"]),
+          assetTitle: value(asset, ["asset_title"]),
+          rawSignedUrl: value(asset, ["signed_url"]),
           raw: payload.raw
         });
       });
@@ -1797,7 +1804,16 @@ function QuizList({ title, questions, onEdit, onDelete }: { title: string; quest
       <p className="text-xs uppercase tracking-[.18em] text-gold-300">{title}</p>
       <div className="mt-4 grid gap-3">
         {questions.length === 0 ? <p className="text-sm text-ink/68">No saved questions match this quiz yet.</p> : questions.map((questionRecord, index) => {
-          console.log(questionRecord);
+          console.log("AFF quiz question audit", {
+            assetId: questionRecord.assetId,
+            assetTitle: questionRecord.assetTitle,
+            rawSignedUrl: questionRecord.rawSignedUrl,
+            normalizedQuestion: questionRecord.raw,
+            correctAnswer: questionRecord.storedAnswerKeys.find((candidate) => candidate.source.endsWith(".correctAnswer"))?.rawValue ?? "",
+            correct_answer: questionRecord.storedAnswerKeys.find((candidate) => candidate.source.endsWith(".correct_answer"))?.rawValue ?? "",
+            resolvedCorrectAnswer: questionRecord.correctAnswer,
+            renderedCorrectAnswer: questionRecord.correctAnswer || "No valid answer key stored"
+          });
           return (
             <article key={questionRecord.id} className="border border-gold-500/18 bg-navy-950 p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

@@ -130,7 +130,7 @@ function quizRowsFromAssets(assets: DbRow[]) {
     const payload = parseAssetPayload(asset);
     const sourceQuestions = Array.isArray(payload?.questions) ? payload.questions : [payload?.question ?? asset];
     const normalizedQuestions = sourceQuestions
-      .map((question) => normalizeQuizQuestionRecord(question, value(asset, ["asset_title"])))
+      .map((question) => normalizeQuizQuestionRecord(question, value(asset, ["asset_title"]), sourceQuestions.length === 1 ? payload : undefined))
       .filter((question) => question.questionText);
     if (!normalizedQuestions.length) continue;
     const quizTitle = payload?.quizTitle || payload?.quiz_title || value(asset, ["asset_title"], "AFF Quiz");

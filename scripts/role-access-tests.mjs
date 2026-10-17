@@ -51,6 +51,13 @@ assert.equal(quizQuestionModule.quizAnswerIsCorrect("False", "Option B", ["True"
 assert.equal(quizQuestionModule.quizAnswerIsCorrect("False", "False", ["True", "False"]), true, "plain False must score correctly");
 assert.equal(quizQuestionModule.quizAnswerIsCorrect("▢️ False", "False", ["True", "▢️ False"]), true, "decorated False with a variation selector must score correctly");
 assert.equal(quizQuestionModule.quizAnswerIsCorrect("True", "Option B", ["True", "False"]), false, "True must not score correctly when False is the answer");
+assert.equal(quizQuestionModule.auditQuizCorrectAnswer({ options: ["EUR", "USD"], correctAnswer: "EUR" }).correctAnswer, "EUR", "admin answer audit must display camel-case EUR keys");
+assert.equal(quizQuestionModule.auditQuizCorrectAnswer({ options: ["Supply and Demand", "Weather"], correct_answer: "Supply and Demand" }).correctAnswer, "Supply and Demand", "admin answer audit must display snake-case supply-and-demand keys");
+assert.equal(quizQuestionModule.auditQuizCorrectAnswer({ options: ["Lower rates", "Higher interest rates"], answer: "Higher interest rates" }).correctAnswer, "Higher interest rates", "admin answer audit must display legacy answer fields");
+assert.equal(quizQuestionModule.auditQuizCorrectAnswer({ options: ["True", "False"] }, { correct_answer: "False" }).correctAnswer, "False", "admin answer audit must resolve a legacy payload-level False key");
+assert.equal(quizQuestionModule.auditQuizCorrectAnswer({ options: ["The Dollar strengthened", "The Euro strengthened against the Dollar"], correctOption: "B" }).correctAnswer, "The Euro strengthened against the Dollar", "admin answer audit must resolve legacy option references");
+assert.equal(quizQuestionModule.auditQuizCorrectAnswer({ options: ["A", "B"] }).issue, "missing", "admin answer audit must identify truly missing keys without inventing an answer");
+assert.equal(quizQuestionModule.auditQuizCorrectAnswer({ options: ["A", "B"], correctAnswer: "A", correct_answer: "B" }).issue, "conflict", "admin answer audit must identify conflicting valid keys");
 const understandingExchangeRatesLivePayload = [
   {
     selected: "☐ Supply and Demand",

@@ -28,7 +28,7 @@ import {
 import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getClientAdminStatus } from "@/lib/admin-client";
-import { cleanQuizAnswerText, normalizeQuizOptions, normalizeQuizQuestionRecord, serializeQuizQuestion } from "@/lib/quiz-question";
+import { auditQuizCorrectAnswer, cleanQuizAnswerText, normalizeQuizOptions, normalizeQuizQuestionRecord, serializeQuizQuestion } from "@/lib/quiz-question";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -86,6 +86,10 @@ type SavedQuizQuestion = {
   correctAnswer: string;
   points: number;
   status: string;
+  answerKeySource: string;
+  answerKeyIssue: "" | "missing" | "conflict";
+  storedAnswerKeys: Array<{ source: string; rawValue: string; resolvedValue: string; valid: boolean }>;
+  canEditIndividually: boolean;
   raw: unknown;
 };
 
@@ -339,18 +343,25 @@ function parseJson(row: DbRow | undefined | null) {
 
 function parseQuizPayload(row: DbRow) {
   const parsed = parseJson(row);
-  const question = parsed.question ?? parsed;
-  const normalized = normalizeQuizQuestionRecord(question, value(row, ["asset_title"]));
-  if (!normalized.questionText && !normalized.prompt) return null;
-  return {
-    quizTitle: value(parsed, ["quizTitle", "quiz_title"], value(row, ["asset_title"])),
-    prompt: normalized.prompt,
-    questionText: normalized.questionText,
-    options: normalized.options,
-    correctAnswer: normalized.correctAnswer,
-    points: normalized.points || 1,
-    raw: question
-  };
+  const questions = Array.isArray(parsed.questions) ? parsed.questions : [parsed.question ?? parsed];
+  return questions.flatMap((question) => {
+    const normalized = normalizeQuizQuestionRecord(question, value(row, ["asset_title"]));
+    if (!normalized.questionText && !normalized.prompt) return [];
+    const answerAudit = auditQuizCorrectAnswer(question, questions.length === 1 ? parsed : undefined);
+    return [{
+      quizTitle: value(parsed, ["quizTitle", "quiz_title"], value(row, ["asset_title"])),
+      prompt: normalized.prompt,
+      questionText: normalized.questionText,
+      options: normalized.options,
+      correctAnswer: answerAudit.correctAnswer,
+      points: normalized.points || 1,
+      answerKeySource: answerAudit.source,
+      answerKeyIssue: answerAudit.issue,
+      storedAnswerKeys: answerAudit.candidates,
+      canEditIndividually: questions.length === 1,
+      raw: question
+    }];
+  });
 }
 
 async function insertCourseAsset(asset: CourseAssetInput) {
@@ -517,21 +528,26 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
   const savedQuestions = useMemo<SavedQuizQuestion[]>(() => {
     const questions: SavedQuizQuestion[] = [];
     for (const asset of quizAssets) {
-      const payload = parseQuizPayload(asset);
-      if (!payload) continue;
-      questions.push({
-        id: value(asset, ["id"]),
-        courseId: value(asset, ["course_id"]),
-        moduleId: value(asset, ["module_id"]),
-        lessonId: value(asset, ["lesson_id"]),
-        quizTitle: payload.quizTitle,
-        prompt: payload.prompt,
-        questionText: payload.questionText,
-        options: payload.options,
-        correctAnswer: payload.correctAnswer,
-        points: payload.points,
-        status: value(asset, ["asset_status"], "Draft"),
-        raw: payload.raw
+      const parsedQuestions = parseQuizPayload(asset);
+      parsedQuestions.forEach((payload, questionIndex) => {
+        questions.push({
+          id: parsedQuestions.length === 1 ? value(asset, ["id"]) : `${value(asset, ["id"])}::${questionIndex}`,
+          courseId: value(asset, ["course_id"]),
+          moduleId: value(asset, ["module_id"]),
+          lessonId: value(asset, ["lesson_id"]),
+          quizTitle: payload.quizTitle,
+          prompt: payload.prompt,
+          questionText: payload.questionText,
+          options: payload.options,
+          correctAnswer: payload.correctAnswer,
+          points: payload.points,
+          status: value(asset, ["asset_status"], "Draft"),
+          answerKeySource: payload.answerKeySource,
+          answerKeyIssue: payload.answerKeyIssue,
+          storedAnswerKeys: payload.storedAnswerKeys,
+          canEditIndividually: payload.canEditIndividually,
+          raw: payload.raw
+        });
       });
     }
     return questions
@@ -1791,11 +1807,16 @@ function QuizList({ title, questions, onEdit, onDelete }: { title: string; quest
                   <div className="mt-2 grid gap-1 text-sm text-ink/68">
                     {questionRecord.options.map((option, optionIndex) => <p key={`${questionRecord.id}-option-${optionIndex}`}>Option {String.fromCharCode(65 + optionIndex)}: {option}</p>)}
                   </div>
-                  <p className="mt-1 text-sm text-gold-300">Correct answer: {questionRecord.correctAnswer}</p>
+                  <p className="mt-1 text-sm text-gold-300">Correct answer: {questionRecord.correctAnswer || "No valid answer key stored"}</p>
+                  {questionRecord.answerKeySource ? <p className="mt-1 text-xs text-ink/52">Answer key source: {questionRecord.answerKeySource}</p> : null}
+                  {questionRecord.answerKeyIssue === "conflict" ? <p className="mt-2 text-sm font-semibold text-amber-300">Conflicting stored answer keys require review. No production data was changed.</p> : null}
+                  {questionRecord.answerKeyIssue === "missing" ? <p className="mt-2 text-sm font-semibold text-amber-300">No valid correct answer is stored for this question.</p> : null}
                 </div>
                 <div className="flex shrink-0 gap-2">
-                  <button className="mini-button" type="button" onClick={() => onEdit(questionRecord)}>Edit</button>
-                  <button className="mini-danger" type="button" onClick={() => onDelete(questionRecord.id)}>Delete</button>
+                  {questionRecord.canEditIndividually ? <>
+                    <button className="mini-button" type="button" onClick={() => onEdit(questionRecord)}>Edit</button>
+                    <button className="mini-danger" type="button" onClick={() => onDelete(questionRecord.id)}>Delete</button>
+                  </> : <span className="text-xs text-ink/52">Bundled quiz question</span>}
                 </div>
               </div>
             </article>

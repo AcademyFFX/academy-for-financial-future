@@ -13,6 +13,15 @@ export type NormalizedQuizQuestion = {
 
 type QuestionRecord = Record<string, unknown>;
 
+const quizAnswerFieldNames = ["correctAnswer", "correct_answer", "correct", "answer", "correctOption", "correct_option"] as const;
+
+export type QuizAnswerKeyAudit = {
+  correctAnswer: string;
+  source: string;
+  issue: "" | "missing" | "conflict";
+  candidates: Array<{ source: string; rawValue: string; resolvedValue: string; valid: boolean }>;
+};
+
 function stripLeadingOptionDecorations(value: string) {
   let output = value.trimStart();
   while (output) {
@@ -118,6 +127,37 @@ export function resolveQuizAnswerToOption(answer: unknown, optionsValue: unknown
   return optionIndex >= 0 ? options[optionIndex] : cleanQuizAnswerText(answer);
 }
 
+export function auditQuizCorrectAnswer(questionValue: unknown, payloadValue?: unknown): QuizAnswerKeyAudit {
+  const question = questionValue && typeof questionValue === "object" ? questionValue as QuestionRecord : {};
+  const payload = payloadValue && typeof payloadValue === "object" ? payloadValue as QuestionRecord : {};
+  const options = normalizeQuizOptions(question.options ?? question.choices ?? question.answers ?? question.answer_options ?? question.answerOptions);
+  const records = [{ label: "question", record: question }];
+  if (payload !== question) records.push({ label: "payload", record: payload });
+
+  const candidates: QuizAnswerKeyAudit["candidates"] = [];
+  for (const { label, record } of records) {
+    for (const field of quizAnswerFieldNames) {
+      const raw = record[field];
+      if (raw === null || raw === undefined || !String(raw).trim()) continue;
+      const rawValue = String(raw);
+      const resolvedValue = resolveQuizAnswerToOption(raw, options);
+      const valid = options.length === 0
+        ? Boolean(normalizeQuizAnswerForComparison(resolvedValue))
+        : options.some((option) => normalizeQuizAnswerForComparison(option) === normalizeQuizAnswerForComparison(resolvedValue));
+      candidates.push({ source: `${label}.${field}`, rawValue, resolvedValue, valid });
+    }
+  }
+
+  const validCandidates = candidates.filter((candidate) => candidate.valid);
+  const uniqueAnswers = new Set(validCandidates.map((candidate) => normalizeQuizAnswerForComparison(candidate.resolvedValue)));
+  return {
+    correctAnswer: validCandidates[0]?.resolvedValue ?? "",
+    source: validCandidates[0]?.source ?? "",
+    issue: validCandidates.length === 0 ? "missing" : uniqueAnswers.size > 1 ? "conflict" : "",
+    candidates
+  };
+}
+
 export function quizAnswerIsCorrect(selectedAnswer: unknown, correctAnswer: unknown, optionsValue: unknown) {
   const selected = resolveQuizAnswerToOption(selectedAnswer, optionsValue);
   const correct = resolveQuizAnswerToOption(correctAnswer, optionsValue);
@@ -129,8 +169,7 @@ export function normalizeQuizQuestionRecord(record: unknown, fallbackTitle = "")
   const questionText = textValue(source, ["prompt", "question", "question_text", "questionText", "text", "title"], fallbackTitle);
   const optionSource = source.options ?? source.choices ?? source.answers ?? source.answer_options ?? source.answerOptions;
   const options = normalizeQuizOptions(optionSource);
-  const storedCorrectAnswer = textValue(source, ["correctAnswer", "correct_answer", "correct", "answer", "correctOption", "correct_option"]);
-  const correctAnswer = resolveQuizAnswerToOption(storedCorrectAnswer, options);
+  const correctAnswer = auditQuizCorrectAnswer(source).correctAnswer;
   const points = Number(source.points ?? source.point_value ?? source.pointValue ?? 1) || 1;
 
   return {

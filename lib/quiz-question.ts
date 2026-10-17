@@ -23,11 +23,14 @@ function textValue(record: QuestionRecord, keys: string[], fallback = "") {
 
 export function cleanQuizAnswerText(value: unknown) {
   return String(value ?? "")
+    .normalize("NFKC")
     .trim()
+    .replace(/^[\s\u200B-\u200D\uFEFF☐☑☒□■▪▫◻◼✓✔•·]+/, "")
     .replace(/^\s*(?:options?|answer options?|correct\s*answers?)\s*:\s*/i, "")
     .replace(/^\s*(?:option|answer)\s+[a-z]\s*[:.)-]\s*/i, "")
     .replace(/^\s*(?:option|answer)\s*[:.)-]\s*/i, "")
     .replace(/^\s*(?:[a-z]|\d+)\s*[:.)-]\s+/i, "")
+    .replace(/^[\s\u200B-\u200D\uFEFF☐☑☒□■▪▫◻◼✓✔•·]+/, "")
     .trim();
 }
 

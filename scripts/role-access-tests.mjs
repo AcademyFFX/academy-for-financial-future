@@ -48,6 +48,29 @@ assert.equal(quizQuestionModule.quizAnswerIsCorrect("Supply and Demand", "1", ["
 assert.equal(quizQuestionModule.quizAnswerIsCorrect("Higher interest rates", "B", ["Lower liquidity", "Higher interest rates", "Weekend trading", "Lower exports"]), true, "Higher interest rates must score correctly when a legacy key stores option B");
 assert.equal(quizQuestionModule.quizAnswerIsCorrect("False", "Option B", ["True", "False"]), true, "False must score correctly for a legacy True/False option key");
 assert.equal(quizQuestionModule.quizAnswerIsCorrect("True", "Option B", ["True", "False"]), false, "True must not score correctly when False is the answer");
+const understandingExchangeRatesLivePayload = [
+  {
+    selected: "☐ Supply and Demand",
+    correct: "Supply and Demand",
+    options: ["Option A: ☐ Supply and Demand", "Option B: Government websites", "Option C: Weather", "Option D: Fashion"]
+  },
+  {
+    selected: "□ Higher interest rates",
+    correct: "Higher interest rates",
+    options: ["Option A: Lower growth", "Option B: □ Higher interest rates", "Option C: Lower liquidity", "Option D: Weekend trading"]
+  },
+  {
+    selected: "False",
+    correct: "False",
+    options: ["True", "False"]
+  }
+];
+const understandingExchangeRatesScore = understandingExchangeRatesLivePayload.filter((question) =>
+  quizQuestionModule.quizAnswerIsCorrect(question.selected, question.correct, question.options)
+).length;
+assert.equal(understandingExchangeRatesScore, 3, "the exact decorated Understanding Exchange Rates payload must grade 3/3");
+assert.equal(quizQuestionModule.quizAnswerIsCorrect("☐ EUR", "EUR", ["Option A: ☐ EUR", "Option B: USD", "Option C: Both", "Option D: Neither"]), true, "decorated EUR must remain correct");
+assert.equal(quizQuestionModule.quizAnswerIsCorrect("□ The Euro strengthened against the Dollar", "The Euro strengthened against the Dollar", ["Option A: The Dollar strengthened against the Euro", "Option B: □ The Euro strengthened against the Dollar"]), true, "decorated Euro-strength answer must remain correct");
 assert.match(quizAnswerKeyMigration, /update public\.course_assets/, "quiz answer-key repair must update only the existing Course Builder quiz records");
 assert.match(quizAnswerKeyMigration, /'The Euro strengthened against the Dollar'/, "quiz answer-key repair must normalize the EUR\/USD interpretation answer");
 assert.match(quizAnswerKeyMigration, /'Supply and Demand'/, "quiz answer-key repair must normalize the exchange-rate supply and demand answer");

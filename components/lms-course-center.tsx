@@ -12,7 +12,7 @@ import { normalizeQuizQuestionRecord, quizAnswerIsCorrect, type NormalizedQuizQu
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
-type QuizQuestion = NormalizedQuizQuestion;
+type QuizQuestion = NormalizedQuizQuestion & { sourceAssetId?: string; questionKey?: string };
 type QuizSubmissionDiagnostic = {
   stage: string;
   authUserId: string;
@@ -65,7 +65,17 @@ function isMissingColumn(error: unknown, column: string) {
 
 function questionsOf(row: DbRow): QuizQuestion[] {
   const questions = row.questions;
-  return Array.isArray(questions) ? questions.map((question) => normalizeQuizQuestionRecord(question)) : [];
+  return Array.isArray(questions) ? questions.map((question) => {
+    const source = question && typeof question === "object" ? question as DbRow : {};
+    const normalized = normalizeQuizQuestionRecord(question);
+    return {
+      ...normalized,
+      answerKeySource: value(source, ["answerKeySource"], normalized.answerKeySource),
+      answerKeyIssue: value(source, ["answerKeyIssue"], normalized.answerKeyIssue) as QuizQuestion["answerKeyIssue"],
+      sourceAssetId: value(source, ["sourceAssetId"]),
+      questionKey: value(source, ["questionKey"])
+    };
+  }) : [];
 }
 
 function safeSlug(text: string) {
@@ -131,7 +141,11 @@ function quizRowsFromAssets(assets: DbRow[], lessons: DbRow[]) {
     const payload = parseAssetPayload(asset);
     const sourceQuestions = Array.isArray(payload?.questions) ? payload.questions : [payload?.question ?? asset];
     const normalizedQuestions = sourceQuestions
-      .map((question) => normalizeQuizQuestionRecord(question, value(asset, ["asset_title"]), sourceQuestions.length === 1 ? payload : undefined))
+      .map((question, questionIndex) => ({
+        ...normalizeQuizQuestionRecord(question, value(asset, ["asset_title"]), sourceQuestions.length === 1 ? payload : undefined),
+        sourceAssetId: idOf(asset),
+        questionKey: `${idOf(asset)}:${questionIndex}`
+      }))
       .filter((question) => question.questionText);
     if (!normalizedQuestions.length) continue;
     const quizTitle = payload?.quizTitle || payload?.quiz_title || value(asset, ["asset_title"], "AFF Quiz");
@@ -403,12 +417,17 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
       const match = quizAnswerIsCorrect(quizAnswers[index], question.correctAnswer, question.options);
       return {
         question: question.questionText || question.prompt,
+        questionKey: question.questionKey || `${quizId}:${index}`,
+        sourceAssetId: question.sourceAssetId || "",
+        renderedOptions: question.options,
         selectedAnswer: quizAnswers[index],
         correctAnswer: question.correctAnswer,
+        answerKeySource: question.answerKeySource,
         points,
         earnedPoints: match ? points : 0
       };
     });
+    if (process.env.NODE_ENV !== "production") console.table(gradingBreakdown);
     const totalPoints = gradingBreakdown.reduce((total, question) => total + question.points, 0);
     const earnedPoints = gradingBreakdown.reduce((total, question) => total + question.earnedPoints, 0);
     const percentage = totalPoints ? Math.round((earnedPoints / totalPoints) * 100) : 0;

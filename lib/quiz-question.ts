@@ -8,6 +8,8 @@ export type NormalizedQuizQuestion = {
   correctAnswer: string;
   correct_answer: string;
   points: number;
+  answerKeySource: string;
+  answerKeyIssue: "" | "missing" | "conflict";
   raw: unknown;
 };
 
@@ -161,10 +163,14 @@ export function auditQuizCorrectAnswer(questionValue: unknown, payloadValue?: un
   }
 
   const validCandidates = candidates.filter((candidate) => candidate.valid);
+  const exactTextCandidates = validCandidates.filter((candidate) =>
+    options.some((option) => normalizeQuizAnswerForComparison(option) === normalizeQuizAnswerForComparison(candidate.rawValue))
+  );
+  const preferredCandidate = exactTextCandidates[0] ?? validCandidates[0];
   const uniqueAnswers = new Set(validCandidates.map((candidate) => normalizeQuizAnswerForComparison(candidate.resolvedValue)));
   return {
-    correctAnswer: validCandidates[0]?.resolvedValue ?? "",
-    source: validCandidates[0]?.source ?? "",
+    correctAnswer: preferredCandidate?.resolvedValue ?? "",
+    source: preferredCandidate?.source ?? "",
     issue: validCandidates.length === 0 ? "missing" : uniqueAnswers.size > 1 ? "conflict" : "",
     candidates
   };
@@ -181,7 +187,8 @@ export function normalizeQuizQuestionRecord(record: unknown, fallbackTitle = "",
   const questionText = textValue(source, ["prompt", "question", "question_text", "questionText", "text", "title"], fallbackTitle);
   const optionSource = source.options ?? source.choices ?? source.answers ?? source.answer_options ?? source.answerOptions;
   const options = normalizeQuizOptions(optionSource);
-  const correctAnswer = auditQuizCorrectAnswer(source, payloadValue).correctAnswer;
+  const answerKeyAudit = auditQuizCorrectAnswer(source, payloadValue);
+  const correctAnswer = answerKeyAudit.correctAnswer;
   const points = Number(source.points ?? source.point_value ?? source.pointValue ?? 1) || 1;
 
   return {
@@ -194,6 +201,8 @@ export function normalizeQuizQuestionRecord(record: unknown, fallbackTitle = "",
     correctAnswer,
     correct_answer: correctAnswer,
     points,
+    answerKeySource: answerKeyAudit.source,
+    answerKeyIssue: answerKeyAudit.issue,
     raw: record
   };
 }

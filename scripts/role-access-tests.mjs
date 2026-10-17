@@ -81,6 +81,26 @@ assert.equal(quizQuestionModule.normalizeQuizQuestionRecord({ prompt: "Inflation
 assert.equal(quizQuestionModule.normalizeQuizQuestionRecord({ prompt: "EUR/USD rises", options: ["The Dollar strengthened", "The Euro strengthened against the Dollar"] }, "", { correct_answer: "The Euro strengthened against the Dollar" }).correctAnswer, "The Euro strengthened against the Dollar", "wrapper-level Euro-strength answers must use the canonical resolver");
 assert.equal(quizQuestionModule.auditQuizCorrectAnswer({ options: ["A", "B"] }).issue, "missing", "admin answer audit must identify truly missing keys without inventing an answer");
 assert.equal(quizQuestionModule.auditQuizCorrectAnswer({ options: ["A", "B"], correctAnswer: "A", correct_answer: "B" }).issue, "conflict", "admin answer audit must identify conflicting valid keys");
+const liveCurrencyPairsQuestions = [
+  quizQuestionModule.normalizeQuizQuestionRecord({
+    prompt: "In EUR/USD, which currency is the base currency?",
+    options: ["USD", "Both", "EUR", "Neither"],
+    correctAnswer: "A",
+    correct_answer: "EUR",
+    points: 1
+  }),
+  quizQuestionModule.normalizeQuizQuestionRecord({
+    prompt: "If EUR/USD rises, this generally means:",
+    options: ["The Dollar strengthened against the Euro", "The Euro strengthened against the Dollar", "Both currencies weakened", "The pair stopped trading"],
+    correctAnswer: "The Euro strengthened against the Dollar",
+    points: 1
+  })
+];
+assert.equal(liveCurrencyPairsQuestions[0].correctAnswer, "EUR", "explicit EUR answer text must outrank a conflicting stale option-letter key");
+assert.equal(liveCurrencyPairsQuestions[0].answerKeySource, "question.correct_answer", "the grading trace must identify the explicit EUR key as its source");
+const liveCurrencyPairsSelections = ["EUR", "The Euro strengthened against the Dollar"];
+const liveCurrencyPairsEarnedPoints = liveCurrencyPairsQuestions.reduce((score, question, index) => score + (quizQuestionModule.quizAnswerIsCorrect(liveCurrencyPairsSelections[index], question.correctAnswer, question.options) ? question.points : 0), 0);
+assert.equal(liveCurrencyPairsEarnedPoints, 2, "the exact two-question live Currency Pairs payload must grade 2/2");
 const understandingExchangeRatesLivePayload = [
   {
     selected: "☐ Supply and Demand",
@@ -173,6 +193,10 @@ assert.match(lmsCourseCenter, /earned_points: earnedPoints/, "student quiz submi
 assert.match(lmsCourseCenter, /quizAnswerIsCorrect\(quizAnswers\[index\], question\.correctAnswer, question\.options\)/, "student quiz grading must use canonical answer resolution instead of raw string equality");
 assert.match(lmsCourseCenter, /const gradingBreakdown = quizQuestions\.map/, "student quiz grading must compute one canonical comparison breakdown");
 assert.match(lmsCourseCenter, /const selectedAnswers = gradingBreakdown;/, "persisted grading details must reuse the same comparison breakdown used for the score");
+assert.match(lmsCourseCenter, /sourceAssetId: question\.sourceAssetId/, "persisted grading details must retain the source quiz asset id");
+assert.match(lmsCourseCenter, /questionKey: question\.questionKey/, "persisted grading details must retain a stable source question key");
+assert.match(lmsCourseCenter, /renderedOptions: question\.options/, "persisted grading details must retain the exact options shown to the student");
+assert.match(lmsCourseCenter, /answerKeySource: question\.answerKeySource/, "persisted grading details must identify the resolved answer-key source");
 assert.match(lmsCourseCenter, /percentage/, "student quiz submission must persist and render percentage");
 assert.match(lmsCourseCenter, /retrying_internal_student_attempt/, "student quiz submission must retry with internal student id if production expects bigint student_id");
 assert.match(lmsCourseCenter, /process\.env\.NODE_ENV !== "production" && diagnostic/, "student quiz diagnostics must be hidden from production students");

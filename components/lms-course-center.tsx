@@ -394,19 +394,24 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
       setQuizSubmissionDiagnostics((current) => ({ ...current, [quizId]: { ...baseDiagnostic, stage: "error", errorMessage: `Question ${unanswered + 1} is unanswered.` } }));
       return;
     }
-    const totalPoints = quizQuestions.reduce((total, question) => total + Number(question.points ?? 1), 0);
-    const earnedPoints = quizQuestions.reduce((total, question, index) => total + (quizAnswerIsCorrect(quizAnswers[index], question.correctAnswer, question.options) ? Number(question.points ?? 1) : 0), 0);
+    const gradingBreakdown = quizQuestions.map((question, index) => {
+      const points = Number(question.points ?? 1);
+      const match = quizAnswerIsCorrect(quizAnswers[index], question.correctAnswer, question.options);
+      return {
+        question: question.questionText || question.prompt,
+        selectedAnswer: quizAnswers[index],
+        correctAnswer: question.correctAnswer,
+        points,
+        earnedPoints: match ? points : 0
+      };
+    });
+    const totalPoints = gradingBreakdown.reduce((total, question) => total + question.points, 0);
+    const earnedPoints = gradingBreakdown.reduce((total, question) => total + question.earnedPoints, 0);
     const percentage = totalPoints ? Math.round((earnedPoints / totalPoints) * 100) : 0;
     const score = percentage;
     const passingScore = quizPassingScore(quiz);
     const result = percentage >= passingScore ? "Pass" : "Fail";
-    const selectedAnswers = quizQuestions.map((question, index) => ({
-      question: question.questionText || question.prompt,
-      selectedAnswer: quizAnswers[index],
-      correctAnswer: question.correctAnswer,
-      points: Number(question.points ?? 1),
-      earnedPoints: quizAnswerIsCorrect(quizAnswers[index], question.correctAnswer, question.options) ? Number(question.points ?? 1) : 0
-    }));
+    const selectedAnswers = gradingBreakdown;
     const previousAttempts = attempts.filter((attempt) => {
       const attemptQuizId = value(attempt, ["quiz_id", "exam_id"]);
       const attemptCourseId = value(attempt, ["course_id"]);

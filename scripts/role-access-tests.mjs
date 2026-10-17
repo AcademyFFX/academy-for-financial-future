@@ -37,6 +37,7 @@ const studentDirectoryPage = read("app/student-directory/page.tsx");
 const lessonVideoPersistenceMigration = read("supabase/migrations/20260806_repair_lesson_video_metadata_persistence.sql");
 const assignmentReviewMigration = read("supabase/migrations/20261012_repair_assignment_review_workflow.sql");
 const quizAnswerKeyMigration = read("supabase/migrations/20261016_normalize_aff_quiz_answer_keys.sql");
+const exchangeRateAnswerKeyMigration = read("supabase/migrations/20261016_correct_understanding_exchange_rates_answer_key.sql");
 const quizQuestionSource = read("lib/quiz-question.ts");
 const quizQuestionModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(quizQuestionSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
@@ -47,6 +48,8 @@ assert.equal(quizQuestionModule.quizAnswerIsCorrect("The Euro strengthened again
 assert.equal(quizQuestionModule.quizAnswerIsCorrect("Supply and Demand", "1", ["Supply and Demand", "Weather", "Chart colors", "Broker branding"]), true, "Supply and Demand must score correctly when a legacy key stores one-based index 1");
 assert.equal(quizQuestionModule.quizAnswerIsCorrect("Higher interest rates", "B", ["Lower liquidity", "Higher interest rates", "Weekend trading", "Lower exports"]), true, "Higher interest rates must score correctly when a legacy key stores option B");
 assert.equal(quizQuestionModule.quizAnswerIsCorrect("False", "Option B", ["True", "False"]), true, "False must score correctly for a legacy True/False option key");
+assert.equal(quizQuestionModule.quizAnswerIsCorrect("False", "False", ["True", "False"]), true, "plain False must score correctly");
+assert.equal(quizQuestionModule.quizAnswerIsCorrect("▢️ False", "False", ["True", "▢️ False"]), true, "decorated False with a variation selector must score correctly");
 assert.equal(quizQuestionModule.quizAnswerIsCorrect("True", "Option B", ["True", "False"]), false, "True must not score correctly when False is the answer");
 const understandingExchangeRatesLivePayload = [
   {
@@ -77,6 +80,11 @@ assert.match(quizAnswerKeyMigration, /'Supply and Demand'/, "quiz answer-key rep
 assert.match(quizAnswerKeyMigration, /'Higher interest rates'/, "quiz answer-key repair must normalize the international-capital answer");
 assert.match(quizAnswerKeyMigration, /'False'/, "quiz answer-key repair must normalize the inflation True\/False answer");
 assert.doesNotMatch(quizAnswerKeyMigration, /update public\.exams|delete from public\.exams/, "quiz answer-key repair must not alter historical student attempts or scores");
+assert.match(exchangeRateAnswerKeyMigration, /course_id = 1/, "exchange-rate answer repair must target Forex Foundations only");
+assert.match(exchangeRateAnswerKeyMigration, /lesson_id = 2/, "exchange-rate answer repair must target the Currency Pairs lesson only");
+assert.match(exchangeRateAnswerKeyMigration, /which factor often attracts international capital\?/, "exchange-rate answer repair must target only the proven incorrect question");
+assert.match(exchangeRateAnswerKeyMigration, /Higher interest rates/, "exchange-rate answer repair must write the verified answer key");
+assert.doesNotMatch(exchangeRateAnswerKeyMigration, /update public\.exams|delete from public\.exams/, "targeted answer repair must preserve historical attempts and scores");
 
 assert.match(middleware, /\["\/student-dashboard", "\/admin"\]/, "administrator /student-dashboard must redirect to /admin");
 assert.match(middleware, /\["\/student-profile", "\/admin\/profile"\]/, "administrator /student-profile must redirect to /admin/profile");
@@ -133,6 +141,8 @@ assert.match(lmsCourseCenter, /selected_answers: selectedAnswers/, "student quiz
 assert.match(lmsCourseCenter, /total_points: totalPoints/, "student quiz submission must persist total points");
 assert.match(lmsCourseCenter, /earned_points: earnedPoints/, "student quiz submission must persist earned points");
 assert.match(lmsCourseCenter, /quizAnswerIsCorrect\(quizAnswers\[index\], question\.correctAnswer, question\.options\)/, "student quiz grading must use canonical answer resolution instead of raw string equality");
+assert.match(lmsCourseCenter, /const gradingBreakdown = quizQuestions\.map/, "student quiz grading must compute one canonical comparison breakdown");
+assert.match(lmsCourseCenter, /const selectedAnswers = gradingBreakdown;/, "persisted grading details must reuse the same comparison breakdown used for the score");
 assert.match(lmsCourseCenter, /percentage/, "student quiz submission must persist and render percentage");
 assert.match(lmsCourseCenter, /retrying_internal_student_attempt/, "student quiz submission must retry with internal student id if production expects bigint student_id");
 assert.match(lmsCourseCenter, /process\.env\.NODE_ENV !== "production" && diagnostic/, "student quiz diagnostics must be hidden from production students");

@@ -13,6 +13,23 @@ export type NormalizedQuizQuestion = {
 
 type QuestionRecord = Record<string, unknown>;
 
+function stripLeadingOptionDecorations(value: string) {
+  let output = value.trimStart();
+  while (output) {
+    const codePoint = output.codePointAt(0);
+    if (codePoint === undefined) break;
+    const isDecoration =
+      (codePoint >= 0x2000 && codePoint <= 0x206f) ||
+      (codePoint >= 0x2500 && codePoint <= 0x27bf) ||
+      (codePoint >= 0xfe00 && codePoint <= 0xfe0f) ||
+      codePoint === 0xfeff ||
+      (codePoint >= 0x1f300 && codePoint <= 0x1faff);
+    if (!isDecoration) break;
+    output = output.slice(codePoint > 0xffff ? 2 : 1).trimStart();
+  }
+  return output;
+}
+
 function textValue(record: QuestionRecord, keys: string[], fallback = "") {
   for (const key of keys) {
     const value = record[key];
@@ -22,16 +39,14 @@ function textValue(record: QuestionRecord, keys: string[], fallback = "") {
 }
 
 export function cleanQuizAnswerText(value: unknown) {
-  return String(value ?? "")
-    .normalize("NFKC")
+  const withoutLeadingDecoration = stripLeadingOptionDecorations(String(value ?? "").normalize("NFKC"));
+  const withoutOptionPrefix = withoutLeadingDecoration
     .trim()
-    .replace(/^[\s\u200B-\u200D\uFEFF☐☑☒□■▪▫◻◼✓✔•·]+/, "")
     .replace(/^\s*(?:options?|answer options?|correct\s*answers?)\s*:\s*/i, "")
     .replace(/^\s*(?:option|answer)\s+[a-z]\s*[:.)-]\s*/i, "")
     .replace(/^\s*(?:option|answer)\s*[:.)-]\s*/i, "")
-    .replace(/^\s*(?:[a-z]|\d+)\s*[:.)-]\s+/i, "")
-    .replace(/^[\s\u200B-\u200D\uFEFF☐☑☒□■▪▫◻◼✓✔•·]+/, "")
-    .trim();
+    .replace(/^\s*(?:[a-z]|\d+)\s*[:.)-]\s+/i, "");
+  return stripLeadingOptionDecorations(withoutOptionPrefix).trim();
 }
 
 export function normalizeQuizOptions(value: unknown): string[] {

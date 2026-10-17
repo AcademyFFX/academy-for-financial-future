@@ -62,12 +62,57 @@ export function normalizeQuizOptions(value: unknown): string[] {
   return [];
 }
 
+export function normalizeQuizAnswerForComparison(value: unknown) {
+  return cleanQuizAnswerText(value)
+    .normalize("NFKC")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\s+/g, " ")
+    .replace(/[.!?]+$/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function referencedOptionIndex(value: unknown, optionCount: number) {
+  const raw = String(value ?? "").trim();
+  const letterMatch = raw.match(/^(?:(?:option|answer)\s*)?([a-z])(?:\s*[:.)-])?$/i);
+  if (letterMatch) {
+    const index = letterMatch[1].toUpperCase().charCodeAt(0) - 65;
+    return index >= 0 && index < optionCount ? index : -1;
+  }
+
+  const numberMatch = raw.match(/^(?:(?:option|answer)\s*)?(\d+)(?:\s*[:.)-])?$/i);
+  if (!numberMatch) return -1;
+  const number = Number(numberMatch[1]);
+  if (number === 0 && optionCount > 0) return 0;
+  return number >= 1 && number <= optionCount ? number - 1 : -1;
+}
+
+export function resolveQuizAnswerToOption(answer: unknown, optionsValue: unknown) {
+  const options = normalizeQuizOptions(optionsValue);
+  const normalizedAnswer = normalizeQuizAnswerForComparison(answer);
+  if (!normalizedAnswer) return "";
+
+  const textMatch = options.find((option) => normalizeQuizAnswerForComparison(option) === normalizedAnswer);
+  if (textMatch) return textMatch;
+
+  const optionIndex = referencedOptionIndex(answer, options.length);
+  return optionIndex >= 0 ? options[optionIndex] : cleanQuizAnswerText(answer);
+}
+
+export function quizAnswerIsCorrect(selectedAnswer: unknown, correctAnswer: unknown, optionsValue: unknown) {
+  const selected = resolveQuizAnswerToOption(selectedAnswer, optionsValue);
+  const correct = resolveQuizAnswerToOption(correctAnswer, optionsValue);
+  return Boolean(selected && correct && normalizeQuizAnswerForComparison(selected) === normalizeQuizAnswerForComparison(correct));
+}
+
 export function normalizeQuizQuestionRecord(record: unknown, fallbackTitle = ""): NormalizedQuizQuestion {
   const source = record && typeof record === "object" ? record as QuestionRecord : {};
   const questionText = textValue(source, ["prompt", "question", "question_text", "questionText", "text", "title"], fallbackTitle);
   const optionSource = source.options ?? source.choices ?? source.answers ?? source.answer_options ?? source.answerOptions;
   const options = normalizeQuizOptions(optionSource);
-  const correctAnswer = textValue(source, ["correctAnswer", "correct_answer", "correct", "answer", "correctOption", "correct_option"]);
+  const storedCorrectAnswer = textValue(source, ["correctAnswer", "correct_answer", "correct", "answer", "correctOption", "correct_option"]);
+  const correctAnswer = resolveQuizAnswerToOption(storedCorrectAnswer, options);
   const points = Number(source.points ?? source.point_value ?? source.pointValue ?? 1) || 1;
 
   return {

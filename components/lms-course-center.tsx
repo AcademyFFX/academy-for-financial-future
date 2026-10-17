@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProgressBar } from "@/components/progress";
 import { getClientAdminStatus } from "@/lib/admin-client";
 import { hasFullCourseAccess } from "@/lib/membership-state";
-import { normalizeQuizQuestionRecord, type NormalizedQuizQuestion } from "@/lib/quiz-question";
+import { normalizeQuizQuestionRecord, quizAnswerIsCorrect, type NormalizedQuizQuestion } from "@/lib/quiz-question";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -395,7 +395,7 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
       return;
     }
     const totalPoints = quizQuestions.reduce((total, question) => total + Number(question.points ?? 1), 0);
-    const earnedPoints = quizQuestions.reduce((total, question, index) => total + (quizAnswers[index] === question.correctAnswer ? Number(question.points ?? 1) : 0), 0);
+    const earnedPoints = quizQuestions.reduce((total, question, index) => total + (quizAnswerIsCorrect(quizAnswers[index], question.correctAnswer, question.options) ? Number(question.points ?? 1) : 0), 0);
     const percentage = totalPoints ? Math.round((earnedPoints / totalPoints) * 100) : 0;
     const score = percentage;
     const passingScore = quizPassingScore(quiz);
@@ -405,7 +405,7 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
       selectedAnswer: quizAnswers[index],
       correctAnswer: question.correctAnswer,
       points: Number(question.points ?? 1),
-      earnedPoints: quizAnswers[index] === question.correctAnswer ? Number(question.points ?? 1) : 0
+      earnedPoints: quizAnswerIsCorrect(quizAnswers[index], question.correctAnswer, question.options) ? Number(question.points ?? 1) : 0
     }));
     const previousAttempts = attempts.filter((attempt) => {
       const attemptQuizId = value(attempt, ["quiz_id", "exam_id"]);

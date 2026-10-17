@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProgressBar } from "@/components/progress";
 import { getClientAdminStatus } from "@/lib/admin-client";
 import { hasFullCourseAccess } from "@/lib/membership-state";
+import { selectCanonicalQuizAssets } from "@/lib/quiz-asset-selection";
 import { normalizeQuizQuestionRecord, quizAnswerIsCorrect, type NormalizedQuizQuestion } from "@/lib/quiz-question";
 import { createClient } from "@/lib/supabase";
 
@@ -124,9 +125,9 @@ function quizPassingScore(row: DbRow) {
   return 80;
 }
 
-function quizRowsFromAssets(assets: DbRow[]) {
+function quizRowsFromAssets(assets: DbRow[], lessons: DbRow[]) {
   const grouped = new Map<string, DbRow>();
-  for (const asset of assets.filter((row) => value(row, ["asset_type"]) === "Quiz" && value(row, ["asset_status"], "Published") === "Published")) {
+  for (const asset of selectCanonicalQuizAssets(assets, lessons)) {
     const payload = parseAssetPayload(asset);
     const sourceQuestions = Array.isArray(payload?.questions) ? payload.questions : [payload?.question ?? asset];
     const normalizedQuestions = sourceQuestions
@@ -134,7 +135,8 @@ function quizRowsFromAssets(assets: DbRow[]) {
       .filter((question) => question.questionText);
     if (!normalizedQuestions.length) continue;
     const quizTitle = payload?.quizTitle || payload?.quiz_title || value(asset, ["asset_title"], "AFF Quiz");
-    const key = `${value(asset, ["course_id"])}::${value(asset, ["lesson_id"])}::${quizTitle}`;
+    const quizGroupId = value(asset, ["quiz_group_id"]);
+    const key = quizGroupId || `${value(asset, ["course_id"])}::${value(asset, ["lesson_id"])}::${quizTitle}`;
     const existing = grouped.get(key);
     const points = normalizedQuestions.reduce((total, question) => total + Number(question.points ?? 1), 0);
     if (existing) {
@@ -144,12 +146,14 @@ function quizRowsFromAssets(assets: DbRow[]) {
       grouped.set(key, {
         ...asset,
         id: key,
+        source_asset_ids: [idOf(asset)],
         quiz_title: quizTitle,
         passing_score: String(quizPassingScore(asset)),
         questions: normalizedQuestions,
         file_size: points
       });
     }
+    if (existing) existing.source_asset_ids = [...((existing.source_asset_ids as string[] | undefined) ?? []), idOf(asset)];
   }
   return Array.from(grouped.values());
 }
@@ -227,7 +231,7 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
       setModules(assets.filter((asset) => value(asset, ["asset_type"]) === "Module"));
       setLessons((lessonResult.data ?? []) as DbRow[]);
       setHomework(assets.filter((asset) => value(asset, ["asset_type"]) === "Assignment"));
-      setQuizzes(quizRowsFromAssets(assets));
+      setQuizzes(quizRowsFromAssets(assets, (lessonResult.data ?? []) as DbRow[]));
       setEnrollments(enrollmentResult.error ? [] : (enrollmentResult.data ?? []) as DbRow[]);
       setProgress(progressResult.error ? [] : (progressResult.data ?? []) as DbRow[]);
       setAttempts(attemptResult.error ? [] : (attemptResult.data ?? []) as DbRow[]);

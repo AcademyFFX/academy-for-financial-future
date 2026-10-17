@@ -28,6 +28,7 @@ import {
 import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getClientAdminStatus } from "@/lib/admin-client";
+import { duplicatePublishedQuizAssetWarnings } from "@/lib/quiz-asset-selection";
 import { auditQuizCorrectAnswer, cleanQuizAnswerText, normalizeQuizOptions, normalizeQuizQuestionRecord, serializeQuizQuestion } from "@/lib/quiz-question";
 import { createClient } from "@/lib/supabase";
 
@@ -503,6 +504,10 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
   const selectedCourseResources = useMemo(() => resources.filter((asset) => value(asset, ["course_id"]) === selectedCourseId), [resources, selectedCourseId]);
   const selectedCourseAssignments = useMemo(() => assignments.filter((asset) => value(asset, ["course_id"]) === selectedCourseId), [assignments, selectedCourseId]);
   const selectedCourseQuizzes = useMemo(() => quizAssets.filter((asset) => value(asset, ["course_id"]) === selectedCourseId), [quizAssets, selectedCourseId]);
+  const duplicateQuizWarnings = useMemo(
+    () => duplicatePublishedQuizAssetWarnings(selectedCourseQuizzes, lessons).filter((warning) => !selectedCourseId || warning.courseId === selectedCourseId),
+    [lessons, selectedCourseId, selectedCourseQuizzes]
+  );
   const lessonVideoValidationMessage = videoUrlValidationMessage(lessonForm.videoProvider, lessonForm.videoUrl);
   const lessonVideoPreviewUrl = videoPreviewEmbedUrl(lessonForm.videoProvider, lessonForm.videoUrl);
   const lessonVideoIsDirect = ["mp4", "uploaded_video"].includes(lessonForm.videoProvider);
@@ -1637,6 +1642,13 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
 
           {activeSection === "quizzes" ? (
             <EditorPanel title="Quiz Placeholder Integration" icon={<ClipboardCheck size={21} />}>
+              {duplicateQuizWarnings.length ? <div className="grid gap-3">
+                {duplicateQuizWarnings.map((warning) => <div key={warning.key} className="border border-amber-300/35 bg-amber-300/10 p-4 text-sm text-amber-100">
+                  <p className="font-semibold">Multiple published quiz assets detected for lesson {warning.lessonId}.</p>
+                  <p className="mt-1">{warning.assetCount} assets: {warning.titles.join(" · ")}</p>
+                  <p className="mt-1">{warning.canonicalGroupId ? `${warning.competingAssetCount} non-canonical asset(s) are excluded from the student quiz page.` : "No canonical quiz group is configured; published assets may compete on the student page."}</p>
+                </div>)}
+              </div> : null}
               <FormPanel title="Create Quiz Question" icon={<ClipboardCheck size={21} />} onSubmit={(event) => { event.preventDefault(); saveQuizQuestion(false); }} submitLabel={editingQuestionId ? "Update Question" : "Save Question"}>
                 <Select label="Select course" value={quizForm.courseId} onChange={(next) => setQuizForm({ ...quizForm, courseId: next, lessonId: "" })}>{courseOptions}</Select>
                 <Select label="Optional module" value={quizForm.moduleId} onChange={(next) => setQuizForm({ ...quizForm, moduleId: next })}>{selectedCourseModules.map((moduleRow) => <option key={value(moduleRow, ["id"])} value={value(moduleRow, ["module_id", "display_order"])}>{value(moduleRow, ["module_title", "asset_title"])}</option>)}</Select>

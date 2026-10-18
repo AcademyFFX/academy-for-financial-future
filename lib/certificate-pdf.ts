@@ -13,13 +13,28 @@ export type PrintableCertificate = {
   issuance_source?: string | null;
   instructor_name?: string | null;
   approved_by?: string | null;
+  credential_class?: string | null;
+  credential_type?: string | null;
+  certificate_type?: string | null;
+  registry_serial?: string | null;
+  signatory_title?: string | null;
 };
 
 export type CertificateLogoImage = {
   jpegHex: string;
   width: number;
   height: number;
+  watermarkJpegHex?: string;
+  watermarkWidth?: number;
+  watermarkHeight?: number;
 };
+
+export type AffCredentialClass =
+  | "Certificate of Completion"
+  | "Professional Certificate"
+  | "Advanced Certificate"
+  | "Academic Certificate"
+  | "Diploma";
 
 const PAGE_WIDTH = 792;
 const PAGE_HEIGHT = 612;
@@ -43,15 +58,6 @@ function escapePdfText(value: unknown) {
   return pdfSafe(value).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
-function hashText(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
 function estimateTextWidth(text: string, fontSize: number, factor = 0.52) {
   return pdfSafe(text).length * fontSize * factor;
 }
@@ -65,6 +71,12 @@ function centeredText(text: string, y: number, fontSize: number, font = "F2", co
 
 function placedText(text: string, x: number, y: number, fontSize: number, font = "F4", color = NAVY) {
   return `${color} rg BT /${font} ${fontSize} Tf ${x} ${y} Td (${escapePdfText(text)}) Tj ET`;
+}
+
+function fittedPlacedText(text: string, x: number, y: number, fontSize: number, maxWidth: number, font = "F4", color = NAVY) {
+  const safeText = pdfSafe(text);
+  const fittedSize = Math.max(5.5, Math.min(fontSize, fontSize * (maxWidth / Math.max(estimateTextWidth(safeText, fontSize), maxWidth))));
+  return `${color} rg BT /${font} ${fittedSize.toFixed(2)} Tf ${x} ${y} Td (${escapePdfText(safeText)}) Tj ET`;
 }
 
 function formattedDate(raw: string) {
@@ -84,29 +96,197 @@ function buildOfficialLogoPlacement(logo: CertificateLogoImage) {
   return `q ${width.toFixed(2)} 0 0 ${height.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm /AFFLogo Do Q`;
 }
 
-function buildVerificationMark(payload: string) {
-  const size = 21;
-  const cell = 3;
-  const left = 664;
-  const bottom = 83;
-  const commands = [`1 1 1 rg ${left - 6} ${bottom - 6} ${size * cell + 12} ${size * cell + 12} re f`, `${NAVY} rg`];
+function buildOfficialWatermarkPlacement(logo: CertificateLogoImage) {
+  const widthSource = logo.watermarkWidth ?? logo.width;
+  const heightSource = logo.watermarkHeight ?? logo.height;
+  const maxWidth = 350;
+  const maxHeight = 185;
+  const scale = Math.min(maxWidth / widthSource, maxHeight / heightSource);
+  const width = widthSource * scale;
+  const height = heightSource * scale;
+  const x = (PAGE_WIDTH - width) / 2;
+  const y = 186 + (185 - height) / 2;
+  return `q ${width.toFixed(2)} 0 0 ${height.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm /AFFWatermark Do Q`;
+}
 
-  function finder(x: number, y: number) {
-    commands.push(`${left + x * cell} ${bottom + y * cell} ${cell * 7} ${cell * 7} re f`);
-    commands.push(`1 1 1 rg ${left + (x + 1) * cell} ${bottom + (y + 1) * cell} ${cell * 5} ${cell * 5} re f ${NAVY} rg`);
-    commands.push(`${left + (x + 2) * cell} ${bottom + (y + 2) * cell} ${cell * 3} ${cell * 3} re f`);
+function qrGaloisTables() {
+  const exp = new Array<number>(512).fill(0);
+  const log = new Array<number>(256).fill(0);
+  let value = 1;
+  for (let index = 0; index < 255; index += 1) {
+    exp[index] = value;
+    log[value] = index;
+    value <<= 1;
+    if (value & 0x100) value ^= 0x11d;
+  }
+  for (let index = 255; index < exp.length; index += 1) exp[index] = exp[index - 255];
+  return { exp, log };
+}
+
+const qrGalois = qrGaloisTables();
+
+function qrMultiply(left: number, right: number) {
+  if (left === 0 || right === 0) return 0;
+  return qrGalois.exp[qrGalois.log[left] + qrGalois.log[right]];
+}
+
+function qrErrorCorrection(data: number[], length: number) {
+  let generator = [1];
+  for (let degree = 0; degree < length; degree += 1) {
+    const next = new Array<number>(generator.length + 1).fill(0);
+    for (let index = 0; index < generator.length; index += 1) {
+      next[index] ^= generator[index];
+      next[index + 1] ^= qrMultiply(generator[index], qrGalois.exp[degree]);
+    }
+    generator = next;
   }
 
-  finder(0, 0);
-  finder(14, 0);
-  finder(0, 14);
-  const seed = hashText(payload);
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const inFinder = (x < 7 && y < 7) || (x >= 14 && y < 7) || (x < 7 && y >= 14);
-      if (inFinder) continue;
-      const bit = (Math.imul(seed + x * 37 + y * 149, 2654435761) >>> ((x + y) % 13)) & 1;
-      if (bit) commands.push(`${left + x * cell} ${bottom + y * cell} ${cell} ${cell} re f`);
+  const remainder = new Array<number>(length).fill(0);
+  for (const byte of data) {
+    const factor = byte ^ remainder[0];
+    remainder.shift();
+    remainder.push(0);
+    if (factor === 0) continue;
+    for (let index = 0; index < length; index += 1) remainder[index] ^= qrMultiply(generator[index + 1], factor);
+  }
+  return remainder;
+}
+
+function qrBch(value: number, polynomial: number) {
+  let shifted = value;
+  const polynomialDegree = 31 - Math.clz32(polynomial);
+  while (shifted !== 0 && 31 - Math.clz32(shifted) >= polynomialDegree) {
+    shifted ^= polynomial << (31 - Math.clz32(shifted) - polynomialDegree);
+  }
+  return shifted;
+}
+
+export function createVerificationQrMatrix(verificationUrl: string) {
+  const bytes = Array.from(new TextEncoder().encode(verificationUrl));
+  if (bytes.length > 192) throw new Error("The certificate verification URL is too long for the secure QR block.");
+
+  const bits: number[] = [];
+  const appendBits = (value: number, length: number) => {
+    for (let bit = length - 1; bit >= 0; bit -= 1) bits.push((value >>> bit) & 1);
+  };
+  appendBits(0b0100, 4);
+  appendBits(bytes.length, 8);
+  for (const byte of bytes) appendBits(byte, 8);
+  const dataCapacityBits = 194 * 8;
+  appendBits(0, Math.min(4, dataCapacityBits - bits.length));
+  while (bits.length % 8 !== 0) bits.push(0);
+
+  const dataCodewords: number[] = [];
+  for (let index = 0; index < bits.length; index += 8) {
+    let byte = 0;
+    for (let bit = 0; bit < 8; bit += 1) byte = (byte << 1) | bits[index + bit];
+    dataCodewords.push(byte);
+  }
+  for (let pad = 0; dataCodewords.length < 194; pad += 1) dataCodewords.push(pad % 2 === 0 ? 0xec : 0x11);
+
+  const blocks = [dataCodewords.slice(0, 97), dataCodewords.slice(97, 194)];
+  const corrections = blocks.map((block) => qrErrorCorrection(block, 24));
+  const codewords: number[] = [];
+  for (let index = 0; index < 97; index += 1) for (const block of blocks) codewords.push(block[index]);
+  for (let index = 0; index < 24; index += 1) for (const correction of corrections) codewords.push(correction[index]);
+
+  const size = 49;
+  const modules: Array<Array<boolean | null>> = Array.from({ length: size }, () => Array<boolean | null>(size).fill(null));
+  const placeFinder = (row: number, column: number) => {
+    for (let y = -1; y <= 7; y += 1) {
+      for (let x = -1; x <= 7; x += 1) {
+        const targetRow = row + y;
+        const targetColumn = column + x;
+        if (targetRow < 0 || targetRow >= size || targetColumn < 0 || targetColumn >= size) continue;
+        modules[targetRow][targetColumn] =
+          (y >= 0 && y <= 6 && (x === 0 || x === 6)) ||
+          (x >= 0 && x <= 6 && (y === 0 || y === 6)) ||
+          (y >= 2 && y <= 4 && x >= 2 && x <= 4);
+      }
+    }
+  };
+  placeFinder(0, 0);
+  placeFinder(size - 7, 0);
+  placeFinder(0, size - 7);
+
+  for (const row of [6, 24, 42]) {
+    for (const column of [6, 24, 42]) {
+      if (modules[row][column] !== null) continue;
+      for (let y = -2; y <= 2; y += 1) {
+        for (let x = -2; x <= 2; x += 1) modules[row + y][column + x] = Math.abs(y) === 2 || Math.abs(x) === 2 || (y === 0 && x === 0);
+      }
+    }
+  }
+
+  for (let index = 8; index < size - 8; index += 1) {
+    if (modules[index][6] === null) modules[index][6] = index % 2 === 0;
+    if (modules[6][index] === null) modules[6][index] = index % 2 === 0;
+  }
+
+  const versionBits = (8 << 12) | qrBch(8 << 12, 0x1f25);
+  for (let index = 0; index < 18; index += 1) {
+    const dark = ((versionBits >>> index) & 1) === 1;
+    modules[Math.floor(index / 3)][index % 3 + size - 11] = dark;
+    modules[index % 3 + size - 11][Math.floor(index / 3)] = dark;
+  }
+
+  const formatValue = 0b01000;
+  const formatBits = ((formatValue << 10) | qrBch(formatValue << 10, 0x537)) ^ 0x5412;
+  for (let index = 0; index < 15; index += 1) {
+    const dark = ((formatBits >>> index) & 1) === 1;
+    if (index < 6) modules[index][8] = dark;
+    else if (index < 8) modules[index + 1][8] = dark;
+    else modules[size - 15 + index][8] = dark;
+
+    if (index < 8) modules[8][size - index - 1] = dark;
+    else if (index < 9) modules[8][7] = dark;
+    else modules[8][15 - index - 1] = dark;
+  }
+  modules[size - 8][8] = true;
+
+  let row = size - 1;
+  let direction = -1;
+  let byteIndex = 0;
+  let bitIndex = 7;
+  for (let column = size - 1; column > 0; column -= 2) {
+    if (column === 6) column -= 1;
+    while (true) {
+      for (let offset = 0; offset < 2; offset += 1) {
+        const targetColumn = column - offset;
+        if (modules[row][targetColumn] !== null) continue;
+        let dark = byteIndex < codewords.length && ((codewords[byteIndex] >>> bitIndex) & 1) === 1;
+        if ((row + targetColumn) % 2 === 0) dark = !dark;
+        modules[row][targetColumn] = dark;
+        bitIndex -= 1;
+        if (bitIndex < 0) {
+          byteIndex += 1;
+          bitIndex = 7;
+        }
+      }
+      row += direction;
+      if (row >= 0 && row < size) continue;
+      row -= direction;
+      direction = -direction;
+      break;
+    }
+  }
+  return modules.map((line) => line.map(Boolean));
+}
+
+function buildVerificationMark(verificationUrl: string) {
+  const matrix = createVerificationQrMatrix(verificationUrl);
+  const cell = 1.36;
+  const quietZone = 4;
+  const left = 658;
+  const bottom = 82;
+  const totalSize = (matrix.length + quietZone * 2) * cell;
+  const commands = [`1 1 1 rg ${left} ${bottom} ${totalSize.toFixed(2)} ${totalSize.toFixed(2)} re f`, `${NAVY} rg`];
+  for (let row = 0; row < matrix.length; row += 1) {
+    for (let column = 0; column < matrix.length; column += 1) {
+      if (!matrix[row][column]) continue;
+      const x = left + (column + quietZone) * cell;
+      const y = bottom + (matrix.length - row - 1 + quietZone) * cell;
+      commands.push(`${x.toFixed(2)} ${y.toFixed(2)} ${cell.toFixed(2)} ${cell.toFixed(2)} re f`);
     }
   }
   return commands.join("\n");
@@ -115,10 +295,34 @@ function buildVerificationMark(payload: string) {
 function buildMicroPattern() {
   const commands: string[] = [`${PALE_GOLD} RG 0.35 w`];
   for (let x = 64; x <= 728; x += 16) {
-    commands.push(`${x} 49 m ${x + 8} 57 l ${x} 65 l ${x - 8} 57 l h S`);
     commands.push(`${x} 547 m ${x + 8} 555 l ${x} 563 l ${x - 8} 555 l h S`);
   }
   return commands.join("\n");
+}
+
+const credentialClasses: AffCredentialClass[] = [
+  "Certificate of Completion",
+  "Professional Certificate",
+  "Advanced Certificate",
+  "Academic Certificate",
+  "Diploma"
+];
+
+export function resolveCredentialClass(certificate: PrintableCertificate): AffCredentialClass {
+  const requested = pdfSafe(certificate.credential_class ?? certificate.credential_type ?? certificate.certificate_type).toLowerCase();
+  const explicit = credentialClasses.find((item) => item.toLowerCase() === requested);
+  if (explicit) return explicit;
+  if (pdfSafe(certificate.course_name).toLowerCase().includes("forex foundations")) return "Professional Certificate";
+  return "Academic Certificate";
+}
+
+function verificationDestination(verificationUrl: string) {
+  try {
+    const parsed = new URL(verificationUrl);
+    return `${parsed.host}${parsed.pathname}${parsed.search}`;
+  } catch {
+    return pdfSafe(verificationUrl);
+  }
 }
 
 export function hasVerifiedExamProvenance(certificate: PrintableCertificate) {
@@ -134,11 +338,14 @@ export function certificateAwardLanguage(certificate: PrintableCertificate) {
 export function createCertificatePdfDocument(certificate: PrintableCertificate, verificationUrl: string, logo: CertificateLogoImage) {
   const verifiedByExam = hasVerifiedExamProvenance(certificate);
   const signatory = certificate.approved_by || certificate.instructor_name || "Dr. Jean Rene Moricette";
+  const signatoryTitle = certificate.signatory_title || "Authorized Academic Signatory";
   const credentialTitle = certificate.course_name || "Academy Credential";
+  const credentialClass = resolveCredentialClass(certificate);
+  const registrySerial = certificate.registry_serial || certificate.certificate_number;
   const awardLanguage = certificateAwardLanguage(certificate);
-  const securityPayload = `${certificate.certificate_number}|${certificate.verification_code}|${verificationUrl}`;
+  const destination = verificationDestination(verificationUrl);
   const scoreLine = verifiedByExam
-    ? centeredText(`VERIFIED EXAMINATION SCORE  ${Math.round(certificate.score)}%`, 170, 10, "F3", GOLD, 420)
+    ? centeredText(`VERIFIED EXAMINATION SCORE  ${Math.round(certificate.score)}%`, 183, 10, "F3", GOLD, 420)
     : "";
 
   const content = `
@@ -147,11 +354,12 @@ ${DEEP_NAVY} rg 18 18 756 576 re f
 ${IVORY} rg 28 28 736 556 re f
 ${GOLD} RG 3 w 36 36 720 540 re S
 ${NAVY} RG 1 w 44 44 704 524 re S
+${buildOfficialWatermarkPlacement(logo)}
 ${buildMicroPattern()}
 ${NAVY} rg 52 475 688 88 re f
 ${buildOfficialLogoPlacement(logo)}
 ${GOLD} RG 1 w 76 473 m 716 473 l S
-${centeredText("ACADEMIC CERTIFICATE", 450, 14, "F3", GOLD, 560)}
+${centeredText(credentialClass.toUpperCase(), 450, 14, "F3", GOLD, 560)}
 ${centeredText("This official credential certifies that", 418, 11, "F5", CHARCOAL, 520)}
 ${centeredText(certificate.student_name, 367, 34, "F1", NAVY, 640)}
 ${GOLD} RG 1.2 w 170 350 m 622 350 l S
@@ -159,28 +367,34 @@ ${centeredText(awardLanguage, 318, 11, "F5", CHARCOAL, 680)}
 ${centeredText(credentialTitle, 269, 27, "F2", NAVY, 650)}
 ${centeredText(verifiedByExam ? "Verified completion under Academy academic and assessment standards" : "Academy credential recorded in the official certificate register", 236, 10, "F4", CHARCOAL, 620)}
 ${scoreLine}
-${GOLD} RG 1 w 76 139 m 286 139 l S
-${placedText(signatory, 76, 119, 11, "F2", NAVY)}
-${placedText("ACADEMY INSTRUCTOR AND AUTHORIZED SIGNATORY", 76, 102, 7, "F3", CHARCOAL)}
-${placedText(`ISSUED  ${formattedDate(certificate.issue_date)}`, 322, 133, 9, "F3", NAVY)}
-${placedText(`CERTIFICATE NO.  ${certificate.certificate_number}`, 322, 113, 8, "F4", CHARCOAL)}
-${placedText(`VERIFICATION  ${certificate.verification_code}`, 322, 95, 8, "F4", CHARCOAL)}
-${buildVerificationMark(securityPayload)}
-${centeredText("SECURE DIGITAL VERIFICATION", 67, 7, "F3", GOLD, 250)}
-${placedText("Verify this credential using the certificate number and verification code.", 76, 67, 7, "F4", CHARCOAL)}
-${placedText(`SERIAL ${certificate.certificate_number}  |  AFF ACADEMIC REGISTRY`, 76, 51, 6, "F4", CHARCOAL)}
+${GOLD} RG 1 w 76 150 m 286 150 l S
+${placedText(signatory, 76, 130, 11, "F2", NAVY)}
+${placedText(signatoryTitle, 76, 113, 7, "F3", CHARCOAL)}
+${placedText("Academy for Financial Future", 76, 98, 7, "F4", CHARCOAL)}
+${placedText("ISSUE DATE", 322, 145, 6.5, "F3", GOLD)}
+${placedText(formattedDate(certificate.issue_date), 322, 130, 9, "F4", NAVY)}
+${certificate.completion_date ? placedText("COMPLETION DATE", 452, 145, 6.5, "F3", GOLD) : ""}
+${certificate.completion_date ? placedText(formattedDate(certificate.completion_date), 452, 130, 9, "F4", NAVY) : ""}
+${fittedPlacedText(`CERTIFICATE NO.  ${certificate.certificate_number}`, 322, 112, 8, 300, "F4", CHARCOAL)}
+${fittedPlacedText(`VERIFICATION CODE  ${certificate.verification_code}`, 322, 95, 8, 300, "F4", CHARCOAL)}
+${fittedPlacedText(`AFF ACADEMIC REGISTRY  ${registrySerial}`, 322, 78, 7, 300, "F3", CHARCOAL)}
+${placedText("Issued by Academy for Financial Future", 322, 61, 7, "F4", CHARCOAL)}
+${buildVerificationMark(verificationUrl)}
+${placedText("SCAN TO VERIFY CREDENTIAL", 653, 68, 6, "F3", GOLD)}
+${fittedPlacedText(`VERIFICATION DESTINATION  ${destination}`, 76, 51, 7, 560, "F4", CHARCOAL)}
 `;
 
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 4 0 R /F2 5 0 R /F3 6 0 R /F4 7 0 R /F5 8 0 R >> /XObject << /AFFLogo 9 0 R >> >> /Contents 10 0 R >>`,
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 4 0 R /F2 5 0 R /F3 6 0 R /F4 7 0 R /F5 8 0 R >> /XObject << /AFFLogo 9 0 R /AFFWatermark 10 0 R >> >> /Contents 11 0 R >>`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >>",
     `<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${logo.jpegHex.length + 1} >>\nstream\n${logo.jpegHex}>\nendstream`,
+    `<< /Type /XObject /Subtype /Image /Width ${logo.watermarkWidth ?? logo.width} /Height ${logo.watermarkHeight ?? logo.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${(logo.watermarkJpegHex ?? logo.jpegHex).length + 1} >>\nstream\n${logo.watermarkJpegHex ?? logo.jpegHex}>\nendstream`,
     `<< /Length ${content.length} >>\nstream\n${content}\nendstream`
   ];
 
@@ -243,24 +457,33 @@ async function loadOfficialAffLogoForPdf(): Promise<CertificateLogoImage> {
     if (maxX < minX || maxY < minY) throw new Error("The official AFF logo artwork is empty.");
 
     const padding = 12;
-    const width = maxX - minX + 1 + padding * 2;
     const height = maxY - minY + 1 + padding * 2;
-    const outputCanvas = document.createElement("canvas");
-    outputCanvas.width = width;
-    outputCanvas.height = height;
-    const outputContext = outputCanvas.getContext("2d");
-    if (!outputContext) throw new Error("The official AFF logo could not be prepared for the certificate.");
-    outputContext.fillStyle = "#0A1833";
-    outputContext.fillRect(0, 0, width, height);
-    outputContext.drawImage(sourceCanvas, minX, minY, maxX - minX + 1, maxY - minY + 1, padding, padding, maxX - minX + 1, maxY - minY + 1);
+    const encodeArtwork = async (background: string, alpha: number, cropWidth = maxX - minX + 1) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = cropWidth + padding * 2;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("The official AFF logo could not be prepared for the certificate.");
+      context.fillStyle = background;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.globalAlpha = alpha;
+      context.drawImage(sourceCanvas, minX, minY, cropWidth, maxY - minY + 1, padding, padding, cropWidth, maxY - minY + 1);
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((result) => result ? resolve(result) : reject(new Error("The official AFF logo could not be encoded for the certificate.")), "image/jpeg", 0.96);
+      });
+      return { blob, width: canvas.width, height: canvas.height };
+    };
 
-    const jpegBlob = await new Promise<Blob>((resolve, reject) => {
-      outputCanvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The official AFF logo could not be encoded for the certificate.")), "image/jpeg", 0.96);
-    });
+    const primary = await encodeArtwork("#0A1833", 1);
+    const monogramWidth = Math.max(1, Math.round((maxX - minX + 1) * 0.41));
+    const watermark = await encodeArtwork("#F7F3EB", 0.075, monogramWidth);
     return {
-      jpegHex: bytesToHex(new Uint8Array(await jpegBlob.arrayBuffer())),
-      width,
-      height
+      jpegHex: bytesToHex(new Uint8Array(await primary.blob.arrayBuffer())),
+      width: primary.width,
+      height: primary.height,
+      watermarkJpegHex: bytesToHex(new Uint8Array(await watermark.blob.arrayBuffer())),
+      watermarkWidth: watermark.width,
+      watermarkHeight: watermark.height
     };
   } finally {
     URL.revokeObjectURL(sourceUrl);

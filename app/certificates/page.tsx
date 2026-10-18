@@ -27,6 +27,9 @@ type Certificate = {
   integrity_verified: boolean;
   issuance_source: string | null;
   instructor_name: string;
+  credential_class: string | null;
+  registry_serial: string;
+  signatory_title: string;
   registry: "legacy" | "digital";
 };
 
@@ -88,6 +91,11 @@ export default function CertificatesPage() {
       integrity_verified: row.integrity_verified === true,
       issuance_source: row.issuance_source ? String(row.issuance_source) : null,
       instructor_name: String(row.approved_by ?? row.instructor_name ?? "Dr. Jean Rene Moricette"),
+      credential_class: row.credential_class || row.credential_type || row.certificate_type
+        ? String(row.credential_class ?? row.credential_type ?? row.certificate_type)
+        : null,
+      registry_serial: String(row.registry_serial ?? row.certificate_number ?? ""),
+      signatory_title: String(row.signatory_title ?? "Authorized Academic Signatory"),
       registry
     };
   }

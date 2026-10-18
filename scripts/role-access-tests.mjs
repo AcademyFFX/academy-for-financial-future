@@ -160,22 +160,41 @@ const legacyCertificate = {
   exam_attempt_id: null,
   instructor_name: "Dr. Jean Rene Moricette"
 };
-const officialLogoFixture = { jpegHex: "ffd8ffd9", width: 1600, height: 758 };
+const officialLogoFixture = { jpegHex: "ffd8ffd9", width: 1600, height: 758, watermarkJpegHex: "ffd8ffd9", watermarkWidth: 660, watermarkHeight: 758 };
 const legacyCertificatePdf = certificatePdfModule.createCertificatePdfDocument(legacyCertificate, "https://academy.example/verify-certificate?certificate=AFF-2026-8834542", officialLogoFixture);
 assert.equal(certificatePdfModule.hasVerifiedExamProvenance(legacyCertificate), false, "a preserved certificate without attempt provenance must remain a legacy credential");
 assert.match(certificatePdfModule.certificateAwardLanguage(legacyCertificate), /recognized by the Academy for the award of/, "legacy certificates must use neutral award wording");
+assert.equal(certificatePdfModule.resolveCredentialClass(legacyCertificate), "Professional Certificate", "Forex Foundations must default to the Professional Certificate classification");
+assert.equal(certificatePdfModule.resolveCredentialClass({ ...legacyCertificate, credential_class: "Diploma" }), "Diploma", "explicit supported credential metadata must override the course default");
 assert.doesNotMatch(legacyCertificatePdf, /fulfilled all academic requirements|VERIFIED EXAMINATION SCORE/, "legacy PDFs must not claim unverified completion or display an unverified score");
+assert.match(legacyCertificatePdf, /PROFESSIONAL CERTIFICATE/, "the master template must render the resolved credential class");
 assert.match(legacyCertificatePdf, /AFF-2026-8834542/, "the PDF must preserve George Moreno's exact certificate number");
 assert.match(legacyCertificatePdf, /VERIFY-GEORGE/, "the PDF must contain the stored verification code");
 assert.match(legacyCertificatePdf, /Dr\. Jean Rene Moricette/, "the PDF must contain the authorized instructor name");
+assert.match(legacyCertificatePdf, /Authorized Academic Signatory/, "the PDF must contain the formal academic authorization title");
+assert.match(legacyCertificatePdf, /Issued by Academy for Financial Future/, "the PDF must identify the issuing institution");
 assert.match(legacyCertificatePdf, /October 18, 2026/, "the PDF must contain the recorded issue date");
-assert.match(legacyCertificatePdf, /SECURE DIGITAL VERIFICATION/, "the PDF must include the QR verification block");
+assert.match(legacyCertificatePdf, /SCAN TO VERIFY CREDENTIAL/, "the PDF must label the QR verification block");
+assert.match(legacyCertificatePdf, /academy\.example\/verify-certificate\?certificate=AFF-2026-8834542/, "the verification destination must match the certificate record");
+const verificationQr = certificatePdfModule.createVerificationQrMatrix("https://academy.example/verify-certificate?certificate=AFF-2026-8834542");
+assert.equal(verificationQr.length, 49, "the verification destination must be encoded as a version 8 QR matrix");
+assert.ok(verificationQr.every((row) => row.length === 49), "the verification QR matrix must be square and complete");
+assert.deepEqual(verificationQr.slice(0, 7).map((row) => row.slice(0, 7)), [
+  [true, true, true, true, true, true, true],
+  [true, false, false, false, false, false, true],
+  [true, false, true, true, true, false, true],
+  [true, false, true, true, true, false, true],
+  [true, false, true, true, true, false, true],
+  [true, false, false, false, false, false, true],
+  [true, true, true, true, true, true, true]
+], "the verification QR must contain a standards-compliant finder pattern");
 assert.match(legacyCertificatePdf, /MediaBox \[0 0 792 612\]/, "the academic certificate must use a landscape page composition");
 assert.match(affBrandSource, /AFF_LOGO_2_OFFICIAL\.png/, "all Academy surfaces must share the authoritative official logo asset");
 assert.equal(officialAffLogo.subarray(1, 4).toString("ascii"), "PNG", "the authoritative Academy logo must remain an intact PNG asset");
 assert.ok(officialAffLogo.length > 100_000, "the authoritative Academy logo must retain its full-resolution artwork");
 assert.match(certificatePdfSource, /OFFICIAL_AFF_LOGO_PATH/, "certificate generation must load the shared official Academy logo path");
 assert.match(legacyCertificatePdf, /\/AFFLogo Do/, "the certificate PDF must render the official Academy logo image");
+assert.match(legacyCertificatePdf, /\/AFFWatermark Do/, "the certificate PDF must derive its watermark from the official Academy logo image");
 assert.doesNotMatch(certificatePdfSource, /function buildSeal|\(AFF\) Tj/, "certificate generation must not substitute a generated AFF text seal");
 
 const guardedCertificate = {
@@ -185,12 +204,14 @@ const guardedCertificate = {
   exam_attempt_id: 501,
   integrity_verified: true,
   issuance_source: "guarded-certification-rpc",
+  completion_date: "2026-10-17",
   score: 80
 };
 const guardedCertificatePdf = certificatePdfModule.createCertificatePdfDocument(guardedCertificate, "https://academy.example/verify-certificate?certificate=AFF-2026-GUARDED", officialLogoFixture);
 assert.equal(certificatePdfModule.hasVerifiedExamProvenance(guardedCertificate), true, "a guarded certificate with an exam attempt must have verified provenance");
 assert.match(guardedCertificatePdf, /fulfilled all academic requirements and successfully passed/, "guarded certificates may use verified completion language");
 assert.match(guardedCertificatePdf, /VERIFIED EXAMINATION SCORE 80%/, "only provenance-verified certificates may display the certification score");
+assert.match(guardedCertificatePdf, /COMPLETION DATE[\s\S]*October 17, 2026/, "the shared master template must render a recorded completion date");
 const generatedCertificateBlob = await certificatePdfModule.createCertificatePdfBlob(guardedCertificate, "https://academy.example/verify-certificate?certificate=AFF-2026-GUARDED", officialLogoFixture);
 assert.equal(generatedCertificateBlob.type, "application/pdf", "certificate generation must return a PDF blob");
 assert.ok(generatedCertificateBlob.size > 4000, "the premium academic certificate PDF must contain a complete rendered document");

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
 import { createClient } from "@/lib/supabase";
+import { formatStoredCertificateDate } from "@/lib/certificate-record";
 
 type Certificate = {
   certificate_number: string;
@@ -118,8 +119,8 @@ export default function VerifyCertificatePage() {
               <div className="grid gap-4 text-ink/76 sm:grid-cols-2">
                 <p><span className="text-gold-300">Course Name:</span> {certificate.course_name}</p>
                 <p><span className="text-gold-300">Score:</span> {certificate.score}%</p>
-                <p><span className="text-gold-300">Completion Date:</span> {new Date(certificate.completion_date ?? certificate.issue_date).toLocaleDateString()}</p>
-                <p><span className="text-gold-300">Issue Date:</span> {new Date(certificate.issue_date).toLocaleDateString()}</p>
+                <p><span className="text-gold-300">Completion Date:</span> {formatStoredCertificateDate(certificate.completion_date)}</p>
+                <p><span className="text-gold-300">Issue Date:</span> {formatStoredCertificateDate(certificate.issue_date)}</p>
                 <p><span className="text-gold-300">Certificate Number:</span> {certificate.certificate_number}</p>
                 <p><span className="text-gold-300">Instructor:</span> {certificate.instructor_name ?? "Dr. Jean Rene Moricette"}</p>
                 <p className="sm:col-span-2"><span className="text-gold-300">Verification Code:</span> {certificate.verification_code}</p>

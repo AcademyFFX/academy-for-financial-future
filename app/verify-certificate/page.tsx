@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Award, SearchCheck } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
 import { createClient } from "@/lib/supabase";
+import { formatStoredCertificateDate } from "@/lib/certificate-record";
 
 type VerificationResult = {
   student_name: string;
@@ -21,8 +22,9 @@ export default function VerifyCertificatePage() {
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function verifyCertificate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const lookupCertificate = useCallback(async (requestedNumber: string) => {
+    const normalizedNumber = requestedNumber.trim();
+    if (!normalizedNumber) return;
     setLoading(true);
     setResult(null);
     setMessage("Checking AFF certificate registry...");
@@ -32,7 +34,7 @@ export default function VerifyCertificatePage() {
       const { data, error } = await supabase
         .from("digital_certificates")
         .select("student_name, certificate_name, issue_date, certificate_number, status")
-        .eq("certificate_number", certificateNumber.trim())
+        .eq("certificate_number", normalizedNumber)
         .eq("status", "Valid")
         .maybeSingle();
 
@@ -49,6 +51,18 @@ export default function VerifyCertificatePage() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    const requestedNumber = new URLSearchParams(window.location.search).get("certificate")?.trim() ?? "";
+    if (!requestedNumber) return;
+    setCertificateNumber(requestedNumber);
+    void lookupCertificate(requestedNumber);
+  }, [lookupCertificate]);
+
+  function verifyCertificate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void lookupCertificate(certificateNumber);
   }
 
   return (
@@ -85,7 +99,7 @@ export default function VerifyCertificatePage() {
                 <h2 className="mt-3 text-3xl font-semibold text-white">Verified Certificate</h2>
                 <div className="mt-6 grid gap-4 md:grid-cols-2">
                   <Detail label="Student Name" value={result.student_name} />
-                  <Detail label="Issue Date" value={new Date(result.issue_date).toLocaleDateString()} />
+                  <Detail label="Issue Date" value={formatStoredCertificateDate(result.issue_date)} />
                   <Detail label="Certification" value={result.certificate_name} />
                   <Detail label="Certificate Number" value={result.certificate_number} />
                 </div>

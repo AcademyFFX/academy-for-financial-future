@@ -7,6 +7,8 @@ import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
 import { ProgressBar } from "@/components/progress";
 import { createCertificatePdfBlob } from "@/lib/certificate-pdf";
+import { formatStoredCertificateDate, resolveStoredCertificateDates } from "@/lib/certificate-record";
+import { buildAffCertificateVerificationUrl } from "@/lib/certificate-verification";
 import { calculateCertificationReadiness, resolveForexFoundationsCourse } from "@/lib/certification-readiness";
 import { createClient } from "@/lib/supabase";
 
@@ -76,6 +78,7 @@ export default function CertificatesPage() {
   }
 
   function normalizeCertificate(row: DbRow, registry: Certificate["registry"] = "legacy"): Certificate {
+    const storedDates = resolveStoredCertificateDates(row);
     return {
       id: String(row.id ?? crypto.randomUUID()),
       certificate_number: String(row.certificate_number ?? ""),
@@ -83,8 +86,8 @@ export default function CertificatesPage() {
       student_name: String(row.student_name ?? "Student"),
       course_name: String(row.course_name ?? row.certificate_name ?? certificationCourseName),
       score: Number(row.score ?? 0),
-      issue_date: String(row.issue_date ?? new Date().toISOString().slice(0, 10)),
-      completion_date: row.completion_date ? String(row.completion_date) : row.issue_date ? String(row.issue_date) : null,
+      issue_date: storedDates.issueDate,
+      completion_date: storedDates.completionDate,
       verification_code: String(row.verification_code ?? row.qr_verification_code ?? ""),
       qr_payload: row.qr_payload ? String(row.qr_payload) : null,
       exam_attempt_id: row.exam_attempt_id === null || row.exam_attempt_id === undefined ? null : String(row.exam_attempt_id),
@@ -270,10 +273,7 @@ export default function CertificatesPage() {
   }
 
   async function downloadCertificate(certificate: Certificate) {
-    const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
-    const verificationUrl = certificate.qr_payload ?? (certificate.registry === "digital"
-      ? `${siteUrl}/verify-certificate?certificate=${encodeURIComponent(certificate.certificate_number)}`
-      : `${siteUrl}/verify?certificate=${encodeURIComponent(certificate.certificate_number)}&code=${encodeURIComponent(certificate.verification_code)}`);
+    const verificationUrl = buildAffCertificateVerificationUrl(certificate.certificate_number);
     try {
       const blob = await createCertificatePdfBlob(certificate, verificationUrl);
       const url = URL.createObjectURL(blob);
@@ -352,8 +352,8 @@ export default function CertificatesPage() {
                   <div className="gold-rule my-6" />
                   <div className="grid gap-3 text-sm text-ink/76">
                     <p><span className="text-gold-300">Student:</span> {certificate.student_name}</p>
-                    <p><span className="text-gold-300">Completion Date:</span> {new Date(certificate.completion_date ?? certificate.issue_date).toLocaleDateString()}</p>
-                    <p><span className="text-gold-300">Issued:</span> {new Date(certificate.issue_date).toLocaleDateString()}</p>
+                    <p><span className="text-gold-300">Completion Date:</span> {formatStoredCertificateDate(certificate.completion_date)}</p>
+                    <p><span className="text-gold-300">Issued:</span> {formatStoredCertificateDate(certificate.issue_date)}</p>
                     <p><span className="text-gold-300">Certificate ID:</span> {certificate.certificate_number}</p>
                     <p><span className="text-gold-300">Verification Code:</span> {certificate.verification_code}</p>
                     <p><span className="text-gold-300">Instructor:</span> Dr. Jean Rene Moricette</p>
@@ -365,6 +365,14 @@ export default function CertificatesPage() {
                   >
                     <Download size={18} /> Download PDF Certificate
                   </button>
+                  <a
+                    className="mt-3 inline-flex items-center justify-center gap-2 border border-gold-500/40 px-5 py-3 font-semibold text-gold-300"
+                    href={buildAffCertificateVerificationUrl(certificate.certificate_number)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <QrCode size={18} /> Verify Certificate
+                  </a>
                 </article>
               ))}
             </div>

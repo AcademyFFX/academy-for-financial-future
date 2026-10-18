@@ -49,6 +49,8 @@ const certificationIntegrityMigration = read("supabase/migrations/20261018_secur
 const certificationReadinessSource = read("lib/certification-readiness.ts");
 const certificatePdfSource = read("lib/certificate-pdf.ts");
 const affBrandSource = read("lib/aff-brand.ts");
+const certificateRecordSource = read("lib/certificate-record.ts");
+const certificateVerificationSource = read("lib/certificate-verification.ts");
 const officialAffLogo = readFileSync(new URL("../public/brand/AFF_LOGO_2_OFFICIAL.png", import.meta.url));
 const quizQuestionModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(quizQuestionSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
@@ -64,6 +66,12 @@ const isolatedCertificatePdfSource = certificatePdfSource.replace(
   'const OFFICIAL_AFF_LOGO_PATH = "/brand/AFF_LOGO_2_OFFICIAL.png";'
 );
 const certificatePdfModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(isolatedCertificatePdfSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
+}).outputText).toString("base64")}`);
+const certificateRecordModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(certificateRecordSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
+}).outputText).toString("base64")}`);
+const certificateVerificationModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(certificateVerificationSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
 }).outputText).toString("base64")}`);
 
@@ -154,14 +162,16 @@ const legacyCertificate = {
   student_name: "George Moreno",
   course_name: "Forex Foundations Certificate",
   score: 100,
-  issue_date: "2026-10-18",
+  issue_date: "2026-10-17",
+  completion_date: "2026-10-17",
   verification_code: "VERIFY-GEORGE",
   integrity_verified: false,
   exam_attempt_id: null,
   instructor_name: "Dr. Jean Rene Moricette"
 };
 const officialLogoFixture = { jpegHex: "ffd8ffd9", width: 1600, height: 758, watermarkJpegHex: "ffd8ffd9", watermarkWidth: 660, watermarkHeight: 758 };
-const legacyCertificatePdf = certificatePdfModule.createCertificatePdfDocument(legacyCertificate, "https://academy.example/verify-certificate?certificate=AFF-2026-8834542", officialLogoFixture);
+const stableLegacyVerificationUrl = certificateVerificationModule.buildAffCertificateVerificationUrl(legacyCertificate.certificate_number);
+const legacyCertificatePdf = certificatePdfModule.createCertificatePdfDocument(legacyCertificate, stableLegacyVerificationUrl, officialLogoFixture);
 assert.equal(certificatePdfModule.hasVerifiedExamProvenance(legacyCertificate), false, "a preserved certificate without attempt provenance must remain a legacy credential");
 assert.match(certificatePdfModule.certificateAwardLanguage(legacyCertificate), /recognized by the Academy for the award of/, "legacy certificates must use neutral award wording");
 assert.equal(certificatePdfModule.resolveCredentialClass(legacyCertificate), "Professional Certificate", "Forex Foundations must default to the Professional Certificate classification");
@@ -173,10 +183,11 @@ assert.match(legacyCertificatePdf, /VERIFY-GEORGE/, "the PDF must contain the st
 assert.match(legacyCertificatePdf, /Dr\. Jean Rene Moricette/, "the PDF must contain the authorized instructor name");
 assert.match(legacyCertificatePdf, /Authorized Academic Signatory/, "the PDF must contain the formal academic authorization title");
 assert.match(legacyCertificatePdf, /Issued by Academy for Financial Future/, "the PDF must identify the issuing institution");
-assert.match(legacyCertificatePdf, /October 18, 2026/, "the PDF must contain the recorded issue date");
+assert.match(legacyCertificatePdf, /October 17, 2026/, "George's preserved PDF must contain the original stored issue and completion date");
+assert.doesNotMatch(legacyCertificatePdf, /October 18, 2026/, "PDF generation must not replace George's stored historical date with the render date");
 assert.match(legacyCertificatePdf, /SCAN TO VERIFY CREDENTIAL/, "the PDF must label the QR verification block");
-assert.match(legacyCertificatePdf, /academy\.example\/verify-certificate\?certificate=AFF-2026-8834542/, "the verification destination must match the certificate record");
-const verificationQr = certificatePdfModule.createVerificationQrMatrix("https://academy.example/verify-certificate?certificate=AFF-2026-8834542");
+assert.match(legacyCertificatePdf, /academy-for-financial-future\.vercel\.app\/verify-certificate\?certificate=AFF-2026-8834542/, "the printed verification destination must use the canonical AFF endpoint");
+const verificationQr = certificatePdfModule.createVerificationQrMatrix(stableLegacyVerificationUrl);
 assert.equal(verificationQr.length, 49, "the verification destination must be encoded as a version 8 QR matrix");
 assert.ok(verificationQr.every((row) => row.length === 49), "the verification QR matrix must be square and complete");
 assert.deepEqual(verificationQr.slice(0, 7).map((row) => row.slice(0, 7)), [
@@ -196,6 +207,18 @@ assert.match(certificatePdfSource, /OFFICIAL_AFF_LOGO_PATH/, "certificate genera
 assert.match(legacyCertificatePdf, /\/AFFLogo Do/, "the certificate PDF must render the official Academy logo image");
 assert.match(legacyCertificatePdf, /\/AFFWatermark Do/, "the certificate PDF must derive its watermark from the official Academy logo image");
 assert.doesNotMatch(certificatePdfSource, /function buildSeal|\(AFF\) Tj/, "certificate generation must not substitute a generated AFF text seal");
+assert.match(certificatePdfSource, /buildVerificationMark\(verificationUrl\)/, "the QR and printed destination must be generated from the same verification URL");
+
+const storedHistoricalDates = certificateRecordModule.resolveStoredCertificateDates({ issue_date: "2026-10-17", completion_date: "2026-10-17" });
+assert.deepEqual(storedHistoricalDates, { issueDate: "2026-10-17", completionDate: "2026-10-17" }, "stored historical certificate dates must pass through unchanged");
+assert.deepEqual(certificateRecordModule.resolveStoredCertificateDates({ issue_date: "2026-10-17" }), { issueDate: "2026-10-17", completionDate: null }, "a missing completion date must never be synthesized from issuance data");
+assert.deepEqual(certificateRecordModule.resolveStoredCertificateDates({}), { issueDate: "", completionDate: null }, "a missing issue date must never be replaced with the render date");
+assert.equal(certificateRecordModule.formatStoredCertificateDate("2026-10-17"), "October 17, 2026", "date-only certificate values must render in UTC without timezone drift");
+const previewVerificationUrl = certificateVerificationModule.buildAffCertificateVerificationUrl("AFF-2026-8834542", "https://academy-for-financial-future-git-feature-team.vercel.app");
+assert.equal(previewVerificationUrl, stableLegacyVerificationUrl, "preview or deployment-specific Vercel hosts must never enter certificate verification data");
+assert.doesNotMatch(previewVerificationUrl, /git-feature|team\.vercel/, "canonical certificate URLs must exclude preview deployment hostnames");
+assert.match(certificatesPage, /buildAffCertificateVerificationUrl\(certificate\.certificate_number\)/, "PDF downloads and verification buttons must share the canonical verification URL builder");
+assert.doesNotMatch(certificatesPage, /window\.location\.origin|certificate\.qr_payload\s*\?\?/, "certificate verification must not depend on the current deployment origin or a stale stored preview payload");
 
 const guardedCertificate = {
   ...legacyCertificate,
@@ -207,12 +230,13 @@ const guardedCertificate = {
   completion_date: "2026-10-17",
   score: 80
 };
-const guardedCertificatePdf = certificatePdfModule.createCertificatePdfDocument(guardedCertificate, "https://academy.example/verify-certificate?certificate=AFF-2026-GUARDED", officialLogoFixture);
+const guardedVerificationUrl = certificateVerificationModule.buildAffCertificateVerificationUrl(guardedCertificate.certificate_number);
+const guardedCertificatePdf = certificatePdfModule.createCertificatePdfDocument(guardedCertificate, guardedVerificationUrl, officialLogoFixture);
 assert.equal(certificatePdfModule.hasVerifiedExamProvenance(guardedCertificate), true, "a guarded certificate with an exam attempt must have verified provenance");
 assert.match(guardedCertificatePdf, /fulfilled all academic requirements and successfully passed/, "guarded certificates may use verified completion language");
 assert.match(guardedCertificatePdf, /VERIFIED EXAMINATION SCORE 80%/, "only provenance-verified certificates may display the certification score");
 assert.match(guardedCertificatePdf, /COMPLETION DATE[\s\S]*October 17, 2026/, "the shared master template must render a recorded completion date");
-const generatedCertificateBlob = await certificatePdfModule.createCertificatePdfBlob(guardedCertificate, "https://academy.example/verify-certificate?certificate=AFF-2026-GUARDED", officialLogoFixture);
+const generatedCertificateBlob = await certificatePdfModule.createCertificatePdfBlob(guardedCertificate, guardedVerificationUrl, officialLogoFixture);
 assert.equal(generatedCertificateBlob.type, "application/pdf", "certificate generation must return a PDF blob");
 assert.ok(generatedCertificateBlob.size > 4000, "the premium academic certificate PDF must contain a complete rendered document");
 assert.match(guardedCertificatePdf, /^%PDF-1\.4/, "certificate PDF generation must produce a valid PDF header");

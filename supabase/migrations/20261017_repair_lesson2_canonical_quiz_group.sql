@@ -7,7 +7,7 @@ alter table public.lessons
   add column if not exists canonical_quiz_group_id uuid;
 
 create temporary table aff_lesson2_canonical_quiz_audit
-on commit drop
+on commit preserve rows
 as
 select
   null::bigint as lesson_id,
@@ -207,7 +207,7 @@ begin
   where id = target_lesson_id
     and canonical_quiz_group_id is distinct from intended_group_id;
 
-  insert into aff_lesson2_canonical_quiz_audit (
+  insert into pg_temp.aff_lesson2_canonical_quiz_audit (
     lesson_id,
     previous_canonical_quiz_group_id,
     intended_canonical_quiz_group_id,
@@ -239,7 +239,7 @@ select
   audit.euro_strength_asset_id as euro_strength_asset_id,
   audit.euro_strength_previous_group_id as euro_strength_previous_group_id,
   euro_asset.quiz_group_id as euro_strength_resulting_group_id
-from aff_lesson2_canonical_quiz_audit as audit
+from pg_temp.aff_lesson2_canonical_quiz_audit as audit
 inner join public.lessons as lesson
   on lesson.id = audit.lesson_id
 inner join public.course_assets as base_asset

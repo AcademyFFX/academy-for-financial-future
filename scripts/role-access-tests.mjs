@@ -47,6 +47,7 @@ const lesson2CanonicalRepairMigration = read("supabase/migrations/20261017_repai
 const certificationRepairMigration = read("supabase/migrations/20261018_repair_forex_foundations_certification_workflow.sql");
 const certificationIntegrityMigration = read("supabase/migrations/20261018_secure_forex_foundations_certificate_issuance.sql");
 const certificationReadinessSource = read("lib/certification-readiness.ts");
+const certificatePdfSource = read("lib/certificate-pdf.ts");
 const quizQuestionModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(quizQuestionSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
 }).outputText).toString("base64")}`);
@@ -54,6 +55,9 @@ const quizAssetSelectionModule = await import(`data:text/javascript;base64,${Buf
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
 }).outputText).toString("base64")}`);
 const certificationReadinessModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(certificationReadinessSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
+}).outputText).toString("base64")}`);
+const certificatePdfModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(certificatePdfSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
 }).outputText).toString("base64")}`);
 
@@ -138,6 +142,47 @@ assert.match(certificationIntegrityMigration, /pg_advisory_xact_lock/, "concurre
 assert.match(certificationIntegrityMigration, /digital_certificates_verified_student_certification_unique/, "verified certificates must have database-level duplicate prevention");
 assert.match(certificationIntegrityMigration, /where certificate\.student_id = attempt_row\.student_id[\s\S]*certificate\.certification_id = catalog_row\.id[\s\S]*certificate\.status = 'Valid'/, "repeated issuance must return the existing valid certificate rather than create a duplicate");
 assert.doesNotMatch(certificationIntegrityMigration, /delete from|truncate table|update public\.digital_certificates/i, "the integrity migration must preserve George's current certificate and every historical credential");
+
+const legacyCertificate = {
+  certificate_number: "AFF-2026-8834542",
+  student_name: "George Moreno",
+  course_name: "Forex Foundations Certificate",
+  score: 100,
+  issue_date: "2026-10-18",
+  verification_code: "VERIFY-GEORGE",
+  integrity_verified: false,
+  exam_attempt_id: null,
+  instructor_name: "Dr. Jean Rene Moricette"
+};
+const legacyCertificatePdf = certificatePdfModule.createCertificatePdfDocument(legacyCertificate, "https://academy.example/verify-certificate?certificate=AFF-2026-8834542");
+assert.equal(certificatePdfModule.hasVerifiedExamProvenance(legacyCertificate), false, "a preserved certificate without attempt provenance must remain a legacy credential");
+assert.match(certificatePdfModule.certificateAwardLanguage(legacyCertificate), /recognized by the Academy for the award of/, "legacy certificates must use neutral award wording");
+assert.doesNotMatch(legacyCertificatePdf, /fulfilled all academic requirements|VERIFIED EXAMINATION SCORE/, "legacy PDFs must not claim unverified completion or display an unverified score");
+assert.match(legacyCertificatePdf, /AFF-2026-8834542/, "the PDF must preserve George Moreno's exact certificate number");
+assert.match(legacyCertificatePdf, /VERIFY-GEORGE/, "the PDF must contain the stored verification code");
+assert.match(legacyCertificatePdf, /Dr\. Jean Rene Moricette/, "the PDF must contain the authorized instructor name");
+assert.match(legacyCertificatePdf, /October 18, 2026/, "the PDF must contain the recorded issue date");
+assert.match(legacyCertificatePdf, /SECURE DIGITAL VERIFICATION/, "the PDF must include the QR verification block");
+assert.match(legacyCertificatePdf, /MediaBox \[0 0 792 612\]/, "the academic certificate must use a landscape page composition");
+
+const guardedCertificate = {
+  ...legacyCertificate,
+  certificate_number: "AFF-2026-GUARDED",
+  verification_code: "VERIFY-GUARDED",
+  exam_attempt_id: 501,
+  integrity_verified: true,
+  issuance_source: "guarded-certification-rpc",
+  score: 80
+};
+const guardedCertificatePdf = certificatePdfModule.createCertificatePdfDocument(guardedCertificate, "https://academy.example/verify-certificate?certificate=AFF-2026-GUARDED");
+assert.equal(certificatePdfModule.hasVerifiedExamProvenance(guardedCertificate), true, "a guarded certificate with an exam attempt must have verified provenance");
+assert.match(guardedCertificatePdf, /fulfilled all academic requirements and successfully passed/, "guarded certificates may use verified completion language");
+assert.match(guardedCertificatePdf, /VERIFIED EXAMINATION SCORE 80%/, "only provenance-verified certificates may display the certification score");
+const generatedCertificateBlob = certificatePdfModule.createCertificatePdfBlob(guardedCertificate, "https://academy.example/verify-certificate?certificate=AFF-2026-GUARDED");
+assert.equal(generatedCertificateBlob.type, "application/pdf", "certificate generation must return a PDF blob");
+assert.ok(generatedCertificateBlob.size > 4000, "the premium academic certificate PDF must contain a complete rendered document");
+assert.match(guardedCertificatePdf, /^%PDF-1\.4/, "certificate PDF generation must produce a valid PDF header");
+assert.match(guardedCertificatePdf, /%%EOF$/, "certificate PDF generation must produce a complete PDF trailer");
 
 const duplicateLessonQuizAssets = [
   { id: "legacy-1", course_id: 1, lesson_id: 2, asset_type: "Quiz", asset_status: "Published", asset_title: "Currency Pairs and Quote Anatomy", quiz_group_id: null },

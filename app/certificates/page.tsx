@@ -23,6 +23,11 @@ type Certificate = {
   completion_date: string | null;
   verification_code: string;
   qr_payload: string | null;
+  exam_attempt_id: string | null;
+  integrity_verified: boolean;
+  issuance_source: string | null;
+  instructor_name: string;
+  registry: "legacy" | "digital";
 };
 
 type Eligibility = {
@@ -67,7 +72,7 @@ export default function CertificatesPage() {
     return fallback;
   }
 
-  function normalizeCertificate(row: DbRow): Certificate {
+  function normalizeCertificate(row: DbRow, registry: Certificate["registry"] = "legacy"): Certificate {
     return {
       id: String(row.id ?? crypto.randomUUID()),
       certificate_number: String(row.certificate_number ?? ""),
@@ -78,7 +83,12 @@ export default function CertificatesPage() {
       issue_date: String(row.issue_date ?? new Date().toISOString().slice(0, 10)),
       completion_date: row.completion_date ? String(row.completion_date) : row.issue_date ? String(row.issue_date) : null,
       verification_code: String(row.verification_code ?? row.qr_verification_code ?? ""),
-      qr_payload: row.qr_payload ? String(row.qr_payload) : null
+      qr_payload: row.qr_payload ? String(row.qr_payload) : null,
+      exam_attempt_id: row.exam_attempt_id === null || row.exam_attempt_id === undefined ? null : String(row.exam_attempt_id),
+      integrity_verified: row.integrity_verified === true,
+      issuance_source: row.issuance_source ? String(row.issuance_source) : null,
+      instructor_name: String(row.approved_by ?? row.instructor_name ?? "Dr. Jean Rene Moricette"),
+      registry
     };
   }
 
@@ -195,9 +205,9 @@ export default function CertificatesPage() {
         minimumPassingScore: Number(catalogItem.passing_score ?? 80)
       });
 
-      const legacyCertificates = ((certificatesResult.data ?? []) as DbRow[]).map(normalizeCertificate);
+      const legacyCertificates = ((certificatesResult.data ?? []) as DbRow[]).map((row) => normalizeCertificate(row));
       const digitalCertificates = ((digitalCertificatesResult.data ?? []) as DbRow[]).map((row) => ({
-        ...normalizeCertificate(row),
+        ...normalizeCertificate(row, "digital"),
         score: Number(row.score ?? nextEligibility.score)
       }));
       const normalized = [...digitalCertificates, ...legacyCertificates];
@@ -241,7 +251,7 @@ export default function CertificatesPage() {
       if (error) throw error;
       if (!data) throw new Error("Certificate issuance did not return a verified certificate.");
 
-      const certificate = { ...normalizeCertificate(data as DbRow), score: eligibility.score };
+      const certificate = { ...normalizeCertificate(data as DbRow, "digital"), score: eligibility.score };
       setCertificates((current) => current.some((item) => item.id === certificate.id) ? current : [certificate, ...current]);
       setMessage("Certificate issued successfully.");
     } catch (error) {
@@ -253,7 +263,9 @@ export default function CertificatesPage() {
 
   function downloadCertificate(certificate: Certificate) {
     const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
-    const verificationUrl = certificate.qr_payload ?? `${siteUrl}/verify?certificate=${encodeURIComponent(certificate.certificate_number)}&code=${encodeURIComponent(certificate.verification_code)}`;
+    const verificationUrl = certificate.qr_payload ?? (certificate.registry === "digital"
+      ? `${siteUrl}/verify-certificate?certificate=${encodeURIComponent(certificate.certificate_number)}`
+      : `${siteUrl}/verify?certificate=${encodeURIComponent(certificate.certificate_number)}&code=${encodeURIComponent(certificate.verification_code)}`);
     const blob = createCertificatePdfBlob(certificate, verificationUrl);
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");

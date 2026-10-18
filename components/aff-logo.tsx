@@ -1,10 +1,11 @@
 import Image from "next/image";
 import type { HTMLAttributes } from "react";
+import { OFFICIAL_AFF_LOGO_PATH } from "@/lib/aff-brand";
 
 export const affLogoPaths = {
-  official: "/brand/AFF_LOGO_2_OFFICIAL.png",
-  horizontal: "/brand/AFF_LOGO_2_OFFICIAL.png",
-  stacked: "/brand/AFF_LOGO_2_OFFICIAL.png"
+  official: OFFICIAL_AFF_LOGO_PATH,
+  horizontal: OFFICIAL_AFF_LOGO_PATH,
+  stacked: OFFICIAL_AFF_LOGO_PATH
 } as const;
 
 type LogoProps = HTMLAttributes<HTMLDivElement> & {

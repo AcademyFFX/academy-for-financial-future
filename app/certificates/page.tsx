@@ -261,18 +261,22 @@ export default function CertificatesPage() {
     }
   }
 
-  function downloadCertificate(certificate: Certificate) {
+  async function downloadCertificate(certificate: Certificate) {
     const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
     const verificationUrl = certificate.qr_payload ?? (certificate.registry === "digital"
       ? `${siteUrl}/verify-certificate?certificate=${encodeURIComponent(certificate.certificate_number)}`
       : `${siteUrl}/verify?certificate=${encodeURIComponent(certificate.certificate_number)}&code=${encodeURIComponent(certificate.verification_code)}`);
-    const blob = createCertificatePdfBlob(certificate, verificationUrl);
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${certificate.certificate_number}.pdf`;
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      const blob = await createCertificatePdfBlob(certificate, verificationUrl);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${certificate.certificate_number}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setMessage(getErrorMessage(error, "Unable to generate the certificate with the official Academy logo."));
+    }
   }
 
   return (

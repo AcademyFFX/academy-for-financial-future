@@ -48,6 +48,8 @@ const certificationRepairMigration = read("supabase/migrations/20261018_repair_f
 const certificationIntegrityMigration = read("supabase/migrations/20261018_secure_forex_foundations_certificate_issuance.sql");
 const certificationReadinessSource = read("lib/certification-readiness.ts");
 const certificatePdfSource = read("lib/certificate-pdf.ts");
+const affBrandSource = read("lib/aff-brand.ts");
+const officialAffLogo = readFileSync(new URL("../public/brand/AFF_LOGO_2_OFFICIAL.png", import.meta.url));
 const quizQuestionModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(quizQuestionSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
 }).outputText).toString("base64")}`);
@@ -57,7 +59,11 @@ const quizAssetSelectionModule = await import(`data:text/javascript;base64,${Buf
 const certificationReadinessModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(certificationReadinessSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
 }).outputText).toString("base64")}`);
-const certificatePdfModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(certificatePdfSource, {
+const isolatedCertificatePdfSource = certificatePdfSource.replace(
+  /import \{ OFFICIAL_AFF_LOGO_PATH \} from "@\/lib\/aff-brand";/,
+  'const OFFICIAL_AFF_LOGO_PATH = "/brand/AFF_LOGO_2_OFFICIAL.png";'
+);
+const certificatePdfModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(isolatedCertificatePdfSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
 }).outputText).toString("base64")}`);
 
@@ -154,7 +160,8 @@ const legacyCertificate = {
   exam_attempt_id: null,
   instructor_name: "Dr. Jean Rene Moricette"
 };
-const legacyCertificatePdf = certificatePdfModule.createCertificatePdfDocument(legacyCertificate, "https://academy.example/verify-certificate?certificate=AFF-2026-8834542");
+const officialLogoFixture = { jpegHex: "ffd8ffd9", width: 1600, height: 758 };
+const legacyCertificatePdf = certificatePdfModule.createCertificatePdfDocument(legacyCertificate, "https://academy.example/verify-certificate?certificate=AFF-2026-8834542", officialLogoFixture);
 assert.equal(certificatePdfModule.hasVerifiedExamProvenance(legacyCertificate), false, "a preserved certificate without attempt provenance must remain a legacy credential");
 assert.match(certificatePdfModule.certificateAwardLanguage(legacyCertificate), /recognized by the Academy for the award of/, "legacy certificates must use neutral award wording");
 assert.doesNotMatch(legacyCertificatePdf, /fulfilled all academic requirements|VERIFIED EXAMINATION SCORE/, "legacy PDFs must not claim unverified completion or display an unverified score");
@@ -164,6 +171,12 @@ assert.match(legacyCertificatePdf, /Dr\. Jean Rene Moricette/, "the PDF must con
 assert.match(legacyCertificatePdf, /October 18, 2026/, "the PDF must contain the recorded issue date");
 assert.match(legacyCertificatePdf, /SECURE DIGITAL VERIFICATION/, "the PDF must include the QR verification block");
 assert.match(legacyCertificatePdf, /MediaBox \[0 0 792 612\]/, "the academic certificate must use a landscape page composition");
+assert.match(affBrandSource, /AFF_LOGO_2_OFFICIAL\.png/, "all Academy surfaces must share the authoritative official logo asset");
+assert.equal(officialAffLogo.subarray(1, 4).toString("ascii"), "PNG", "the authoritative Academy logo must remain an intact PNG asset");
+assert.ok(officialAffLogo.length > 100_000, "the authoritative Academy logo must retain its full-resolution artwork");
+assert.match(certificatePdfSource, /OFFICIAL_AFF_LOGO_PATH/, "certificate generation must load the shared official Academy logo path");
+assert.match(legacyCertificatePdf, /\/AFFLogo Do/, "the certificate PDF must render the official Academy logo image");
+assert.doesNotMatch(certificatePdfSource, /function buildSeal|\(AFF\) Tj/, "certificate generation must not substitute a generated AFF text seal");
 
 const guardedCertificate = {
   ...legacyCertificate,
@@ -174,11 +187,11 @@ const guardedCertificate = {
   issuance_source: "guarded-certification-rpc",
   score: 80
 };
-const guardedCertificatePdf = certificatePdfModule.createCertificatePdfDocument(guardedCertificate, "https://academy.example/verify-certificate?certificate=AFF-2026-GUARDED");
+const guardedCertificatePdf = certificatePdfModule.createCertificatePdfDocument(guardedCertificate, "https://academy.example/verify-certificate?certificate=AFF-2026-GUARDED", officialLogoFixture);
 assert.equal(certificatePdfModule.hasVerifiedExamProvenance(guardedCertificate), true, "a guarded certificate with an exam attempt must have verified provenance");
 assert.match(guardedCertificatePdf, /fulfilled all academic requirements and successfully passed/, "guarded certificates may use verified completion language");
 assert.match(guardedCertificatePdf, /VERIFIED EXAMINATION SCORE 80%/, "only provenance-verified certificates may display the certification score");
-const generatedCertificateBlob = certificatePdfModule.createCertificatePdfBlob(guardedCertificate, "https://academy.example/verify-certificate?certificate=AFF-2026-GUARDED");
+const generatedCertificateBlob = await certificatePdfModule.createCertificatePdfBlob(guardedCertificate, "https://academy.example/verify-certificate?certificate=AFF-2026-GUARDED", officialLogoFixture);
 assert.equal(generatedCertificateBlob.type, "application/pdf", "certificate generation must return a PDF blob");
 assert.ok(generatedCertificateBlob.size > 4000, "the premium academic certificate PDF must contain a complete rendered document");
 assert.match(guardedCertificatePdf, /^%PDF-1\.4/, "certificate PDF generation must produce a valid PDF header");

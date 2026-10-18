@@ -1,3 +1,5 @@
+import { OFFICIAL_AFF_LOGO_PATH } from "@/lib/aff-brand";
+
 export type PrintableCertificate = {
   certificate_number: string;
   student_name: string;
@@ -11,6 +13,12 @@ export type PrintableCertificate = {
   issuance_source?: string | null;
   instructor_name?: string | null;
   approved_by?: string | null;
+};
+
+export type CertificateLogoImage = {
+  jpegHex: string;
+  width: number;
+  height: number;
 };
 
 const PAGE_WIDTH = 792;
@@ -65,14 +73,15 @@ function formattedDate(raw: string) {
   return date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 }
 
-function buildSeal() {
-  return `
-${GOLD} RG 2 w
-127 514 m 127 531.7 112.7 546 95 546 c 77.3 546 63 531.7 63 514 c 63 496.3 77.3 482 95 482 c 112.7 482 127 496.3 127 514 c S
-${NAVY} RG 1 w
-121 514 m 121 528.4 109.4 540 95 540 c 80.6 540 69 528.4 69 514 c 69 499.6 80.6 488 95 488 c 109.4 488 121 499.6 121 514 c S
-${GOLD} rg BT /F1 22 Tf 76 508 Td (AFF) Tj ET
-${IVORY} rg BT /F3 5 Tf 77 494 Td (ACADEMY SEAL) Tj ET`;
+function buildOfficialLogoPlacement(logo: CertificateLogoImage) {
+  const maxWidth = 330;
+  const maxHeight = 76;
+  const scale = Math.min(maxWidth / logo.width, maxHeight / logo.height);
+  const width = logo.width * scale;
+  const height = logo.height * scale;
+  const x = (PAGE_WIDTH - width) / 2;
+  const y = 481 + (76 - height) / 2;
+  return `q ${width.toFixed(2)} 0 0 ${height.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm /AFFLogo Do Q`;
 }
 
 function buildVerificationMark(payload: string) {
@@ -122,7 +131,7 @@ export function certificateAwardLanguage(certificate: PrintableCertificate) {
     : "is hereby recognized by the Academy for the award of";
 }
 
-export function createCertificatePdfDocument(certificate: PrintableCertificate, verificationUrl: string) {
+export function createCertificatePdfDocument(certificate: PrintableCertificate, verificationUrl: string, logo: CertificateLogoImage) {
   const verifiedByExam = hasVerifiedExamProvenance(certificate);
   const signatory = certificate.approved_by || certificate.instructor_name || "Dr. Jean Rene Moricette";
   const credentialTitle = certificate.course_name || "Academy Credential";
@@ -139,12 +148,9 @@ ${IVORY} rg 28 28 736 556 re f
 ${GOLD} RG 3 w 36 36 720 540 re S
 ${NAVY} RG 1 w 44 44 704 524 re S
 ${buildMicroPattern()}
-${PALE_GOLD} rg BT /F1 126 Tf 278 232 Td (AFF) Tj ET
-${NAVY} rg 52 475 688 78 re f
-${buildSeal()}
-${GOLD} rg BT /F3 12 Tf 150 529 Td (ACADEMY FOR FINANCIAL FUTURE) Tj ET
-${IVORY} rg BT /F4 8 Tf 150 510 Td (LEARN  -  GROW  -  PROSPER) Tj ET
-${GOLD} RG 1 w 150 495 m 722 495 l S
+${NAVY} rg 52 475 688 88 re f
+${buildOfficialLogoPlacement(logo)}
+${GOLD} RG 1 w 76 473 m 716 473 l S
 ${centeredText("ACADEMIC CERTIFICATE", 450, 14, "F3", GOLD, 560)}
 ${centeredText("This official credential certifies that", 418, 11, "F5", CHARCOAL, 520)}
 ${centeredText(certificate.student_name, 367, 34, "F1", NAVY, 640)}
@@ -168,12 +174,13 @@ ${placedText(`SERIAL ${certificate.certificate_number}  |  AFF ACADEMIC REGISTRY
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 4 0 R /F2 5 0 R /F3 6 0 R /F4 7 0 R /F5 8 0 R >> >> /Contents 9 0 R >>`,
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 4 0 R /F2 5 0 R /F3 6 0 R /F4 7 0 R /F5 8 0 R >> /XObject << /AFFLogo 9 0 R >> >> /Contents 10 0 R >>`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >>",
+    `<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${logo.jpegHex.length + 1} >>\nstream\n${logo.jpegHex}>\nendstream`,
     `<< /Length ${content.length} >>\nstream\n${content}\nendstream`
   ];
 
@@ -193,6 +200,74 @@ ${placedText(`SERIAL ${certificate.certificate_number}  |  AFF ACADEMIC REGISTRY
   return pdf;
 }
 
-export function createCertificatePdfBlob(certificate: PrintableCertificate, verificationUrl: string) {
-  return new Blob([createCertificatePdfDocument(certificate, verificationUrl)], { type: "application/pdf" });
+function bytesToHex(bytes: Uint8Array) {
+  let result = "";
+  for (let index = 0; index < bytes.length; index += 1) result += bytes[index].toString(16).padStart(2, "0");
+  return result;
+}
+
+async function loadOfficialAffLogoForPdf(): Promise<CertificateLogoImage> {
+  if (typeof document === "undefined") throw new Error("The official AFF logo can only be prepared in a browser.");
+
+  const response = await fetch(OFFICIAL_AFF_LOGO_PATH, { cache: "force-cache" });
+  if (!response.ok) throw new Error("The official AFF logo could not be loaded.");
+  const sourceBlob = await response.blob();
+  const sourceUrl = URL.createObjectURL(sourceBlob);
+
+  try {
+    const image = new Image();
+    image.src = sourceUrl;
+    await image.decode();
+
+    const sourceCanvas = document.createElement("canvas");
+    sourceCanvas.width = image.naturalWidth;
+    sourceCanvas.height = image.naturalHeight;
+    const sourceContext = sourceCanvas.getContext("2d", { willReadFrequently: true });
+    if (!sourceContext) throw new Error("The official AFF logo could not be prepared for the certificate.");
+    sourceContext.drawImage(image, 0, 0);
+
+    const pixels = sourceContext.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height).data;
+    let minX = sourceCanvas.width;
+    let minY = sourceCanvas.height;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < sourceCanvas.height; y += 1) {
+      for (let x = 0; x < sourceCanvas.width; x += 1) {
+        if (pixels[(y * sourceCanvas.width + x) * 4 + 3] <= 4) continue;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+    if (maxX < minX || maxY < minY) throw new Error("The official AFF logo artwork is empty.");
+
+    const padding = 12;
+    const width = maxX - minX + 1 + padding * 2;
+    const height = maxY - minY + 1 + padding * 2;
+    const outputCanvas = document.createElement("canvas");
+    outputCanvas.width = width;
+    outputCanvas.height = height;
+    const outputContext = outputCanvas.getContext("2d");
+    if (!outputContext) throw new Error("The official AFF logo could not be prepared for the certificate.");
+    outputContext.fillStyle = "#0A1833";
+    outputContext.fillRect(0, 0, width, height);
+    outputContext.drawImage(sourceCanvas, minX, minY, maxX - minX + 1, maxY - minY + 1, padding, padding, maxX - minX + 1, maxY - minY + 1);
+
+    const jpegBlob = await new Promise<Blob>((resolve, reject) => {
+      outputCanvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The official AFF logo could not be encoded for the certificate.")), "image/jpeg", 0.96);
+    });
+    return {
+      jpegHex: bytesToHex(new Uint8Array(await jpegBlob.arrayBuffer())),
+      width,
+      height
+    };
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
+}
+
+export async function createCertificatePdfBlob(certificate: PrintableCertificate, verificationUrl: string, logoOverride?: CertificateLogoImage) {
+  const logo = logoOverride ?? await loadOfficialAffLogoForPdf();
+  return new Blob([createCertificatePdfDocument(certificate, verificationUrl, logo)], { type: "application/pdf" });
 }

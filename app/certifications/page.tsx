@@ -15,6 +15,7 @@ type DbRow = Record<string, unknown>;
 type CatalogItem = {
   id: string;
   slug: string;
+  courseId: string;
   certificateName: string;
   description: string;
   passingScore: number;
@@ -24,6 +25,7 @@ type CatalogItem = {
 type ExamItem = {
   id: string;
   certificationId: string;
+  examCode: string;
   examTitle: string;
   scheduledAt: string;
   timeLimitMinutes: number;
@@ -101,6 +103,12 @@ function numberValue(row: DbRow, keys: string[], fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") return error.message;
+  return fallback;
+}
+
 function shortDate(raw: string) {
   if (!raw) return "Not scheduled";
   const date = new Date(raw);
@@ -124,6 +132,7 @@ function normalizeCatalog(row: DbRow): CatalogItem {
   return {
     id: value(row, ["id"]),
     slug: value(row, ["slug"]),
+    courseId: value(row, ["course_id"]),
     certificateName: value(row, ["certificate_name"], "AFF Certificate"),
     description: value(row, ["description"], "Academy for Financial Future certification pathway."),
     passingScore: numberValue(row, ["passing_score"], 80),
@@ -135,6 +144,7 @@ function normalizeExam(row: DbRow): ExamItem {
   return {
     id: value(row, ["id"]),
     certificationId: value(row, ["certification_id"]),
+    examCode: value(row, ["exam_code"]),
     examTitle: value(row, ["exam_title"], "Certification Examination"),
     scheduledAt: value(row, ["scheduled_at"]),
     timeLimitMinutes: numberValue(row, ["time_limit_minutes"], 45),
@@ -292,8 +302,12 @@ export default function CertificationsPage() {
         if (result.error) throw result.error;
       }
 
-      const normalizedCatalog = ((catalogResult.data ?? []) as DbRow[]).map(normalizeCatalog);
-      const normalizedExams = ((examsResult.data ?? []) as DbRow[]).map(normalizeExam);
+      const allCatalog = ((catalogResult.data ?? []) as DbRow[]).map(normalizeCatalog);
+      const allExams = ((examsResult.data ?? []) as DbRow[]).map(normalizeExam);
+      const normalizedCatalog = admin ? allCatalog : allCatalog.filter((item) => item.slug === "forex-foundations");
+      const normalizedExams = admin
+        ? allExams
+        : allExams.filter((exam) => exam.examCode === "AFF-FX-FOUNDATIONS-CERT");
       setCatalog(normalizedCatalog);
       setExams(normalizedExams);
       setQuestions(((questionsResult.data ?? []) as DbRow[]).map(normalizeQuestion));
@@ -316,7 +330,7 @@ export default function CertificationsPage() {
       if (!selectedExamId && normalizedExams.length > 0) setSelectedExamId(normalizedExams[0].id);
       setMessage("Certification center ready.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to load certification center.");
+      setMessage(`Unable to load certification center: ${errorMessage(error, "Certification tables or policies are unavailable.")}`);
     } finally {
       setLoading(false);
     }
@@ -351,6 +365,21 @@ export default function CertificationsPage() {
     affStudentId: string;
   }) {
     const supabase = createClient();
+    const { data: existing, error: existingError } = await supabase
+      .from("digital_certificates")
+      .select("*")
+      .eq("student_id", params.studentId)
+      .eq("certification_id", params.certificationId)
+      .eq("status", "Valid")
+      .order("issue_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (existing) {
+      const certificate = normalizeCertificate(existing as DbRow);
+      setCertificates((current) => current.some((item) => item.id === certificate.id) ? current : [certificate, ...current]);
+      return;
+    }
     const { data, error } = await supabase
       .from("digital_certificates")
       .insert({
@@ -492,7 +521,7 @@ export default function CertificationsPage() {
       setMessage(hasManualReview ? "Exam submitted. Essay and chart analysis responses are waiting for instructor review." : `Exam submitted. Result: ${finalResult}.`);
       await loadCenter();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to submit certification exam.");
+      setMessage(errorMessage(error, "Unable to submit certification exam."));
     } finally {
       setSubmitting(false);
     }

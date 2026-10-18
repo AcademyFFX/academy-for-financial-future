@@ -6,8 +6,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
 import { ProgressBar } from "@/components/progress";
-import { courseCatalog } from "@/lib/course-catalog";
 import { createCertificatePdfBlob } from "@/lib/certificate-pdf";
+import { calculateCertificationReadiness, resolveForexFoundationsCourse } from "@/lib/certification-readiness";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
@@ -28,6 +28,7 @@ type Certificate = {
 type CertificateRow = Partial<Certificate>;
 
 type Eligibility = {
+  activeEnrollment: boolean;
   requiredLessons: number;
   completedLessons: number;
   requiredAssignments: number;
@@ -37,8 +38,8 @@ type Eligibility = {
   eligible: boolean;
 };
 
-const certificationCourse = courseCatalog.find((course) => course.id === "forex-anatomy") ?? courseCatalog[0];
-const examTitle = "Level 1 Forex Anatomy";
+const certificationCourseName = "Forex Foundations";
+const certificationSlug = "forex-foundations";
 
 export default function CertificatesPage() {
   const router = useRouter();
@@ -46,6 +47,7 @@ export default function CertificatesPage() {
   const [eligibility, setEligibility] = useState<Eligibility | null>(null);
   const [studentName, setStudentName] = useState("Student");
   const [affStudentId, setAffStudentId] = useState("Student ID pending");
+  const [courseName, setCourseName] = useState(certificationCourseName);
   const [loading, setLoading] = useState(true);
   const [issuing, setIssuing] = useState(false);
   const [message, setMessage] = useState("Certification unlocks after required lessons, quiz, and approved assignments are complete.");
@@ -53,7 +55,7 @@ export default function CertificatesPage() {
   const eligibilityPercent = useMemo(() => {
     if (!eligibility) return 0;
     const lessonRatio = eligibility.requiredLessons ? eligibility.completedLessons / eligibility.requiredLessons : 0;
-    const assignmentRatio = eligibility.requiredAssignments ? eligibility.approvedAssignments / eligibility.requiredAssignments : 0;
+    const assignmentRatio = eligibility.requiredAssignments ? eligibility.approvedAssignments / eligibility.requiredAssignments : 1;
     const examRatio = eligibility.hasPassingExam ? 1 : 0;
     return Math.round(((lessonRatio + assignmentRatio + examRatio) / 3) * 100);
   }, [eligibility]);
@@ -72,7 +74,7 @@ export default function CertificatesPage() {
       certificate_number: String(row.certificate_number ?? ""),
       student_id: String(row.student_id ?? ""),
       student_name: String(row.student_name ?? "Student"),
-      course_name: String(row.course_name ?? certificationCourse.title),
+      course_name: String(row.course_name ?? certificationCourseName),
       score: Number(row.score ?? 0),
       issue_date: row.issue_date ?? new Date().toISOString().slice(0, 10),
       completion_date: row.completion_date ?? row.issue_date ?? null,
@@ -107,7 +109,7 @@ export default function CertificatesPage() {
       const [studentResult, applicationResult] = await Promise.all([
         supabase
           .from("students")
-          .select("student_id, auth_user_id, full_name, email")
+          .select("id, student_id, auth_user_id, full_name, email")
           .or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`)
           .order("created_at", { ascending: false })
           .limit(1)
@@ -135,59 +137,71 @@ export default function CertificatesPage() {
       setStudentName(resolvedName);
       setAffStudentId(String(application.student_id ?? profile.student_id ?? "Student ID pending"));
 
-      const [certificatesResult, progressResult, examsResult, assignmentsResult] = await Promise.all([
+      if (studentResult.error) throw studentResult.error;
+      if (applicationResult.error) throw applicationResult.error;
+
+      const [courseResult, catalogResult] = await Promise.all([
+        supabase.from("courses").select("*").ilike("course_name", certificationCourseName).limit(1).maybeSingle(),
+        supabase.from("certification_catalog").select("*").eq("slug", certificationSlug).limit(1).maybeSingle()
+      ]);
+      if (courseResult.error) throw courseResult.error;
+      if (catalogResult.error) throw catalogResult.error;
+
+      const { course, catalogItem } = resolveForexFoundationsCourse(
+        courseResult.data ? [courseResult.data as DbRow] : [],
+        catalogResult.data ? [catalogResult.data as DbRow] : []
+      );
+      if (!course) throw new Error("Forex Foundations is not available in the Academy course catalog.");
+      if (!catalogItem) throw new Error("Forex Foundations certification is not seeded. Run the certification repair migration in Supabase SQL Editor.");
+
+      const courseId = String(course.id);
+      const certificationId = String(catalogItem.id);
+      const internalStudentId = String(profile.id ?? "");
+      if (!internalStudentId) throw new Error("Your Academy student record could not be matched to certification readiness.");
+      setCourseName(String(course.course_name ?? certificationCourseName));
+
+      const [certificatesResult, enrollmentsResult, lessonsResult, progressResult, definitionsResult, assignmentsResult, attemptsResult] = await Promise.all([
         supabase
           .from("certificates")
           .select("*")
           .eq("student_id", user.id)
           .order("issue_date", { ascending: false }),
+        supabase.from("enrollments").select("*").eq("student_id", internalStudentId).eq("course_id", courseId),
+        supabase.from("lessons").select("*").eq("course_id", courseId).order("lesson_order", { ascending: true }),
         supabase
           .from("lesson_progress")
-          .select("lesson_id")
+          .select("*")
           .eq("student_id", user.id)
-          .eq("course_id", certificationCourse.id),
-        supabase
-          .from("exams")
-          .select("score")
-          .eq("student_id", user.id)
-          .eq("exam_title", examTitle)
-          .gte("score", 80)
-          .order("submitted_at", { ascending: false })
-          .limit(1),
+          .eq("course_id", courseId),
+        supabase.from("course_assets").select("*").eq("course_id", courseId).eq("asset_type", "Assignment"),
         supabase
           .from("assignments")
-          .select("lesson_id, lesson_title, status")
+          .select("*")
           .eq("student_id", user.id)
-          .eq("status", "Approved")
+          .eq("course_id", courseId),
+        supabase.from("certification_exam_attempts").select("*").eq("student_id", user.id).eq("certification_id", certificationId).order("submitted_at", { ascending: false })
       ]);
 
-      for (const result of [certificatesResult, progressResult, examsResult, assignmentsResult]) {
+      for (const result of [certificatesResult, enrollmentsResult, lessonsResult, progressResult, definitionsResult, assignmentsResult, attemptsResult]) {
         if (result.error) throw result.error;
       }
 
-      const completedLessonIds = new Set((progressResult.data ?? []).map((row) => String(row.lesson_id)));
-      const approvedLessonKeys = new Set(
-        (assignmentsResult.data ?? []).flatMap((row) => [String(row.lesson_id), String(row.lesson_title ?? "")])
-      );
-      const completedLessons = certificationCourse.lessons.filter((lesson) => completedLessonIds.has(lesson.id)).length;
-      const approvedAssignments = certificationCourse.lessons.filter((lesson) => approvedLessonKeys.has(String(lesson.dbId)) || approvedLessonKeys.has(lesson.title)).length;
-      const score = Number(examsResult.data?.[0]?.score ?? 0);
-
-      const nextEligibility = {
-        requiredLessons: certificationCourse.lessons.length,
-        completedLessons,
-        requiredAssignments: certificationCourse.lessons.length,
-        approvedAssignments,
-        hasPassingExam: score >= 80,
-        score,
-        eligible: completedLessons === certificationCourse.lessons.length && approvedAssignments === certificationCourse.lessons.length && score >= 80
-      };
+      const nextEligibility = calculateCertificationReadiness({
+        courseId,
+        certificationId,
+        enrollmentRows: (enrollmentsResult.data ?? []) as DbRow[],
+        lessons: (lessonsResult.data ?? []) as DbRow[],
+        progressRows: (progressResult.data ?? []) as DbRow[],
+        assignmentDefinitions: (definitionsResult.data ?? []) as DbRow[],
+        assignmentSubmissions: (assignmentsResult.data ?? []) as DbRow[],
+        attempts: (attemptsResult.data ?? []) as DbRow[]
+      });
 
       const normalized = ((certificatesResult.data ?? []) as CertificateRow[]).map(normalizeCertificate);
       setCertificates(normalized);
       setEligibility(nextEligibility);
 
-      const hasCourseCertificate = normalized.some((certificate) => certificate.course_name === certificationCourse.title);
+      const hasCourseCertificate = normalized.some((certificate) => certificate.course_name.trim().toLowerCase() === String(course.course_name).trim().toLowerCase());
       if (nextEligibility.eligible && !hasCourseCertificate) {
         await issueCertificate(user.id, resolvedName, nextEligibility.score, true);
       } else {
@@ -236,7 +250,7 @@ export default function CertificatesPage() {
         certificate_number: certificateNumber,
         student_id: activeUserId,
         student_name: name,
-        course_name: certificationCourse.title,
+        course_name: courseName,
         score,
         issue_date: new Date().toISOString().slice(0, 10),
         completion_date: new Date().toISOString().slice(0, 10),
@@ -279,7 +293,7 @@ export default function CertificatesPage() {
       <PageHeader
         eyebrow="Certificates"
         title="Certification unlocks through verified completion."
-        text="Complete all required Forex Anatomy lessons, pass the certification quiz, and receive approval on lesson assignments to generate a verified Academy certificate."
+        text="Complete the published Forex Foundations curriculum, required assignments, and certification examination to generate a verified Academy certificate."
       />
       <Section>
         <SectionInner className="grid gap-6">
@@ -287,7 +301,7 @@ export default function CertificatesPage() {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-xs uppercase tracking-[.24em] text-gold-300">Certification Readiness</p>
-                <h2 className="mt-2 text-2xl font-semibold text-white">{certificationCourse.title}</h2>
+                <h2 className="mt-2 text-2xl font-semibold text-white">{courseName}</h2>
                 <p className="mt-2 text-xs uppercase tracking-[.18em] text-gold-300">{studentName} · {affStudentId}</p>
                 <p className="mt-3 text-sm text-ink/70">{message}</p>
               </div>
@@ -311,9 +325,9 @@ export default function CertificatesPage() {
             </div>
 
             <div className="mt-6 grid gap-4 md:grid-cols-3">
-              <RequirementCard label="Required Lessons" value={`${eligibility?.completedLessons ?? 0}/${eligibility?.requiredLessons ?? certificationCourse.lessons.length}`} ready={Boolean(eligibility && eligibility.completedLessons === eligibility.requiredLessons)} />
+              <RequirementCard label="Required Lessons" value={`${eligibility?.completedLessons ?? 0}/${eligibility?.requiredLessons ?? 0}`} ready={Boolean(eligibility && eligibility.requiredLessons > 0 && eligibility.completedLessons === eligibility.requiredLessons)} />
               <RequirementCard label="Certification Quiz" value={eligibility?.hasPassingExam ? `${eligibility.score}% Pass` : "Pass required"} ready={Boolean(eligibility?.hasPassingExam)} />
-              <RequirementCard label="Approved Assignments" value={`${eligibility?.approvedAssignments ?? 0}/${eligibility?.requiredAssignments ?? certificationCourse.lessons.length}`} ready={Boolean(eligibility && eligibility.approvedAssignments === eligibility.requiredAssignments)} />
+              <RequirementCard label="Approved Assignments" value={`${eligibility?.approvedAssignments ?? 0}/${eligibility?.requiredAssignments ?? 0}`} ready={Boolean(eligibility && eligibility.approvedAssignments === eligibility.requiredAssignments)} />
             </div>
           </div>
 

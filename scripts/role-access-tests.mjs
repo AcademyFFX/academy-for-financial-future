@@ -30,6 +30,8 @@ const adminLiveClassroom = read("app/admin/live-classroom/page.tsx");
 const adminEnrollment = read("app/admin/enrollment/page.tsx");
 const adminCourseManagement = read("app/admin/course-management/page.tsx");
 const adminUploadCenter = read("app/admin/course-management/upload-center/page.tsx");
+const certificatesPage = read("app/certificates/page.tsx");
+const certificationsPage = read("app/certifications/page.tsx");
 const adminLmsManager = read("components/admin-lms-manager.tsx");
 const courseUploadCenter = read("components/course-upload-center.tsx");
 const lmsCourseCenter = read("components/lms-course-center.tsx");
@@ -42,12 +44,46 @@ const quizQuestionSource = read("lib/quiz-question.ts");
 const quizAssetSelectionSource = read("lib/quiz-asset-selection.ts");
 const canonicalQuizMigration = read("supabase/migrations/20261017_select_canonical_lesson_quiz_group.sql");
 const lesson2CanonicalRepairMigration = read("supabase/migrations/20261017_repair_lesson2_canonical_quiz_group.sql");
+const certificationRepairMigration = read("supabase/migrations/20261018_repair_forex_foundations_certification_workflow.sql");
+const certificationReadinessSource = read("lib/certification-readiness.ts");
 const quizQuestionModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(quizQuestionSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
 }).outputText).toString("base64")}`);
 const quizAssetSelectionModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(quizAssetSelectionSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
 }).outputText).toString("base64")}`);
+const certificationReadinessModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(certificationReadinessSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
+}).outputText).toString("base64")}`);
+
+const certificationCourses = [
+  { id: 1, course_name: "Forex Foundations" },
+  { id: 2, course_name: "Forex Anatomy" }
+];
+const certificationCatalogRows = [{ id: 11, slug: "forex-foundations", course_id: 1, certificate_name: "Forex Foundations Certificate" }];
+const mappedCertification = certificationReadinessModule.resolveForexFoundationsCourse(certificationCourses, certificationCatalogRows);
+assert.equal(mappedCertification.course.id, 1, "certification readiness must map to Forex Foundations rather than Forex Anatomy");
+const readiness = certificationReadinessModule.calculateCertificationReadiness({
+  courseId: "1",
+  certificationId: "11",
+  enrollmentRows: [{ student_id: 4, course_id: 1, enrollment_status: "Active" }],
+  lessons: Array.from({ length: 7 }, (_, index) => ({ id: index + 1, course_id: 1, publication_status: "Published", required_completion: true })),
+  progressRows: Array.from({ length: 7 }, (_, index) => ({ lesson_id: index + 1, course_id: 1, completed: true })),
+  assignmentDefinitions: [{ id: "assignment-definition", course_id: 1, lesson_id: 7, asset_type: "Assignment", asset_status: "Published", signed_url: JSON.stringify({ required: true }) }],
+  assignmentSubmissions: [{ id: 7, course_id: 1, lesson_id: 7, status: "Approved" }],
+  attempts: [{ certification_id: 11, result: "Pass", score: 100 }]
+});
+assert.equal(readiness.requiredLessons, 7, "Forex Foundations certification must require its seven published required lessons");
+assert.equal(readiness.completedLessons, 7, "George's seven completion rows must produce 7/7 certification readiness");
+assert.equal(readiness.approvedAssignments, 1, "the approved submission must satisfy its canonical required assignment");
+assert.equal(readiness.hasPassingExam, true, "a passing certification attempt must satisfy the exam requirement");
+assert.equal(readiness.eligible, true, "7/7 lessons, approved required assignments, active enrollment, and a passing exam must unlock certification");
+assert.match(certificationRepairMigration, /AFF-FX-FOUNDATIONS-CERT/, "the repair migration must seed a stable Forex Foundations certification exam");
+assert.equal((certificationRepairMigration.match(/'Multiple Choice'|'True\/False'/g) ?? []).length, 10, "the certification exam bank must contain ten seeded questions");
+assert.doesNotMatch(certificationRepairMigration, /delete from|truncate table|update public\.certificates/i, "the certification repair must preserve legacy certificates including AFF Student Orientation");
+assert.match(certificationsPage, /exam\.examCode === "AFF-FX-FOUNDATIONS-CERT"/, "students must receive the stable Forex Foundations certification exam");
+assert.match(certificationsPage, /from\("digital_certificates"\)[\s\S]*certification_id/, "passing exam issuance must reuse an existing digital certificate instead of duplicating it");
+assert.match(certificatesPage, /resolveForexFoundationsCourse/, "certificate readiness must resolve the production Forex Foundations course mapping");
 
 const duplicateLessonQuizAssets = [
   { id: "legacy-1", course_id: 1, lesson_id: 2, asset_type: "Quiz", asset_status: "Published", asset_title: "Currency Pairs and Quote Anatomy", quiz_group_id: null },

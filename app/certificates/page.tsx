@@ -25,8 +25,6 @@ type Certificate = {
   qr_payload: string | null;
 };
 
-type CertificateRow = Partial<Certificate>;
-
 type Eligibility = {
   activeEnrollment: boolean;
   requiredLessons: number;
@@ -34,6 +32,7 @@ type Eligibility = {
   requiredAssignments: number;
   approvedAssignments: number;
   hasPassingExam: boolean;
+  passingAttemptId: string;
   score: number;
   eligible: boolean;
 };
@@ -68,28 +67,19 @@ export default function CertificatesPage() {
     return fallback;
   }
 
-  function normalizeCertificate(row: CertificateRow): Certificate {
+  function normalizeCertificate(row: DbRow): Certificate {
     return {
       id: String(row.id ?? crypto.randomUUID()),
       certificate_number: String(row.certificate_number ?? ""),
       student_id: String(row.student_id ?? ""),
       student_name: String(row.student_name ?? "Student"),
-      course_name: String(row.course_name ?? certificationCourseName),
+      course_name: String(row.course_name ?? row.certificate_name ?? certificationCourseName),
       score: Number(row.score ?? 0),
-      issue_date: row.issue_date ?? new Date().toISOString().slice(0, 10),
-      completion_date: row.completion_date ?? row.issue_date ?? null,
-      verification_code: String(row.verification_code ?? ""),
-      qr_payload: row.qr_payload ?? null
+      issue_date: String(row.issue_date ?? new Date().toISOString().slice(0, 10)),
+      completion_date: row.completion_date ? String(row.completion_date) : row.issue_date ? String(row.issue_date) : null,
+      verification_code: String(row.verification_code ?? row.qr_verification_code ?? ""),
+      qr_payload: row.qr_payload ? String(row.qr_payload) : null
     };
-  }
-
-  function createVerificationCode() {
-    return crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase();
-  }
-
-  function createCertificateNumber() {
-    const suffix = crypto.randomUUID().replaceAll("-", "").slice(0, 5).toUpperCase();
-    return `AFF-2026-${suffix}`;
   }
 
   const loadCertification = useCallback(async () => {
@@ -160,11 +150,18 @@ export default function CertificatesPage() {
       if (!internalStudentId) throw new Error("Your Academy student record could not be matched to certification readiness.");
       setCourseName(String(course.course_name ?? certificationCourseName));
 
-      const [certificatesResult, enrollmentsResult, lessonsResult, progressResult, definitionsResult, assignmentsResult, attemptsResult] = await Promise.all([
+      const [certificatesResult, digitalCertificatesResult, enrollmentsResult, lessonsResult, progressResult, definitionsResult, assignmentsResult, attemptsResult] = await Promise.all([
         supabase
           .from("certificates")
           .select("*")
           .eq("student_id", user.id)
+          .order("issue_date", { ascending: false }),
+        supabase
+          .from("digital_certificates")
+          .select("*")
+          .eq("student_id", user.id)
+          .eq("certification_id", certificationId)
+          .eq("status", "Valid")
           .order("issue_date", { ascending: false }),
         supabase.from("enrollments").select("*").eq("student_id", internalStudentId).eq("course_id", courseId),
         supabase.from("lessons").select("*").eq("course_id", courseId).order("lesson_order", { ascending: true }),
@@ -182,7 +179,7 @@ export default function CertificatesPage() {
         supabase.from("certification_exam_attempts").select("*").eq("student_id", user.id).eq("certification_id", certificationId).order("submitted_at", { ascending: false })
       ]);
 
-      for (const result of [certificatesResult, enrollmentsResult, lessonsResult, progressResult, definitionsResult, assignmentsResult, attemptsResult]) {
+      for (const result of [certificatesResult, digitalCertificatesResult, enrollmentsResult, lessonsResult, progressResult, definitionsResult, assignmentsResult, attemptsResult]) {
         if (result.error) throw result.error;
       }
 
@@ -194,16 +191,22 @@ export default function CertificatesPage() {
         progressRows: (progressResult.data ?? []) as DbRow[],
         assignmentDefinitions: (definitionsResult.data ?? []) as DbRow[],
         assignmentSubmissions: (assignmentsResult.data ?? []) as DbRow[],
-        attempts: (attemptsResult.data ?? []) as DbRow[]
+        attempts: (attemptsResult.data ?? []) as DbRow[],
+        minimumPassingScore: Number(catalogItem.passing_score ?? 80)
       });
 
-      const normalized = ((certificatesResult.data ?? []) as CertificateRow[]).map(normalizeCertificate);
+      const legacyCertificates = ((certificatesResult.data ?? []) as DbRow[]).map(normalizeCertificate);
+      const digitalCertificates = ((digitalCertificatesResult.data ?? []) as DbRow[]).map((row) => ({
+        ...normalizeCertificate(row),
+        score: Number(row.score ?? nextEligibility.score)
+      }));
+      const normalized = [...digitalCertificates, ...legacyCertificates];
       setCertificates(normalized);
       setEligibility(nextEligibility);
 
-      const hasCourseCertificate = normalized.some((certificate) => certificate.course_name.trim().toLowerCase() === String(course.course_name).trim().toLowerCase());
+      const hasCourseCertificate = digitalCertificates.length > 0 || legacyCertificates.some((certificate) => certificate.course_name.trim().toLowerCase() === String(course.course_name).trim().toLowerCase());
       if (nextEligibility.eligible && !hasCourseCertificate) {
-        await issueCertificate(user.id, resolvedName, nextEligibility.score, true);
+        await issueCertificate(nextEligibility.passingAttemptId, true);
       } else {
         setMessage(nextEligibility.eligible ? "Certification unlocked. Certificate is ready." : "Complete all certification requirements to unlock your certificate.");
       }
@@ -212,7 +215,7 @@ export default function CertificatesPage() {
     } finally {
       setLoading(false);
     }
-  // Automatic issuance intentionally calls the current certificate creator after eligibility is computed.
+  // Automatic issuance delegates every integrity check to the guarded database function.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
@@ -220,54 +223,26 @@ export default function CertificatesPage() {
     loadCertification();
   }, [loadCertification]);
 
-  async function issueCertificate(userId?: string, name = studentName, score = eligibility?.score ?? 100, automatic = false) {
+  async function issueCertificate(attemptId = eligibility?.passingAttemptId ?? "", automatic = false) {
     setIssuing(true);
     setMessage(automatic ? "Certification complete. Issuing certificate..." : "Checking eligibility and issuing certificate...");
 
     try {
       const supabase = createClient();
-      const {
-        data: { user }
-      } = await supabase.auth.getUser();
-      const activeUserId = userId ?? user?.id;
-
-      if (!activeUserId) {
-        router.replace("/login");
-        return;
-      }
-
-      if (!automatic && !eligibility?.eligible) {
+      if (!eligibility?.eligible || !attemptId) {
         setMessage("Certification is locked until all lessons, quiz, and assignments are complete.");
         return;
       }
 
-      const certificateNumber = createCertificateNumber();
-      const verificationCode = createVerificationCode();
-      const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
-      const qrPayload = `${siteUrl}/verify?certificate=${encodeURIComponent(certificateNumber)}&code=${encodeURIComponent(verificationCode)}`;
-
-      const payload = {
-        certificate_number: certificateNumber,
-        student_id: activeUserId,
-        student_name: name,
-        course_name: courseName,
-        score,
-        issue_date: new Date().toISOString().slice(0, 10),
-        completion_date: new Date().toISOString().slice(0, 10),
-        verification_code: verificationCode,
-        qr_payload: qrPayload,
-        instructor_name: "Dr. Jean Rene Moricette"
-      };
-
       const { data, error } = await supabase
-        .from("certificates")
-        .insert(payload)
-        .select("*")
+        .rpc("issue_aff_certificate", { p_attempt_id: Number(attemptId) })
         .single();
 
       if (error) throw error;
+      if (!data) throw new Error("Certificate issuance did not return a verified certificate.");
 
-      setCertificates((current) => [normalizeCertificate(data as CertificateRow), ...current]);
+      const certificate = { ...normalizeCertificate(data as DbRow), score: eligibility.score };
+      setCertificates((current) => current.some((item) => item.id === certificate.id) ? current : [certificate, ...current]);
       setMessage("Certificate issued successfully.");
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to issue certificate."));

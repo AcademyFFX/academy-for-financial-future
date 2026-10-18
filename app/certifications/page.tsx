@@ -215,15 +215,6 @@ function normalizeReview(row: DbRow): ReviewQueueItem {
   };
 }
 
-function makeCertificateNumber() {
-  const year = new Date().getFullYear();
-  return `AFF-${year}-${String(Date.now()).slice(-5)}${Math.floor(Math.random() * 90 + 10)}`;
-}
-
-function makeVerificationCode() {
-  return crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase();
-}
-
 export default function CertificationsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -357,48 +348,16 @@ export default function CertificationsPage() {
     return map;
   }, [attempts]);
 
-  async function issueCertificate(params: {
-    certificationId: string;
-    certificateName: string;
-    studentId: string;
-    studentName: string;
-    affStudentId: string;
-  }) {
+  async function issueCertificate(attemptId: string) {
     const supabase = createClient();
-    const { data: existing, error: existingError } = await supabase
-      .from("digital_certificates")
-      .select("*")
-      .eq("student_id", params.studentId)
-      .eq("certification_id", params.certificationId)
-      .eq("status", "Valid")
-      .order("issue_date", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (existingError) throw existingError;
-    if (existing) {
-      const certificate = normalizeCertificate(existing as DbRow);
-      setCertificates((current) => current.some((item) => item.id === certificate.id) ? current : [certificate, ...current]);
-      return;
-    }
     const { data, error } = await supabase
-      .from("digital_certificates")
-      .insert({
-        student_id: params.studentId,
-        student_name: params.studentName,
-        aff_student_id: params.affStudentId,
-        certification_id: params.certificationId,
-        certificate_name: params.certificateName,
-        issue_date: new Date().toISOString().slice(0, 10),
-        certificate_number: makeCertificateNumber(),
-        qr_verification_code: makeVerificationCode(),
-        verification_url: "/verify-certificate",
-        status: "Valid"
-      })
-      .select("*")
+      .rpc("issue_aff_certificate", { p_attempt_id: Number(attemptId) })
       .single();
 
     if (error) throw error;
-    setCertificates((current) => [normalizeCertificate(data as DbRow), ...current]);
+    if (!data) throw new Error("Certificate issuance did not return a verified certificate.");
+    const certificate = normalizeCertificate(data as DbRow);
+    setCertificates((current) => current.some((item) => item.id === certificate.id) ? current : [certificate, ...current]);
   }
 
   async function submitExam(event: FormEvent<HTMLFormElement>) {
@@ -507,13 +466,7 @@ export default function CertificationsPage() {
         );
         if (reviewError) throw reviewError;
       } else if (finalResult === "Pass") {
-        await issueCertificate({
-          certificationId: selectedCatalog.id,
-          certificateName: selectedCatalog.certificateName,
-          studentId: user.id,
-          studentName,
-          affStudentId
-        });
+        await issueCertificate(attempt.id);
       }
 
       setAnswers({});
@@ -583,13 +536,7 @@ export default function CertificationsPage() {
         if (attemptError) throw attemptError;
 
         if (passed && attempt && catalogItem) {
-          await issueCertificate({
-            certificationId: catalogItem.id,
-            certificateName: catalogItem.certificateName,
-            studentId: item.studentId,
-            studentName: attempt.studentName,
-            affStudentId
-          });
+          await issueCertificate(item.attemptId);
         }
       }
 

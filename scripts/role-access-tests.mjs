@@ -45,6 +45,7 @@ const quizAssetSelectionSource = read("lib/quiz-asset-selection.ts");
 const canonicalQuizMigration = read("supabase/migrations/20261017_select_canonical_lesson_quiz_group.sql");
 const lesson2CanonicalRepairMigration = read("supabase/migrations/20261017_repair_lesson2_canonical_quiz_group.sql");
 const certificationRepairMigration = read("supabase/migrations/20261018_repair_forex_foundations_certification_workflow.sql");
+const certificationIntegrityMigration = read("supabase/migrations/20261018_secure_forex_foundations_certificate_issuance.sql");
 const certificationReadinessSource = read("lib/certification-readiness.ts");
 const quizQuestionModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(quizQuestionSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
@@ -71,19 +72,72 @@ const readiness = certificationReadinessModule.calculateCertificationReadiness({
   progressRows: Array.from({ length: 7 }, (_, index) => ({ lesson_id: index + 1, course_id: 1, completed: true })),
   assignmentDefinitions: [{ id: "assignment-definition", course_id: 1, lesson_id: 7, asset_type: "Assignment", asset_status: "Published", signed_url: JSON.stringify({ required: true }) }],
   assignmentSubmissions: [{ id: 7, course_id: 1, lesson_id: 7, status: "Approved" }],
-  attempts: [{ certification_id: 11, result: "Pass", score: 100 }]
+  attempts: [{ id: 91, certification_id: 11, result: "Pass", status: "Completed", score: 100 }]
 });
 assert.equal(readiness.requiredLessons, 7, "Forex Foundations certification must require its seven published required lessons");
 assert.equal(readiness.completedLessons, 7, "George's seven completion rows must produce 7/7 certification readiness");
 assert.equal(readiness.approvedAssignments, 1, "the approved submission must satisfy its canonical required assignment");
 assert.equal(readiness.hasPassingExam, true, "a passing certification attempt must satisfy the exam requirement");
+assert.equal(readiness.passingAttemptId, "91", "certificate issuance must retain the exact passing certification attempt id");
 assert.equal(readiness.eligible, true, "7/7 lessons, approved required assignments, active enrollment, and a passing exam must unlock certification");
+const readinessWithoutAttempt = certificationReadinessModule.calculateCertificationReadiness({
+  courseId: "1",
+  certificationId: "11",
+  enrollmentRows: [{ student_id: 4, course_id: 1, enrollment_status: "Active" }],
+  lessons: [{ id: 1, course_id: 1, publication_status: "Published", required_completion: true }],
+  progressRows: [{ lesson_id: 1, course_id: 1 }],
+  assignmentDefinitions: [],
+  assignmentSubmissions: [],
+  attempts: []
+});
+assert.equal(readinessWithoutAttempt.eligible, false, "no passing certification attempt must never unlock a certificate");
+const readinessAfterFailedAttempt = certificationReadinessModule.calculateCertificationReadiness({
+  courseId: "1",
+  certificationId: "11",
+  enrollmentRows: [{ student_id: 4, course_id: 1, enrollment_status: "Active" }],
+  lessons: [{ id: 1, course_id: 1, publication_status: "Published", required_completion: true }],
+  progressRows: [{ lesson_id: 1, course_id: 1 }],
+  assignmentDefinitions: [],
+  assignmentSubmissions: [],
+  attempts: [{ id: 92, certification_id: 11, result: "Fail", status: "Completed", score: 79 }]
+});
+assert.equal(readinessAfterFailedAttempt.eligible, false, "a failed certification attempt must never unlock a certificate");
+const readinessAtThreshold = certificationReadinessModule.calculateCertificationReadiness({
+  courseId: "1",
+  certificationId: "11",
+  enrollmentRows: [{ student_id: 4, course_id: 1, enrollment_status: "Active" }],
+  lessons: [{ id: 1, course_id: 1, publication_status: "Published", required_completion: true }],
+  progressRows: [{ lesson_id: 1, course_id: 1 }],
+  assignmentDefinitions: [],
+  assignmentSubmissions: [],
+  attempts: [{ id: 93, certification_id: 11, result: "Pass", status: "Completed", score: 80 }]
+});
+assert.equal(readinessAtThreshold.eligible, true, "an 80% passing attempt plus all requirements must unlock certification");
+assert.equal(readinessAtThreshold.passingAttemptId, "93", "the threshold pass must expose its attempt provenance");
 assert.match(certificationRepairMigration, /AFF-FX-FOUNDATIONS-CERT/, "the repair migration must seed a stable Forex Foundations certification exam");
 assert.equal((certificationRepairMigration.match(/'Multiple Choice'|'True\/False'/g) ?? []).length, 10, "the certification exam bank must contain ten seeded questions");
 assert.doesNotMatch(certificationRepairMigration, /delete from|truncate table|update public\.certificates/i, "the certification repair must preserve legacy certificates including AFF Student Orientation");
 assert.match(certificationsPage, /exam\.examCode === "AFF-FX-FOUNDATIONS-CERT"/, "students must receive the stable Forex Foundations certification exam");
-assert.match(certificationsPage, /from\("digital_certificates"\)[\s\S]*certification_id/, "passing exam issuance must reuse an existing digital certificate instead of duplicating it");
+assert.match(certificationsPage, /rpc\("issue_aff_certificate", \{ p_attempt_id: Number\(attemptId\) \}\)/, "the certification center must delegate certificate issuance to the guarded database function");
+assert.doesNotMatch(certificationsPage, /from\("digital_certificates"\)\s*\.insert/, "the certification center must not directly insert digital certificates");
 assert.match(certificatesPage, /resolveForexFoundationsCourse/, "certificate readiness must resolve the production Forex Foundations course mapping");
+assert.match(certificatesPage, /rpc\("issue_aff_certificate", \{ p_attempt_id: Number\(attemptId\) \}\)/, "the certificate readiness page must delegate issuance to the guarded database function");
+assert.doesNotMatch(certificatesPage, /from\("certificates"\)\s*\.insert/, "the Forex Foundations certificate page must not issue an unguarded legacy certificate");
+assert.match(lmsCourseCenter, /Forex Foundations certification requires the separate guarded certification examination/, "lesson quiz completion must not bypass the Forex Foundations certification examination");
+assert.match(courseUploadCenter, /Forex Foundations certificates are issued only after the guarded certification examination and requirement checks/, "admin course tooling must not bypass guarded Forex Foundations issuance");
+assert.match(certificationIntegrityMigration, /add column if not exists exam_attempt_id bigint/, "certificate records must retain certification-attempt provenance");
+assert.match(certificationIntegrityMigration, /drop policy if exists "AFF students issue own digital certificates"/, "the insecure student self-issuance policy must be removed");
+assert.match(certificationIntegrityMigration, /revoke insert, update, delete on public\.digital_certificates from authenticated/, "authenticated users must not write digital certificates directly");
+assert.match(certificationIntegrityMigration, /prevent_legacy_forex_foundations_certificate_insert/, "the legacy certificate table must reject new Forex Foundations credentials while preserving other certificates");
+assert.match(certificationIntegrityMigration, /create or replace function public\.issue_aff_certificate\(p_attempt_id bigint\)/, "a guarded certificate issuance function must own the complete integrity transaction");
+assert.match(certificationIntegrityMigration, /attempt_row\.score < greatest\(80, catalog_row\.passing_score\)/, "the guarded issuer must enforce the catalog threshold with an 80% floor");
+assert.match(certificationIntegrityMigration, /from public\.enrollments as enrollment[\s\S]*enrollment\.student_id = student_row\.id[\s\S]*enrollment\.course_id = catalog_row\.course_id/, "the guarded issuer must require the student's active course enrollment");
+assert.match(certificationIntegrityMigration, /completed_lesson_count <> required_lesson_count/, "the guarded issuer must require every published required lesson");
+assert.match(certificationIntegrityMigration, /approved_assignment_count <> required_assignment_count/, "the guarded issuer must require every published required assignment to be approved");
+assert.match(certificationIntegrityMigration, /pg_advisory_xact_lock/, "concurrent refreshes or submissions must serialize certificate issuance");
+assert.match(certificationIntegrityMigration, /digital_certificates_verified_student_certification_unique/, "verified certificates must have database-level duplicate prevention");
+assert.match(certificationIntegrityMigration, /where certificate\.student_id = attempt_row\.student_id[\s\S]*certificate\.certification_id = catalog_row\.id[\s\S]*certificate\.status = 'Valid'/, "repeated issuance must return the existing valid certificate rather than create a duplicate");
+assert.doesNotMatch(certificationIntegrityMigration, /delete from|truncate table|update public\.digital_certificates/i, "the integrity migration must preserve George's current certificate and every historical credential");
 
 const duplicateLessonQuizAssets = [
   { id: "legacy-1", course_id: 1, lesson_id: 2, asset_type: "Quiz", asset_status: "Published", asset_title: "Currency Pairs and Quote Anatomy", quiz_group_id: null },

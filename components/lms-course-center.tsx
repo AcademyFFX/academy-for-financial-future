@@ -330,6 +330,10 @@ export function LmsCourseCenter({ courseCode }: { courseCode?: string }) {
 
   async function issueCertificate(course: DbRow, newlyPassedQuizId = "") {
     const courseId = idOf(course);
+    if (sameText(value(course, ["course_name", "title"]), "Forex Foundations")) {
+      setMessage("Forex Foundations certification requires the separate guarded certification examination.");
+      return;
+    }
     if (certificates.some((certificate) => value(certificate, ["course_name"]) === value(course, ["course_name", "title"]))) return;
     const requiredQuizzes = quizzes.filter((quiz) => value(quiz, ["course_id"]) === courseId);
     const passedQuizIds = new Set(attempts.filter((attempt) => value(attempt, ["result"]) === "Pass").map((attempt) => value(attempt, ["exam_title"])));

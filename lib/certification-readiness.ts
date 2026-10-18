@@ -51,6 +51,7 @@ export function calculateCertificationReadiness(input: {
   assignmentSubmissions: CertificationRow[];
   attempts: CertificationRow[];
   certificationId: string;
+  minimumPassingScore?: number;
 }) {
   const activeEnrollment = input.enrollmentRows.some((row) => {
     const status = normalized(text(row, ["enrollment_status", "status"]) || "active");
@@ -82,10 +83,14 @@ export function calculateCertificationReadiness(input: {
       return (linkedId && linkedId === definitionId) || (!linkedId && lessonId && text(submission, ["lesson_id"]) === lessonId);
     });
   }).length;
-  const passingAttempt = input.attempts.find((row) =>
-    text(row, ["certification_id"]) === input.certificationId
+  const minimumPassingScore = Math.max(80, input.minimumPassingScore ?? 80);
+  const passingAttempt = input.attempts.find((row) => {
+    const status = normalized(text(row, ["status"]));
+    return text(row, ["certification_id"]) === input.certificationId
       && ["pass", "passed"].includes(normalized(text(row, ["result", "pass_fail"])))
-  ) ?? null;
+      && Number(text(row, ["score"]) || 0) >= minimumPassingScore
+      && (!status || ["submitted", "completed", "certification approved"].includes(status));
+  }) ?? null;
   const score = Number(text(passingAttempt, ["score"]) || 0);
   const lessonsReady = requiredLessons.length > 0 && completedLessons === requiredLessons.length;
   const assignmentsReady = approvedAssignments === requiredAssignments.length;
@@ -97,6 +102,7 @@ export function calculateCertificationReadiness(input: {
     requiredAssignments: requiredAssignments.length,
     approvedAssignments,
     hasPassingExam: Boolean(passingAttempt),
+    passingAttemptId: text(passingAttempt, ["id"]),
     score,
     eligible: activeEnrollment && lessonsReady && assignmentsReady && Boolean(passingAttempt)
   };

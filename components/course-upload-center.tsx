@@ -764,6 +764,10 @@ export function CourseUploadCenter() {
     const student = students.find((item) => value(item, ["auth_user_id"]) === certificateForm.studentId);
     const course = courses.find((item) => value(item, ["id"]) === certificateForm.courseId);
     if (!student || !course) return;
+    if (value(course, ["course_name", "title"]).trim().toLowerCase() === "forex foundations") {
+      setMessage("Forex Foundations certificates are issued only after the guarded certification examination and requirement checks.");
+      return;
+    }
     const token = `${Date.now()}-${Math.random().toString(36).slice(2, 9).toUpperCase()}`;
     const supabase = createClient();
     const { error } = await supabase.from("certificates").insert({

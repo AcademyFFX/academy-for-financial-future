@@ -6,15 +6,18 @@ alter table public.course_assets
 alter table public.lessons
   add column if not exists canonical_quiz_group_id uuid;
 
-create temporary table aff_lesson2_canonical_quiz_audit (
-  lesson_id bigint primary key,
-  previous_canonical_quiz_group_id uuid,
-  intended_canonical_quiz_group_id uuid,
-  base_currency_asset_id uuid not null,
-  base_currency_previous_group_id uuid,
-  euro_strength_asset_id uuid not null,
-  euro_strength_previous_group_id uuid
-) on commit drop;
+create temporary table aff_lesson2_canonical_quiz_audit
+on commit drop
+as
+select
+  null::bigint as lesson_id,
+  null::uuid as previous_canonical_quiz_group_id,
+  null::uuid as intended_canonical_quiz_group_id,
+  null::uuid as base_currency_asset_id,
+  null::uuid as base_currency_previous_group_id,
+  null::uuid as euro_strength_asset_id,
+  null::uuid as euro_strength_previous_group_id
+with no data;
 
 create or replace function pg_temp.aff_safe_jsonb(raw text)
 returns jsonb

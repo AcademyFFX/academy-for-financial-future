@@ -74,6 +74,7 @@ assert.match(lesson2CanonicalRepairMigration, /gen_random_uuid\(\)/, "PostgreSQL
 assert.match(lesson2CanonicalRepairMigration, /old_lesson2_canonical_group/, "Lesson 2 repair must report the previous canonical group id");
 assert.match(lesson2CanonicalRepairMigration, /new_lesson2_canonical_group/, "Lesson 2 repair must report the new canonical group id");
 assert.match(lesson2CanonicalRepairMigration, /extra_group_asset_count <> 0/, "Lesson 2 repair must reject a group containing any additional asset");
+assert.match(lesson2CanonicalRepairMigration, /create temporary table aff_lesson2_canonical_quiz_audit\s+on commit drop\s+as\s+select[\s\S]+with no data;/, "Lesson 2 repair audit table must use a typed CREATE TABLE AS statement without a fragile explicit column list");
 assert.doesNotMatch(lesson2CanonicalRepairMigration, /delete from|truncate table|drop table|update public\.exams/i, "Lesson 2 repair must preserve all quiz assets and historical attempts");
 
 assert.equal(quizQuestionModule.quizAnswerIsCorrect("EUR", "A", ["EUR", "USD", "Both", "Neither"]), true, "EUR must score correctly when a legacy key stores option A");

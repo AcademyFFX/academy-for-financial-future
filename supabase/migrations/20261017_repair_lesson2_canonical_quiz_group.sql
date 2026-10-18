@@ -10,7 +10,10 @@ create temporary table aff_lesson2_canonical_quiz_audit (
   lesson_id bigint primary key,
   previous_canonical_quiz_group_id uuid,
   intended_canonical_quiz_group_id uuid,
-  selected_asset_ids uuid[] not null
+  base_currency_asset_id uuid not null,
+  base_currency_previous_group_id uuid,
+  euro_strength_asset_id uuid not null,
+  euro_strength_previous_group_id uuid
 ) on commit drop;
 
 create or replace function pg_temp.aff_safe_jsonb(raw text)
@@ -25,171 +28,174 @@ exception when others then
 end;
 $$;
 
+create or replace function pg_temp.aff_jsonb_scalar_values(raw text)
+returns table (json_key text, scalar_value text)
+language sql
+immutable
+as $$
+  with recursive walk(json_key, node) as (
+    select null::text, pg_temp.aff_safe_jsonb(raw)
+
+    union all
+
+    select child.json_key, child.node
+    from walk as parent
+    cross join lateral (
+      select object_item.key as json_key, object_item.value as node
+      from jsonb_each(
+        case when jsonb_typeof(parent.node) = 'object' then parent.node else '{}'::jsonb end
+      ) as object_item
+
+      union all
+
+      select array_item.ordinality::text, array_item.value
+      from jsonb_array_elements(
+        case when jsonb_typeof(parent.node) = 'array' then parent.node else '[]'::jsonb end
+      ) with ordinality as array_item(value, ordinality)
+    ) as child
+  )
+  select
+    walk.json_key,
+    walk.node #>> '{}' as scalar_value
+  from walk
+  where jsonb_typeof(walk.node) in ('string', 'number', 'boolean');
+$$;
+
 do $$
 declare
+  expected_previous_group_id constant uuid := 'a8d540ac-b5da-4547-883a-4aaed2092083';
+  base_currency_asset_id constant uuid := 'b1c7fa6a-edb7-4191-a921-080cc66ad6b5';
+  euro_strength_asset_id constant uuid := 'c774d987-f61e-45a4-9777-5e8e64704a99';
   target_course_id bigint;
   target_lesson_id bigint;
   previous_group_id uuid;
+  base_currency_previous_group_id uuid;
+  euro_strength_previous_group_id uuid;
   intended_group_id uuid;
-  reusable_group_id uuid;
-  selected_asset_ids uuid[];
-  matched_question_count integer;
+  target_asset_count integer;
+  target_group_count integer;
   extra_group_asset_count integer;
+  base_currency_is_valid boolean;
+  euro_strength_is_valid boolean;
 begin
-  select id into target_course_id
-  from public.courses
-  where lower(trim(course_name)) = 'forex foundations'
-  order by id
+  select course.id
+  into target_course_id
+  from public.courses as course
+  where lower(trim(course.course_name)) = 'forex foundations'
+  order by course.id
   limit 1;
 
-  select id, canonical_quiz_group_id
+  select lesson.id, lesson.canonical_quiz_group_id
   into target_lesson_id, previous_group_id
-  from public.lessons
-  where course_id = target_course_id
-    and lower(trim(coalesce(lesson_title, title))) = 'currency pairs and quote anatomy'
-  order by id
+  from public.lessons as lesson
+  where lesson.course_id = target_course_id
+    and lower(trim(coalesce(lesson.lesson_title, lesson.title))) = 'currency pairs and quote anatomy'
+  order by lesson.id
   limit 1;
 
   if target_course_id is null or target_lesson_id is null then
-    raise exception 'Forex Foundations / Currency Pairs and Quote Anatomy was not found.';
+    raise exception 'Forex Foundations / Currency Pairs and Quote Anatomy was not found; no canonical metadata was changed.';
   end if;
 
-  create temporary table aff_lesson2_question_rows on commit drop as
-  with asset_payloads as (
-    select
-      asset.id as asset_id,
-      asset.quiz_group_id,
-      asset.updated_at,
-      pg_temp.aff_safe_jsonb(asset.signed_url) as payload
-    from public.course_assets as asset
-    where asset.course_id = target_course_id
-      and asset.lesson_id = target_lesson_id
-      and asset.asset_type = 'Quiz'
-      and asset.asset_status = 'Published'
-      and lower(trim(asset.asset_title)) = 'currency pairs and quote anatomy multiple choice'
-  ), expanded as (
-    select
-      asset.asset_id,
-      asset.quiz_group_id,
-      asset.updated_at,
-      question.value as question
-    from asset_payloads as asset
-    cross join lateral jsonb_array_elements(
-      case when jsonb_typeof(asset.payload -> 'questions') = 'array' then asset.payload -> 'questions' else '[]'::jsonb end
-    ) as question(value)
-
-    union all
-
-    select asset.asset_id, asset.quiz_group_id, asset.updated_at, asset.payload -> 'question'
-    from asset_payloads as asset
-    where jsonb_typeof(asset.payload -> 'questions') is distinct from 'array'
-      and jsonb_typeof(asset.payload -> 'question') = 'object'
-
-    union all
-
-    select asset.asset_id, asset.quiz_group_id, asset.updated_at, asset.payload
-    from asset_payloads as asset
-    where jsonb_typeof(asset.payload -> 'questions') is distinct from 'array'
-      and jsonb_typeof(asset.payload -> 'question') is distinct from 'object'
-      and jsonb_typeof(asset.payload) = 'object'
-  )
-  select
-    expanded.*,
-    lower(regexp_replace(trim(coalesce(
-      question ->> 'prompt',
-      question ->> 'question',
-      question ->> 'question_text',
-      question ->> 'questionText',
-      ''
-    )), '[[:space:][:punct:]]+$', '')) as normalized_prompt,
-    case
-      when exists (
-        select 1 from jsonb_each_text(question) as answer_key(key, answer)
-        where answer_key.key in ('correctAnswer', 'correct_answer', 'correct', 'answer', 'correctOption', 'correct_option')
-          and lower(trim(answer_key.answer)) = 'eur'
-      ) then 'base_currency'
-      when exists (
-        select 1 from jsonb_each_text(question) as answer_key(key, answer)
-        where answer_key.key in ('correctAnswer', 'correct_answer', 'correct', 'answer', 'correctOption', 'correct_option')
-          and lower(trim(answer_key.answer)) = 'the euro strengthened against the dollar'
-      ) then 'euro_strengthened'
-      else null
-    end as expected_answer_key
-  from expanded;
-
-  create temporary table aff_lesson2_selected_assets on commit drop as
-  with valid_questions as (
-    select *
-    from aff_lesson2_question_rows
-    where (
-      normalized_prompt = 'in eur/usd, which currency is the base currency'
-      and expected_answer_key = 'base_currency'
-    ) or (
-      normalized_prompt = 'if eur/usd rises, this generally means'
-      and expected_answer_key = 'euro_strengthened'
-    )
-  ), bundled_asset as (
-    select valid.asset_id, max(valid.updated_at) as updated_at
-    from valid_questions as valid
-    group by valid.asset_id
-    having count(distinct valid.expected_answer_key) = 2
-       and (select count(*) from aff_lesson2_question_rows as all_questions where all_questions.asset_id = valid.asset_id) = 2
-    order by updated_at desc nulls last, valid.asset_id desc
-    limit 1
-  ), ranked_individual_questions as (
-    select
-      valid.asset_id,
-      valid.expected_answer_key,
-      row_number() over (
-        partition by valid.expected_answer_key
-        order by valid.updated_at desc nulls last, valid.asset_id desc
-      ) as answer_rank
-    from valid_questions as valid
-    where not exists (select 1 from bundled_asset)
-  )
-  select asset_id from bundled_asset
-  union
-  select asset_id from ranked_individual_questions where answer_rank = 1;
-
-  select count(distinct row.expected_answer_key)
-  into matched_question_count
-  from aff_lesson2_question_rows as row
-  join aff_lesson2_selected_assets as selected on selected.asset_id = row.asset_id
-  where row.expected_answer_key is not null;
-
-  if matched_question_count <> 2 then
-    raise exception 'Unable to identify exactly the repaired two-question Lesson 2 quiz; no canonical metadata was changed.';
-  end if;
-
-  select array_agg(asset_id order by asset_id)
-  into selected_asset_ids
-  from aff_lesson2_selected_assets;
-
-  select min(asset.quiz_group_id::text)::uuid
-  into reusable_group_id
+  select count(*)
+  into target_asset_count
   from public.course_assets as asset
-  where asset.id = any(selected_asset_ids)
-  having count(distinct asset.quiz_group_id) = 1
-     and count(asset.quiz_group_id) = count(*);
+  where asset.id in (base_currency_asset_id, euro_strength_asset_id)
+    and asset.course_id = target_course_id
+    and asset.lesson_id = target_lesson_id
+    and lower(trim(asset.asset_type)) = 'quiz'
+    and lower(trim(asset.asset_status)) = 'published';
 
-  if reusable_group_id is not null then
-    select count(*) into extra_group_asset_count
-    from public.course_assets as asset
-    where asset.quiz_group_id = reusable_group_id
-      and not (asset.id = any(selected_asset_ids));
-  else
-    extra_group_asset_count := 0;
+  if target_asset_count <> 2 then
+    raise exception 'The two exact published Lesson 2 quiz assets were not found on the expected course and lesson; no canonical metadata was changed.';
   end if;
 
-  intended_group_id := case
-    when reusable_group_id is not null and extra_group_asset_count = 0 then reusable_group_id
-    else gen_random_uuid()
-  end;
+  select
+    exists (
+      select 1
+      from pg_temp.aff_jsonb_scalar_values(asset.signed_url) as scalar
+      where scalar.json_key in ('prompt', 'question', 'question_text', 'questionText')
+        and lower(trim(scalar.scalar_value)) = 'in eur/usd, which currency is the base currency?'
+    )
+    and exists (
+      select 1
+      from pg_temp.aff_jsonb_scalar_values(asset.signed_url) as scalar
+      where scalar.json_key in ('correctAnswer', 'correct_answer', 'correct', 'answer', 'correctOption', 'correct_option')
+        and lower(trim(scalar.scalar_value)) = 'eur'
+    )
+  into base_currency_is_valid
+  from public.course_assets as asset
+  where asset.id = base_currency_asset_id;
+
+  select
+    exists (
+      select 1
+      from pg_temp.aff_jsonb_scalar_values(asset.signed_url) as scalar
+      where scalar.json_key in ('prompt', 'question', 'question_text', 'questionText')
+        and lower(trim(scalar.scalar_value)) = 'if eur/usd rises, this generally means:'
+    )
+    and exists (
+      select 1
+      from pg_temp.aff_jsonb_scalar_values(asset.signed_url) as scalar
+      where scalar.json_key in ('correctAnswer', 'correct_answer', 'correct', 'answer', 'correctOption', 'correct_option')
+        and lower(trim(scalar.scalar_value)) = 'the euro strengthened against the dollar'
+    )
+  into euro_strength_is_valid
+  from public.course_assets as asset
+  where asset.id = euro_strength_asset_id;
+
+  if not coalesce(base_currency_is_valid, false) then
+    raise exception 'Asset b1c7fa6a-edb7-4191-a921-080cc66ad6b5 did not contain the exact expected question and EUR answer; no canonical metadata was changed.';
+  end if;
+
+  if not coalesce(euro_strength_is_valid, false) then
+    raise exception 'Asset c774d987-f61e-45a4-9777-5e8e64704a99 did not contain the exact expected question and Euro-strength answer; no canonical metadata was changed.';
+  end if;
+
+  select asset.quiz_group_id
+  into base_currency_previous_group_id
+  from public.course_assets as asset
+  where asset.id = base_currency_asset_id;
+
+  select asset.quiz_group_id
+  into euro_strength_previous_group_id
+  from public.course_assets as asset
+  where asset.id = euro_strength_asset_id;
+
+  select count(distinct asset.quiz_group_id)
+  into target_group_count
+  from public.course_assets as asset
+  where asset.id in (base_currency_asset_id, euro_strength_asset_id);
+
+  if base_currency_previous_group_id is null and euro_strength_previous_group_id is null then
+    intended_group_id := gen_random_uuid();
+  elsif base_currency_previous_group_id is not null
+    and base_currency_previous_group_id = euro_strength_previous_group_id
+    and target_group_count = 1 then
+    intended_group_id := base_currency_previous_group_id;
+  else
+    raise exception 'The two repaired assets have conflicting quiz groups; no canonical metadata was changed.';
+  end if;
+
+  select count(*)
+  into extra_group_asset_count
+  from public.course_assets as asset
+  where asset.quiz_group_id = intended_group_id
+    and asset.id not in (base_currency_asset_id, euro_strength_asset_id);
+
+  if extra_group_asset_count <> 0 then
+    raise exception 'The intended quiz group contains assets other than the two repaired Lesson 2 questions; no canonical metadata was changed.';
+  end if;
+
+  if previous_group_id is distinct from expected_previous_group_id
+    and previous_group_id is distinct from intended_group_id then
+    raise exception 'Lesson 2 canonical quiz group changed after production diagnosis; no canonical metadata was changed.';
+  end if;
 
   update public.course_assets
   set quiz_group_id = intended_group_id,
       updated_at = now()
-  where id = any(selected_asset_ids)
+  where id in (base_currency_asset_id, euro_strength_asset_id)
     and quiz_group_id is distinct from intended_group_id;
 
   update public.lessons
@@ -202,12 +208,18 @@ begin
     lesson_id,
     previous_canonical_quiz_group_id,
     intended_canonical_quiz_group_id,
-    selected_asset_ids
+    base_currency_asset_id,
+    base_currency_previous_group_id,
+    euro_strength_asset_id,
+    euro_strength_previous_group_id
   ) values (
     target_lesson_id,
     previous_group_id,
     intended_group_id,
-    selected_asset_ids
+    base_currency_asset_id,
+    base_currency_previous_group_id,
+    euro_strength_asset_id,
+    euro_strength_previous_group_id
   );
 end $$;
 
@@ -215,11 +227,18 @@ notify pgrst, 'reload schema';
 
 select
   audit.lesson_id,
-  audit.previous_canonical_quiz_group_id as current_group_before_repair,
-  audit.intended_canonical_quiz_group_id as intended_two_question_group,
-  lesson.canonical_quiz_group_id as current_group_after_repair,
-  audit.selected_asset_ids
+  audit.previous_canonical_quiz_group_id as old_lesson2_canonical_group,
+  audit.intended_canonical_quiz_group_id as new_lesson2_canonical_group,
+  lesson.canonical_quiz_group_id as resulting_lesson2_canonical_group,
+  audit.base_currency_asset_id,
+  audit.base_currency_previous_group_id,
+  base_asset.quiz_group_id as base_currency_resulting_group_id,
+  audit.euro_strength_asset_id,
+  audit.euro_strength_previous_group_id,
+  euro_asset.quiz_group_id as euro_strength_resulting_group_id
 from aff_lesson2_canonical_quiz_audit as audit
-join public.lessons as lesson on lesson.id = audit.lesson_id;
+join public.lessons as lesson on lesson.id = audit.lesson_id
+join public.course_assets as base_asset on base_asset.id = audit.base_currency_asset_id
+join public.course_assets as euro_asset on euro_asset.id = audit.euro_strength_asset_id;
 
 commit;

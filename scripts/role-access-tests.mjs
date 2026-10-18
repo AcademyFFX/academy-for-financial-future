@@ -52,12 +52,12 @@ const quizAssetSelectionModule = await import(`data:text/javascript;base64,${Buf
 const duplicateLessonQuizAssets = [
   { id: "legacy-1", course_id: 1, lesson_id: 2, asset_type: "Quiz", asset_status: "Published", asset_title: "Currency Pairs and Quote Anatomy", quiz_group_id: null },
   { id: "legacy-2", course_id: 1, lesson_id: 2, asset_type: "Quiz", asset_status: "Published", asset_title: "Currency Pairs and Quote Anatomy", quiz_group_id: null },
-  { id: "canonical-1", course_id: 1, lesson_id: 2, asset_type: "Quiz", asset_status: "Published", asset_title: "Currency Pairs and Quote Anatomy Multiple Choice", quiz_group_id: "canonical-group", points: 1 },
-  { id: "canonical-2", course_id: 1, lesson_id: 2, asset_type: "Quiz", asset_status: "Published", asset_title: "Currency Pairs and Quote Anatomy Multiple Choice", quiz_group_id: "canonical-group", points: 1 }
+  { id: "b1c7fa6a-edb7-4191-a921-080cc66ad6b5", course_id: 1, lesson_id: 2, asset_type: "Quiz", asset_status: "Published", asset_title: "Currency Pairs and Quote Anatomy Multiple Choice", quiz_group_id: "canonical-group", points: 1 },
+  { id: "c774d987-f61e-45a4-9777-5e8e64704a99", course_id: 1, lesson_id: 2, asset_type: "Quiz", asset_status: "Published", asset_title: "Currency Pairs and Quote Anatomy Multiple Choice", quiz_group_id: "canonical-group", points: 1 }
 ];
 const canonicalLessonQuiz = [{ id: 2, course_id: 1, canonical_quiz_group_id: "canonical-group" }];
 const selectedLesson2QuizAssets = quizAssetSelectionModule.selectCanonicalQuizAssets(duplicateLessonQuizAssets, canonicalLessonQuiz);
-assert.deepEqual(selectedLesson2QuizAssets.map((asset) => asset.id), ["canonical-1", "canonical-2"], "student quiz selection must retain the complete two-question canonical group while excluding competing legacy assets");
+assert.deepEqual(selectedLesson2QuizAssets.map((asset) => asset.id), ["b1c7fa6a-edb7-4191-a921-080cc66ad6b5", "c774d987-f61e-45a4-9777-5e8e64704a99"], "Lesson 2 must resolve to the two exact repaired production assets while excluding competing legacy assets");
 assert.equal(selectedLesson2QuizAssets.length, 2, "Lesson 2 must always resolve to exactly two canonical questions");
 assert.equal(selectedLesson2QuizAssets.reduce((total, asset) => total + Number(asset.points), 0), 2, "Lesson 2 canonical quiz must total exactly two points");
 assert.deepEqual(quizAssetSelectionModule.selectCanonicalQuizAssets(duplicateLessonQuizAssets, [{ id: 2, course_id: 1, canonical_quiz_group_id: "missing-explicit-group" }]), [], "an explicit canonical quiz group must fail closed and never fall back to another published quiz");
@@ -67,9 +67,13 @@ assert.match(canonicalQuizMigration, /add column if not exists canonical_quiz_gr
 assert.doesNotMatch(canonicalQuizMigration, /delete from|truncate table|drop table/i, "canonical quiz migration must preserve quiz assets, attempts, and scores");
 assert.match(lesson2CanonicalRepairMigration, /in eur\/usd, which currency is the base currency/, "Lesson 2 repair must identify the exact base-currency question");
 assert.match(lesson2CanonicalRepairMigration, /the euro strengthened against the dollar/, "Lesson 2 repair must identify the exact EUR-strength answer");
-assert.match(lesson2CanonicalRepairMigration, /matched_question_count <> 2/, "Lesson 2 repair must fail safely unless exactly both intended questions are identified");
-assert.match(lesson2CanonicalRepairMigration, /current_group_before_repair/, "Lesson 2 repair must report the previous canonical group id");
-assert.match(lesson2CanonicalRepairMigration, /intended_two_question_group/, "Lesson 2 repair must report the intended canonical group id");
+assert.match(lesson2CanonicalRepairMigration, /b1c7fa6a-edb7-4191-a921-080cc66ad6b5/, "Lesson 2 repair must target the diagnosed base-currency asset UUID");
+assert.match(lesson2CanonicalRepairMigration, /c774d987-f61e-45a4-9777-5e8e64704a99/, "Lesson 2 repair must target the diagnosed EUR-strength asset UUID");
+assert.match(lesson2CanonicalRepairMigration, /a8d540ac-b5da-4547-883a-4aaed2092083/, "Lesson 2 repair must guard the diagnosed previous canonical group");
+assert.match(lesson2CanonicalRepairMigration, /gen_random_uuid\(\)/, "PostgreSQL must create and persist the new quiz group UUID");
+assert.match(lesson2CanonicalRepairMigration, /old_lesson2_canonical_group/, "Lesson 2 repair must report the previous canonical group id");
+assert.match(lesson2CanonicalRepairMigration, /new_lesson2_canonical_group/, "Lesson 2 repair must report the new canonical group id");
+assert.match(lesson2CanonicalRepairMigration, /extra_group_asset_count <> 0/, "Lesson 2 repair must reject a group containing any additional asset");
 assert.doesNotMatch(lesson2CanonicalRepairMigration, /delete from|truncate table|drop table|update public\.exams/i, "Lesson 2 repair must preserve all quiz assets and historical attempts");
 
 assert.equal(quizQuestionModule.quizAnswerIsCorrect("EUR", "A", ["EUR", "USD", "Both", "Neither"]), true, "EUR must score correctly when a legacy key stores option A");

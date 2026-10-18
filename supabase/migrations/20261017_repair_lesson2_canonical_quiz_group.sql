@@ -229,19 +229,23 @@ end $$;
 notify pgrst, 'reload schema';
 
 select
-  audit.lesson_id,
+  audit.lesson_id as repaired_lesson_id,
   audit.previous_canonical_quiz_group_id as old_lesson2_canonical_group,
   audit.intended_canonical_quiz_group_id as new_lesson2_canonical_group,
   lesson.canonical_quiz_group_id as resulting_lesson2_canonical_group,
-  audit.base_currency_asset_id,
-  audit.base_currency_previous_group_id,
+  audit.base_currency_asset_id as base_currency_asset_id,
+  audit.base_currency_previous_group_id as base_currency_previous_group_id,
   base_asset.quiz_group_id as base_currency_resulting_group_id,
-  audit.euro_strength_asset_id,
-  audit.euro_strength_previous_group_id,
+  audit.euro_strength_asset_id as euro_strength_asset_id,
+  audit.euro_strength_previous_group_id as euro_strength_previous_group_id,
   euro_asset.quiz_group_id as euro_strength_resulting_group_id
 from aff_lesson2_canonical_quiz_audit as audit
-join public.lessons as lesson on lesson.id = audit.lesson_id
-join public.course_assets as base_asset on base_asset.id = audit.base_currency_asset_id
-join public.course_assets as euro_asset on euro_asset.id = audit.euro_strength_asset_id;
+inner join public.lessons as lesson
+  on lesson.id = audit.lesson_id
+inner join public.course_assets as base_asset
+  on base_asset.id = audit.base_currency_asset_id
+inner join public.course_assets as euro_asset
+  on euro_asset.id = audit.euro_strength_asset_id
+;
 
 commit;

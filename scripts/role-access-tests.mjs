@@ -75,6 +75,8 @@ assert.match(lesson2CanonicalRepairMigration, /old_lesson2_canonical_group/, "Le
 assert.match(lesson2CanonicalRepairMigration, /new_lesson2_canonical_group/, "Lesson 2 repair must report the new canonical group id");
 assert.match(lesson2CanonicalRepairMigration, /extra_group_asset_count <> 0/, "Lesson 2 repair must reject a group containing any additional asset");
 assert.match(lesson2CanonicalRepairMigration, /create temporary table aff_lesson2_canonical_quiz_audit\s+on commit drop\s+as\s+select[\s\S]+with no data;/, "Lesson 2 repair audit table must use a typed CREATE TABLE AS statement without a fragile explicit column list");
+assert.equal((lesson2CanonicalRepairMigration.match(/inner join public\.lessons as lesson/g) ?? []).length, 1, "Lesson 2 repair report must contain exactly one lessons join");
+assert.match(lesson2CanonicalRepairMigration, /from aff_lesson2_canonical_quiz_audit as audit\s+inner join public\.lessons as lesson\s+on lesson\.id = audit\.lesson_id\s+inner join public\.course_assets as base_asset\s+on base_asset\.id = audit\.base_currency_asset_id\s+inner join public\.course_assets as euro_asset\s+on euro_asset\.id = audit\.euro_strength_asset_id\s+;/, "Lesson 2 repair report must terminate only after every reporting join");
 assert.doesNotMatch(lesson2CanonicalRepairMigration, /delete from|truncate table|drop table|update public\.exams/i, "Lesson 2 repair must preserve all quiz assets and historical attempts");
 
 assert.equal(quizQuestionModule.quizAnswerIsCorrect("EUR", "A", ["EUR", "USD", "Both", "Neither"]), true, "EUR must score correctly when a legacy key stores option A");

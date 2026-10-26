@@ -7,25 +7,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
-import { chartAnalysisSections, type ChartAnalystSection } from "@/lib/chart-analyst";
+import { chartAnalysisSections } from "@/lib/chart-analyst";
+import { getClientAdminStatus } from "@/lib/admin-client";
+import { getChartAssetPresentation, normalizeChartReport, type ChartReport } from "@/lib/chart-report";
 import { createClient } from "@/lib/supabase";
-
-type ChartReport = {
-  id: string | number;
-  file_name: string;
-  file_type: string;
-  file_size: number;
-  storage_path: string;
-  public_url?: string | null;
-  platform: string;
-  dr_moricette_review_mode: boolean;
-  student_notes?: string | null;
-  summary: string;
-  overall_grade: number;
-  risk_rating: string;
-  sections: ChartAnalystSection[];
-  created_at: string;
-};
 
 const acceptedTypes = ".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf";
 const platforms = ["TradingView", "MT4", "MT5", "PNG/JPG Chart", "PDF Chart Packet"];
@@ -87,6 +72,8 @@ export default function ChartAnalystPage() {
   const [studentNotes, setStudentNotes] = useState("");
   const [reviewMode, setReviewMode] = useState(false);
   const [activeReport, setActiveReport] = useState<ChartReport | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [status, setStatus] = useState("Loading AFF AI Chart Analyst history...");
@@ -100,6 +87,7 @@ export default function ChartAnalystPage() {
       highRisk: reports.filter((report) => ["Elevated", "High"].includes(report.risk_rating)).length
     };
   }, [reports]);
+  const activeAsset = useMemo(() => activeReport ? getChartAssetPresentation(activeReport) : null, [activeReport]);
 
   function getErrorMessage(error: unknown, fallback: string) {
     if (error instanceof Error) return error.message;
@@ -121,20 +109,34 @@ export default function ChartAnalystPage() {
       }
 
       setStudentId(user.id);
-      const { data, error } = await supabase
+      const admin = await getClientAdminStatus();
+      setIsAdmin(admin);
+      let query = supabase
         .from("chart_analyst_reports")
         .select("*")
-        .eq("student_id", user.id)
         .order("created_at", { ascending: false })
-        .limit(50);
+        .limit(admin ? 200 : 50);
+      if (!admin) query = query.eq("student_id", user.id);
+
+      const { data, error } = await query;
 
       if (error) throw error;
-      const rows = (data ?? []) as ChartReport[];
+      const rows = (data ?? []).flatMap((row) => {
+        const storagePath = typeof row.storage_path === "string" ? row.storage_path : "";
+        const fallbackUrl = storagePath
+          ? supabase.storage.from("chart-analyst-uploads").getPublicUrl(storagePath).data.publicUrl
+          : null;
+        const normalized = normalizeChartReport(row, fallbackUrl);
+        return normalized ? [normalized] : [];
+      });
       setReports(rows);
       setActiveReport(rows[0] ?? null);
-      setStatus("AFF AI Chart Analyst ready.");
+      setLoadError("");
+      setStatus(admin ? "AFF AI Chart Analyst ready in administrator view." : "AFF AI Chart Analyst ready.");
     } catch (error) {
-      setStatus(getErrorMessage(error, "Run the Chart Analyst migration to enable report history."));
+      const message = getErrorMessage(error, "Run the Chart Analyst migration to enable report history.");
+      setLoadError(message);
+      setStatus(message);
     } finally {
       setLoading(false);
     }
@@ -185,7 +187,8 @@ export default function ChartAnalystPage() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "Unable to analyze chart.");
 
-      const report = payload.report as ChartReport;
+      const report = normalizeChartReport(payload.report);
+      if (!report) throw new Error("The saved chart report returned an invalid response.");
       setReports((current) => [report, ...current]);
       setActiveReport(report);
       setSelectedFile(null);
@@ -296,11 +299,13 @@ export default function ChartAnalystPage() {
               </div>
               <div className="mt-4 grid gap-2">
                 {loading ? <p className="text-sm text-ink/68">Loading reports...</p> : null}
-                {!loading && reports.length === 0 ? <p className="text-sm text-ink/68">No chart analysis reports yet.</p> : null}
+                {!loading && loadError ? <p className="text-sm text-red-300">Report history could not be loaded: {loadError}</p> : null}
+                {!loading && !loadError && reports.length === 0 ? <p className="text-sm text-ink/68">No chart analysis reports yet.</p> : null}
                 {reports.map((report) => (
                   <button key={report.id} className={`border px-4 py-3 text-left ${activeReport?.id === report.id ? "border-gold-400 bg-gold-500 text-navy-950" : "border-gold-500/24 bg-navy-950 text-ink/76"}`} type="button" onClick={() => setActiveReport(report)}>
                     <span className="block font-semibold">{report.file_name}</span>
                     <span className={`mt-1 block text-xs ${activeReport?.id === report.id ? "text-navy-900" : "text-ink/54"}`}>{report.platform} | {report.overall_grade}% | {report.risk_rating}</span>
+                    {isAdmin ? <span className={`mt-1 block text-[11px] ${activeReport?.id === report.id ? "text-navy-800" : "text-ink/46"}`}>Student: {report.student_id || "not recorded"}</span> : null}
                   </button>
                 ))}
               </div>
@@ -315,7 +320,24 @@ export default function ChartAnalystPage() {
                     <Download size={16} /> Download PDF
                   </button>
                 </div>
+                <div className="border-b border-gold-500/20 bg-navy-950 p-4">
+                  <p className="mb-3 text-xs uppercase tracking-[.18em] text-gold-300">Submitted Chart</p>
+                  {activeAsset?.kind === "image" ? (
+                    <a href={activeAsset.url} target="_blank" rel="noreferrer">
+                      {/* A dynamic Supabase Storage host cannot be declared in Next image config. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img className="max-h-[520px] w-full object-contain" src={activeAsset.url} alt={`Submitted chart: ${activeAsset.label}`} />
+                    </a>
+                  ) : activeAsset?.kind === "document" ? (
+                    <a className="inline-flex items-center gap-2 border border-gold-500/45 px-4 py-2 text-sm font-semibold text-gold-300" href={activeAsset.url} target="_blank" rel="noreferrer">
+                      <FileText size={16} /> Open submitted chart document
+                    </a>
+                  ) : (
+                    <p className="text-sm text-ink/64">The report exists, but no recoverable chart asset URL was recorded.</p>
+                  )}
+                </div>
                 <div className="grid gap-px bg-gold-500/14">
+                  {activeReport.sections.length === 0 ? <p className="bg-navy-950 p-4 text-sm text-ink/64">No valid analysis sections were stored for this report.</p> : null}
                   {activeReport.sections.map((section) => (
                     <div key={section.title} className="bg-navy-950 p-4">
                       <p className="text-xs uppercase tracking-[.18em] text-gold-300">{section.title}</p>

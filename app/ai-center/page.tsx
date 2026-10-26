@@ -6,11 +6,10 @@ import { BarChart3, Bot, Brain, FileQuestion, GraduationCap, Lightbulb, Mic, Sea
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
-
-const adminEmail = "acafffx@gmail.com";
 
 const modules = [
   {
@@ -88,7 +87,7 @@ export default function AICenterPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("Loading AFF AI Institutional Intelligence Center...");
-  const [userEmail, setUserEmail] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [studentName, setStudentName] = useState("Student");
   const [recommendations, setRecommendations] = useState<DbRow[]>([]);
   const [studyPlans, setStudyPlans] = useState<DbRow[]>([]);
@@ -102,8 +101,6 @@ export default function AICenterPage() {
   const [adminAttendance, setAdminAttendance] = useState<DbRow[]>([]);
   const [adminAiEvents, setAdminAiEvents] = useState<DbRow[]>([]);
 
-  const isAdmin = userEmail.toLowerCase() === adminEmail;
-
   const loadCenter = useCallback(async () => {
     setLoading(true);
     try {
@@ -116,8 +113,8 @@ export default function AICenterPage() {
         return;
       }
 
-      setUserEmail(user.email ?? "");
-      const admin = user.email?.toLowerCase() === adminEmail;
+      const admin = await getClientAdminStatus();
+      setIsAdmin(admin);
       const profile = await safeSelect(supabase, "students", (table) =>
         supabase.from(table).select("full_name, auth_user_id, email").or(`auth_user_id.eq.${user.id},email.eq.${user.email ?? ""}`).order("created_at", { ascending: false }).limit(1)
       );
@@ -139,7 +136,9 @@ export default function AICenterPage() {
         safeSelect(supabase, "ai_center_recommendations", (table) => supabase.from(table).select("*").or(`student_id.eq.${user.id},student_id.is.null`).eq("status", "Active").order("created_at", { ascending: false })),
         safeSelect(supabase, "ai_center_study_plans", (table) => supabase.from(table).select("*").eq("student_id", user.id).order("created_at", { ascending: false })),
         safeSelect(supabase, "ai_coach_chat_messages", (table) => supabase.from(table).select("*").eq("student_id", user.id).order("created_at", { ascending: false }).limit(80)),
-        safeSelect(supabase, "chart_analyst_reports", (table) => supabase.from(table).select("*").eq("student_id", user.id).order("created_at", { ascending: false }).limit(40)),
+        safeSelect(supabase, "chart_analyst_reports", (table) => admin
+          ? supabase.from(table).select("*").order("created_at", { ascending: false }).limit(500)
+          : supabase.from(table).select("*").eq("student_id", user.id).order("created_at", { ascending: false }).limit(40)),
         safeSelect(supabase, "voice_coach_conversations", (table) => supabase.from(table).select("*").eq("student_id", user.id).order("created_at", { ascending: false }).limit(80)),
         safeSelect(supabase, "certification_exam_attempts", (table) => supabase.from(table).select("*").eq("student_id", user.id).order("submitted_at", { ascending: false })),
         safeSelect(supabase, "class_attendance", (table) => supabase.from(table).select("*").eq("student_id", user.id).order("created_at", { ascending: false })),

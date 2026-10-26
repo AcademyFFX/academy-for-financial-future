@@ -34,11 +34,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
 
-const adminEmail = "acafffx@gmail.com";
 const initialIdentity = {
   displayName: "",
   professionalTitle: "AFF Student",
@@ -114,7 +114,7 @@ export default function AFFOSPage() {
         return;
       }
 
-      const admin = user.email?.toLowerCase() === adminEmail;
+      const admin = await getClientAdminStatus();
       const name = typeof user.user_metadata?.name === "string" ? user.user_metadata.name : user.email ?? "AFF Student";
       setStudentId(user.id);
       setStudentEmail(user.email ?? "");
@@ -151,7 +151,9 @@ export default function AFFOSPage() {
         supabase.from("student_degree_progress").select("*").eq("student_id", user.id).limit(100),
         supabase.from("certificates").select("*").eq("student_id", user.id).limit(100),
         supabase.from("voice_coach_usage_events").select("*").eq("student_id", user.id).limit(100),
-        supabase.from("chart_analyst_reports").select("*").eq("student_id", user.id).limit(100),
+        admin
+          ? supabase.from("chart_analyst_reports").select("*").order("created_at", { ascending: false }).limit(500)
+          : supabase.from("chart_analyst_reports").select("*").eq("student_id", user.id).limit(100),
         supabase.from("trade_ideas").select("*").eq("student_id", user.id).limit(100),
         supabase.from("research_submissions").select("*").eq("student_id", user.id).limit(100),
         supabase.from("civic_service_hours").select("*").eq("student_id", user.id).limit(100),

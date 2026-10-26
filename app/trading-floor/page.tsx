@@ -24,11 +24,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
+import { getClientAdminStatus } from "@/lib/admin-client";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
 
-const adminEmail = "acafffx@gmail.com";
 const marketWall = [
   { symbol: "EURUSD", status: "Bullish", note: "London continuation above prior liquidity" },
   { symbol: "GBPUSD", status: "Neutral", note: "Waiting for New York confirmation" },
@@ -154,7 +154,7 @@ export default function TradingFloorPage() {
         return;
       }
 
-      const admin = user.email?.toLowerCase() === adminEmail;
+      const admin = await getClientAdminStatus();
       const name = typeof user.user_metadata?.name === "string" ? user.user_metadata.name : user.email ?? "AFF Student";
       setStudentId(user.id);
       setStudentEmail(user.email ?? "");

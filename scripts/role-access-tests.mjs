@@ -517,6 +517,12 @@ assert.match(executiveCommandCenter, /const totalLessonSeats = activeEnrollments
 assert.match(executiveCommandCenter, /const activeStudents = students\.filter/, "active student counts must come from students.status");
 assert.match(executiveCommandCenter, /const activeMemberships = memberships\.filter/, "active membership counts must remain distinct from active students");
 assert.match(executiveCommandCenter, /datasets\.digital_certificates/, "executive credential counts must include the digital certificate registry");
+assert.match(executiveCommandCenter, /const certifiedStudentIds = new Set/, "certification rate must count unique certified students rather than certificate rows");
+assert.match(executiveCommandCenter, /certificateRate: percent\(certifiedStudentIds\.size, totalStudents\)/, "certification rate denominator must use unique certified students");
+assert.match(executiveCommandCenter, /label: "Recorded Billing Revenue"/, "billing revenue must be presented separately from membership account distribution");
+assert.match(executiveCommandCenter, /title="Membership Account Distribution"/, "membership plans must be labeled as account distribution rather than revenue");
+assert.match(executiveCommandCenter, /course\.total === 0 \? "No eligible enrollments"/, "courses without enrolled lesson seats must not display a misleading zero completion ratio");
+assert.match(executiveCommandCenter, /const isUnavailable = \(\.\.\.tableNames/, "optional table failures must be distinguishable from genuine zero activity");
 assert.match(adminDashboard, /supabase\.from\("digital_certificates"\)\.select\("\*"\)/, "admin credential reporting must include digital certificates");
 assert.match(academicAnalyticsVisibilityMigration, /create policy "AFF admins can read all lesson progress"[\s\S]*using \(public\.is_aff_admin\(\)\)/, "active AFF admins must be able to read lesson completion analytics");
 assert.match(academicAnalyticsVisibilityMigration, /create policy "AFF administrators can manage memberships"[\s\S]*using \(public\.is_aff_admin\(\)\)/, "membership administration must use aff_admin_users authorization");

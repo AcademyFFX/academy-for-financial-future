@@ -266,6 +266,7 @@ export default function ExecutiveCommandCenterPage() {
   const [message, setMessage] = useState("Loading executive intelligence...");
   const [datasets, setDatasets] = useState<Record<string, DbRow[]>>({});
   const [tableErrors, setTableErrors] = useState<string[]>([]);
+  const [unavailableTables, setUnavailableTables] = useState<string[]>([]);
 
   const loadAnalytics = useCallback(async () => {
     setLoading(true);
@@ -302,6 +303,7 @@ export default function ExecutiveCommandCenterPage() {
 
       setDatasets(Object.fromEntries(results.map((result) => [result.table, result.data])));
       setTableErrors(results.filter((result) => result.error).map((result) => `${result.table}: ${result.error}`));
+      setUnavailableTables(results.filter((result) => result.error).map((result) => result.table));
       setMessage("Executive Command Center synchronized with live academy data.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to load executive analytics.");
@@ -495,6 +497,11 @@ export default function ExecutiveCommandCenterPage() {
     const totalStudents = students.length;
     const activeStudents = students.filter((row) => value(row, ["status"]).trim().toLowerCase() === "active").length;
     const activeMemberships = memberships.filter((row) => ["active", "active membership"].includes(value(row, ["membership_status"]).trim().toLowerCase())).length;
+    const certifiedStudentIds = new Set(
+      [...certificates, ...digitalCertificates]
+        .map((row) => value(row, ["student_id"]))
+        .filter(Boolean)
+    );
     const newStudents30 = students.filter((row) => dateWithinDays(value(row, ["enrollment_date", "created_at"]), 30)).length;
     const publishedLessons = lessons.filter((row) => {
       const status = value(row, ["publication_status"]);
@@ -602,7 +609,8 @@ export default function ExecutiveCommandCenterPage() {
       examPassRate: percent(examPasses, exams.length),
       examAverage,
       certificates: certificates.length + digitalCertificates.length,
-      certificateRate: percent(certificates.length + digitalCertificates.length, totalStudents),
+      certifiedStudents: certifiedStudentIds.size,
+      certificateRate: percent(certifiedStudentIds.size, totalStudents),
       assignments: assignments.length + homeworkSubmissions.length,
       gradedAssignments: gradedAssignments.length + homeworkSubmissions.filter((row) => row.score !== null && row.score !== undefined).length,
       approvedAssignments: approvedAssignments + homeworkSubmissions.filter((row) => value(row, ["status"]) === "Approved").length,
@@ -800,11 +808,13 @@ export default function ExecutiveCommandCenterPage() {
     };
   }, [datasets]);
 
+  const isUnavailable = (...tableNames: string[]) => tableNames.some((table) => unavailableTables.includes(table));
+
   const headlineMetrics: Metric[] = [
-    { label: "Total Students", value: String(analytics.totalStudents), detail: `${analytics.newStudents30} new in 30 days`, icon: <Users size={22} />, accent: "Enrollment" },
-    { label: "Course Completion", value: `${analytics.completionRate}%`, detail: `${analytics.progressRows} completed lesson records`, icon: <BookOpenCheck size={22} />, accent: "Academic Progress" },
-    { label: "Certificates Issued", value: String(analytics.certificates), detail: `${analytics.certificateRate}% student certification rate`, icon: <Award size={22} />, accent: "Credentialing" },
-    { label: "Membership Revenue", value: money(analytics.revenue), detail: `${analytics.activeMembershipRate}% active membership base`, icon: <CircleDollarSign size={22} />, accent: "Financial Growth" }
+    { label: "Total Students", value: isUnavailable("students") ? "Unavailable" : String(analytics.totalStudents), detail: isUnavailable("students") ? "Student source unavailable" : `${analytics.newStudents30} new in 30 days`, icon: <Users size={22} />, accent: "Enrollment" },
+    { label: "Course Completion", value: isUnavailable("students", "enrollments", "lessons", "lesson_progress") ? "Unavailable" : `${analytics.completionRate}%`, detail: isUnavailable("students", "enrollments", "lessons", "lesson_progress") ? "Academic progress source unavailable" : `${analytics.progressRows} completed lesson records`, icon: <BookOpenCheck size={22} />, accent: "Academic Progress" },
+    { label: "Certificates Issued", value: isUnavailable("certificates", "digital_certificates") ? "Unavailable" : String(analytics.certificates), detail: isUnavailable("certificates", "digital_certificates", "students") ? "Credential source unavailable" : `${analytics.certifiedStudents} unique certified student${analytics.certifiedStudents === 1 ? "" : "s"} · ${analytics.certificateRate}% certification rate`, icon: <Award size={22} />, accent: "Credentialing" },
+    { label: "Recorded Billing Revenue", value: isUnavailable("billing_history") ? "Unavailable" : money(analytics.revenue), detail: isUnavailable("billing_history") ? "Billing history source unavailable" : "Recorded billing transactions only", icon: <CircleDollarSign size={22} />, accent: "Financial Growth" }
   ];
 
   if (!authorized && !loading) {
@@ -876,7 +886,7 @@ export default function ExecutiveCommandCenterPage() {
               </div>
               <div className="grid gap-px bg-gold-500/14">
                 {analytics.recentActivity.length === 0 ? (
-                  <p className="bg-navy-950 p-5 text-ink/68">No recent academy activity found yet.</p>
+                  <p className="bg-navy-950 p-5 text-ink/68">{tableErrors.length > 0 ? "No recent activity found in the available data sources." : "No recent academy activity found yet."}</p>
                 ) : (
                   analytics.recentActivity.map((item, index) => (
                     <div key={`${item.type}-${index}`} className="bg-navy-950 p-4">
@@ -925,15 +935,17 @@ export default function ExecutiveCommandCenterPage() {
                   <p className="bg-navy-950 p-5 text-ink/68">Run the course seed migration to display course completion intelligence.</p>
                 ) : (
                   analytics.courseCompletion.map((course) => (
-                    <ProgressRow key={course.name} label={course.name} value={course.rate} detail={`${course.completed}/${course.total} expected lesson completions`} />
+                    <ProgressRow key={course.name} label={course.name} value={course.rate} detail={course.total === 0 ? "No eligible enrollments" : `${course.completed}/${course.total} expected lesson completions`} />
                   ))
                 )}
               </div>
             </div>
 
-            <Panel title="Revenue by Membership Plan" icon={<ShieldCheck size={22} />}>
-              {Object.entries(analytics.revenueByPlan).length === 0 ? (
-                <p className="text-sm text-ink/68">No membership records yet.</p>
+            <Panel title="Membership Account Distribution" icon={<ShieldCheck size={22} />}>
+              {isUnavailable("student_memberships") ? (
+                <p className="bg-navy-950 p-5 text-sm text-ink/68">Membership account data is unavailable.</p>
+              ) : Object.entries(analytics.revenueByPlan).length === 0 ? (
+                <p className="bg-navy-950 p-5 text-sm text-ink/68">No membership accounts recorded yet.</p>
               ) : (
                 Object.entries(analytics.revenueByPlan).map(([plan, count]) => (
                   <ProgressRow key={plan} label={plan} value={percent(count, Math.max(analytics.memberships, 1))} detail={`${count} student account${count === 1 ? "" : "s"}`} compact />
@@ -953,7 +965,7 @@ export default function ExecutiveCommandCenterPage() {
             <ExecutiveTile icon={<Award size={20} />} label="Foundation Impact" value={`${analytics.foundationBeneficiaries}`} detail={`${analytics.foundationPrograms} programs, ${money(analytics.foundationGrants)} grants`} />
             <ExecutiveTile icon={<ShieldCheck size={20} />} label="Civic Leadership" value={`${analytics.civicPrograms}`} detail={`${analytics.civicServiceHours} service hours, ${analytics.civicCertifications} ethics certifications`} />
             <ExecutiveTile icon={<Mic size={20} />} label="AI Voice Coach" value={`${analytics.voiceCoachExchanges}`} detail={`${analytics.voiceCoachMessages} messages, ${analytics.voiceCoachSeconds} recorded seconds`} />
-            <ExecutiveTile icon={<BarChart3 size={20} />} label="AI Chart Analyst" value={`${analytics.chartAnalystReports}`} detail={`${analytics.chartAnalystAverage}% avg grade, ${analytics.chartAnalystReviewMode} Dr. reviews`} />
+            <ExecutiveTile icon={<BarChart3 size={20} />} label="AI Chart Analyst" value={isUnavailable("chart_analyst_reports") ? "Unavailable" : `${analytics.chartAnalystReports}`} detail={isUnavailable("chart_analyst_reports", "chart_analyst_usage_events") ? "Chart Analyst source unavailable" : `${analytics.chartAnalystAverage}% avg grade, ${analytics.chartAnalystReviewMode} Dr. reviews`} />
             <ExecutiveTile icon={<ChartCandlestick size={20} />} label="Virtual Trading Floor" value={`${analytics.tradingFloorActiveTraders}`} detail={`${analytics.tradingFloorTradeIdeas} ideas, ${analytics.tradingFloorAIInteractions} AI interactions`} />
             <ExecutiveTile icon={<GraduationCap size={20} />} label="Global University" value={`${analytics.universityColleges}`} detail={`${analytics.universityDegrees} degrees, ${analytics.universityTranscripts} transcripts`} />
             <ExecutiveTile icon={<TrendingUp size={20} />} label="Global Network" value={`${analytics.globalCampuses}`} detail={`${analytics.globalCountryDirectors} country directors, ${analytics.globalEnrollment} students`} />

@@ -65,7 +65,7 @@ export function normalizeChartSections(value: unknown): ChartAnalystSection[] {
   });
 }
 
-export function normalizeChartReport(value: unknown, fallbackPublicUrl: string | null = null): ChartReport | null {
+export function normalizeChartReport(value: unknown, authorizedAssetUrl: string | null = null): ChartReport | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
   const id = typeof row.id === "number" || typeof row.id === "string" ? row.id : "";
@@ -81,7 +81,7 @@ export function normalizeChartReport(value: unknown, fallbackPublicUrl: string |
     file_type: text(row.file_type),
     file_size: Number.isFinite(parsedSize) ? parsedSize : 0,
     storage_path: text(row.storage_path),
-    public_url: safeWebUrl(row.public_url) || safeWebUrl(fallbackPublicUrl),
+    public_url: safeWebUrl(authorizedAssetUrl) || safeWebUrl(row.public_url),
     platform: text(row.platform, "Chart"),
     dr_moricette_review_mode: row.dr_moricette_review_mode === true || row.dr_moricette_review_mode === "true",
     student_notes: text(row.student_notes) || null,

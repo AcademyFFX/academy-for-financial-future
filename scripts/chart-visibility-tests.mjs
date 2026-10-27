@@ -42,6 +42,8 @@ assert.deepEqual(chartReportModule.getChartAssetPresentation(report), {
 const recovered = chartReportModule.normalizeChartReport({ ...validRow, id: 18, public_url: null }, "https://project.supabase.co/recovered.png");
 assert.equal(recovered.public_url, "https://project.supabase.co/recovered.png", "legacy reports must recover their public URL from storage_path");
 assert.equal(chartReportModule.getChartAssetPresentation(recovered).kind, "image");
+const privateAsset = chartReportModule.normalizeChartReport(validRow, "https://project.supabase.co/storage/v1/object/sign/chart-analyst-uploads/student-1/eurusd.png?token=signed");
+assert.match(privateAsset.public_url, /\/object\/sign\//, "an authorized signed URL must replace a legacy public URL");
 
 const malformed = chartReportModule.normalizeChartReport({ ...validRow, id: 19, sections: "not-json" });
 assert.deepEqual(malformed.sections, [], "malformed legacy sections must not crash the chart page");
@@ -54,10 +56,13 @@ const affOS = read("app/aff-os/page.tsx");
 const studentDashboard = read("app/student-dashboard/page.tsx");
 const executiveCommandCenter = read("app/executive-command-center/page.tsx");
 const migration = read("supabase/migrations/20261026_restore_aff_chart_visibility.sql");
+const privateStorageMigration = read("supabase/migrations/20261027_secure_aff_chart_storage.sql");
 
 assert.match(chartPage, /getClientAdminStatus\(\)/, "Chart Analyst must resolve the canonical admin role");
 assert.match(chartPage, /if \(!admin\) query = query\.eq\("student_id", user\.id\)/, "students must remain scoped to their own chart reports");
 assert.match(chartPage, /<img[\s\S]*src=\{activeAsset\.url\}/, "the Chart Analyst must render a valid uploaded chart image");
+assert.match(chartPage, /createSignedUrl\(storagePath, 60 \* 60\)/, "chart files must be delivered through short-lived authorized URLs");
+assert.doesNotMatch(chartPage, /getPublicUrl\(storagePath\)/, "the Chart Analyst must not recover private uploads through public URLs");
 assert.match(chartPage, /No valid analysis sections were stored/, "malformed sections must show an explicit empty state instead of blanking the page");
 assert.match(chartPage, /Report history could not be loaded/, "query failures must not be mislabeled as an empty report history");
 assert.match(aiCenter, /getClientAdminStatus\(\)/, "AI Center chart analytics must use the canonical admin role");
@@ -69,5 +74,8 @@ assert.match(executiveCommandCenter, /getClientAdminStatus\(\)/, "Executive Comm
 assert.match(migration, /auth\.uid\(\) = student_id or public\.is_aff_admin\(\)/, "RLS must expose each chart report only to its student or an active AFF admin");
 assert.doesNotMatch(migration, /acafffx@gmail\.com/, "chart visibility must not depend on one hard-coded email");
 assert.doesNotMatch(migration, /delete from|truncate table/i, "the chart visibility migration must preserve historical records");
+assert.match(privateStorageMigration, /values \('chart-analyst-uploads', 'chart-analyst-uploads', false\)/, "the chart bucket must be private");
+assert.match(privateStorageMigration, /auth\.uid\(\)::text = \(storage\.foldername\(name\)\)\[1\][\s\S]*public\.is_aff_admin\(\)/, "private chart files must remain readable only by their owner or an AFF administrator");
+assert.doesNotMatch(privateStorageMigration, /delete from|truncate table/i, "the private-storage repair must preserve reports and uploaded objects");
 
 console.log("Chart visibility regression tests passed.");

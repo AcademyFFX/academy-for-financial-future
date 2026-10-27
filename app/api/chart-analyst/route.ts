@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export async function POST(request: Request) {
   try {
-    const { fileName, fileType, fileSize, storagePath, publicUrl, platform, studentNotes, drMoricetteReviewMode } = await request.json();
+    const { fileName, fileType, fileSize, storagePath, platform, studentNotes, drMoricetteReviewMode } = await request.json();
     const safeFileName = String(fileName ?? "").trim();
     const safePlatform = String(platform ?? "TradingView").trim();
 
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       file_type: String(fileType ?? ""),
       file_size: Number(fileSize) || 0,
       storage_path: String(storagePath),
-      public_url: publicUrl ? String(publicUrl) : null,
+      public_url: null,
       platform: safePlatform,
       dr_moricette_review_mode: Boolean(drMoricetteReviewMode),
       student_notes: String(studentNotes ?? "").trim() || null,

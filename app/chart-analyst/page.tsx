@@ -121,14 +121,13 @@ export default function ChartAnalystPage() {
       const { data, error } = await query;
 
       if (error) throw error;
-      const rows = (data ?? []).flatMap((row) => {
+      const rows = (await Promise.all((data ?? []).map(async (row) => {
         const storagePath = typeof row.storage_path === "string" ? row.storage_path : "";
-        const fallbackUrl = storagePath
-          ? supabase.storage.from("chart-analyst-uploads").getPublicUrl(storagePath).data.publicUrl
-          : null;
-        const normalized = normalizeChartReport(row, fallbackUrl);
-        return normalized ? [normalized] : [];
-      });
+        const { data: signedAsset } = storagePath
+          ? await supabase.storage.from("chart-analyst-uploads").createSignedUrl(storagePath, 60 * 60)
+          : { data: null };
+        return normalizeChartReport(row, signedAsset?.signedUrl ?? null);
+      }))).filter((report): report is ChartReport => report !== null);
       setReports(rows);
       setActiveReport(rows[0] ?? null);
       setLoadError("");
@@ -169,7 +168,6 @@ export default function ChartAnalystPage() {
 
       if (uploadError) throw uploadError;
 
-      const { data: publicData } = supabase.storage.from("chart-analyst-uploads").getPublicUrl(storagePath);
       const response = await fetch("/api/chart-analyst", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -178,7 +176,6 @@ export default function ChartAnalystPage() {
           fileType: selectedFile.type || extension,
           fileSize: selectedFile.size,
           storagePath,
-          publicUrl: publicData.publicUrl,
           platform,
           studentNotes,
           drMoricetteReviewMode: reviewMode
@@ -187,13 +184,18 @@ export default function ChartAnalystPage() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "Unable to analyze chart.");
 
-      const report = normalizeChartReport(payload.report);
+      const { data: signedAsset, error: signedAssetError } = await supabase.storage
+        .from("chart-analyst-uploads")
+        .createSignedUrl(storagePath, 60 * 60);
+      const report = normalizeChartReport(payload.report, signedAsset?.signedUrl ?? null);
       if (!report) throw new Error("The saved chart report returned an invalid response.");
       setReports((current) => [report, ...current]);
       setActiveReport(report);
       setSelectedFile(null);
       setStudentNotes("");
-      setStatus("Chart analysis generated and saved.");
+      setStatus(signedAssetError
+        ? "Chart analysis generated and saved. The private chart preview is temporarily unavailable."
+        : "Chart analysis generated and saved.");
     } catch (error) {
       setStatus(getErrorMessage(error, "Unable to upload or analyze chart."));
     } finally {

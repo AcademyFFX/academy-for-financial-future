@@ -94,6 +94,8 @@ type Certificate = {
   studentName: string;
   verificationCode: string;
   issueDate: string;
+  status: string;
+  registry: string;
 };
 
 type Announcement = {
@@ -430,14 +432,16 @@ export default function AdminPage() {
     };
   }
 
-  function normalizeCertificate(row: DbRow): Certificate {
+  function normalizeCertificate(row: DbRow, registry: "Legacy" | "Digital"): Certificate {
     return {
       id: value(row, ["id"], crypto.randomUUID()),
       certificateNumber: value(row, ["certificate_number"]),
       studentId: value(row, ["student_id"]),
       studentName: value(row, ["student_name", "name"], "Student"),
-      verificationCode: value(row, ["verification_code"]),
-      issueDate: normalizeDate(value(row, ["issue_date", "created_at", "date"]))
+      verificationCode: value(row, ["qr_verification_code", "verification_code"]),
+      issueDate: normalizeDate(value(row, ["issue_date"])),
+      status: value(row, ["status"], registry === "Legacy" ? "Issued" : "Unknown"),
+      registry
     };
   }
 
@@ -463,13 +467,14 @@ export default function AdminPage() {
 
       setAuthorized(true);
 
-      const [studentsResult, membershipsResult, applicationsResult, assignmentsResult, examsResult, certificatesResult, announcementsResult] = await Promise.all([
+      const [studentsResult, membershipsResult, applicationsResult, assignmentsResult, examsResult, certificatesResult, digitalCertificatesResult, announcementsResult] = await Promise.all([
         supabase.from("students").select("*"),
         supabase.from("student_memberships").select("*"),
         supabase.from("student_applications").select("*").order("created_at", { ascending: false }),
         supabase.from("assignments").select("*"),
         supabase.from("exams").select("*"),
         supabase.from("certificates").select("*"),
+        supabase.from("digital_certificates").select("*"),
         supabase.from("announcements").select("*").order("published_at", { ascending: false })
       ]);
 
@@ -480,10 +485,11 @@ export default function AdminPage() {
         ["assignments", assignmentsResult.error],
         ["exams", examsResult.error],
         ["certificates", certificatesResult.error],
+        ["digital certificates", digitalCertificatesResult.error],
         ["announcements", announcementsResult.error]
       ].filter((entry) => entry[1]);
 
-      if (queryFailures.length === 7) throw queryFailures[0][1];
+      if (queryFailures.length === 8) throw queryFailures[0][1];
 
       const membershipRows = (membershipsResult.data ?? []) as DbRow[];
       const normalizedStudents = ((studentsResult.data ?? []) as DbRow[]).map((studentRow) => {
@@ -503,8 +509,10 @@ export default function AdminPage() {
       const normalizedExams = ((examsResult.data ?? []) as DbRow[])
         .map(normalizeExam)
         .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
-      const normalizedCertificates = ((certificatesResult.data ?? []) as DbRow[])
-        .map(normalizeCertificate)
+      const normalizedCertificates = [
+        ...((certificatesResult.data ?? []) as DbRow[]).map((row) => normalizeCertificate(row, "Legacy")),
+        ...((digitalCertificatesResult.data ?? []) as DbRow[]).map((row) => normalizeCertificate(row, "Digital"))
+      ]
         .sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime());
 
       setStudents(normalizedStudents);
@@ -1483,11 +1491,13 @@ export default function AdminPage() {
                 ))}
               </AdminTable>
 
-              <AdminTable title="Certificates" headers={["Certificate Number", "Student Name", "Verification Code", "Issue Date"]}>
+              <AdminTable title="Certificates" headers={["Certificate Number", "Student Name", "Registry", "Status", "Verification Code", "Issue Date"]}>
                 {certificates.map((certificate) => (
                   <TableRow key={certificate.id} cells={[
                     certificate.certificateNumber,
                     certificate.studentName,
+                    certificate.registry,
+                    certificate.status,
                     certificate.verificationCode,
                     new Date(certificate.issueDate).toLocaleDateString()
                   ]} />

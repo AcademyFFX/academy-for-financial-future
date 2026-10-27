@@ -49,6 +49,7 @@ const adminEmail = "acafffx@gmail.com";
 
 const tables = [
   "students",
+  "enrollments",
   "courses",
   "lessons",
   "lesson_progress",
@@ -56,6 +57,7 @@ const tables = [
   "homework_submissions",
   "exams",
   "certificates",
+  "digital_certificates",
   "certifications",
   "simulator_accounts",
   "simulator_attempts",
@@ -316,6 +318,7 @@ export default function ExecutiveCommandCenterPage() {
 
   const analytics = useMemo(() => {
     const students = datasets.students ?? [];
+    const enrollments = datasets.enrollments ?? [];
     const courses = datasets.courses ?? [];
     const lessons = datasets.lessons ?? [];
     const progress = datasets.lesson_progress ?? [];
@@ -323,6 +326,7 @@ export default function ExecutiveCommandCenterPage() {
     const homeworkSubmissions = datasets.homework_submissions ?? [];
     const exams = datasets.exams ?? [];
     const certificates = datasets.certificates ?? [];
+    const digitalCertificates = datasets.digital_certificates ?? [];
     const certifications = datasets.certifications ?? [];
     const simulatorAccounts = datasets.simulator_accounts ?? [];
     const simulatorAttempts = datasets.simulator_attempts ?? [];
@@ -488,11 +492,27 @@ export default function ExecutiveCommandCenterPage() {
     const policyImpactMetrics = datasets.policy_impact_metrics ?? [];
     const thinkTankPublications = datasets.think_tank_publications ?? [];
 
-    const totalStudents = students.length || uniqueCount(memberships, ["student_id"]) || uniqueCount(progress, ["student_id"]);
-    const activeStudents = memberships.filter((row) => ["Active", "Trial"].includes(value(row, ["account_status"]))).length;
+    const totalStudents = students.length;
+    const activeStudents = students.filter((row) => value(row, ["status"]).trim().toLowerCase() === "active").length;
+    const activeMemberships = memberships.filter((row) => ["active", "active membership"].includes(value(row, ["membership_status"]).trim().toLowerCase())).length;
     const newStudents30 = students.filter((row) => dateWithinDays(value(row, ["enrollment_date", "created_at"]), 30)).length;
-    const totalLessonSeats = Math.max(totalStudents * Math.max(lessons.length, 1), 1);
-    const completionRate = percent(progress.length, totalLessonSeats);
+    const publishedLessons = lessons.filter((row) => {
+      const status = value(row, ["publication_status"]);
+      return !status || status.trim().toLowerCase() === "published";
+    });
+    const activeEnrollments = enrollments.filter((row) => value(row, ["enrollment_status", "status"]).trim().toLowerCase() === "active");
+    const studentAuthIds = new Map(students.map((row) => [value(row, ["id"]), value(row, ["auth_user_id"])]));
+    const enrollmentKeys = new Set(activeEnrollments.map((row) => `${studentAuthIds.get(value(row, ["student_id"])) ?? ""}:${value(row, ["course_id"])}`));
+    const publishedLessonKeys = new Set(publishedLessons.map((row) => `${value(row, ["course_id"])}:${value(row, ["id"])}`));
+    const completedProgress = progress.filter((row) => {
+      const courseId = value(row, ["course_id"]);
+      return Boolean(value(row, ["completed_at"])) && enrollmentKeys.has(`${value(row, ["student_id"])}:${courseId}`) && publishedLessonKeys.has(`${courseId}:${value(row, ["lesson_id"])}`);
+    });
+    const totalLessonSeats = activeEnrollments.reduce((total, enrollment) => {
+      const courseId = value(enrollment, ["course_id"]);
+      return total + publishedLessons.filter((lesson) => value(lesson, ["course_id"]) === courseId).length;
+    }, 0);
+    const completionRate = percent(completedProgress.length, totalLessonSeats);
     const examPasses = exams.filter((row) => value(row, ["result", "status"]).toLowerCase() === "pass" || value(row, ["passed"]) === "true" || numberValue(row, ["score"]) >= numberValue(row, ["passing_score"], 80)).length;
     const examAverage = exams.length ? Math.round(exams.reduce((total, row) => total + numberValue(row, ["score"]), 0) / exams.length) : 0;
     const gradedAssignments = assignments.filter((row) => value(row, ["status"]).toLowerCase() !== "submitted" || row.grade !== null && row.grade !== undefined);
@@ -513,18 +533,21 @@ export default function ExecutiveCommandCenterPage() {
 
     const courseCompletion = courses.map((course) => {
       const courseId = value(course, ["id"]);
-      const courseLessons = lessons.filter((lesson) => value(lesson, ["course_id"]) === courseId);
-      const courseProgress = progress.filter((row) => value(row, ["course_id"]) === courseId);
+      const courseLessons = publishedLessons.filter((lesson) => value(lesson, ["course_id"]) === courseId);
+      const courseEnrollments = activeEnrollments.filter((enrollment) => value(enrollment, ["course_id"]) === courseId);
+      const enrolledAuthIds = new Set(courseEnrollments.map((enrollment) => studentAuthIds.get(value(enrollment, ["student_id"]))).filter(Boolean));
+      const courseProgress = completedProgress.filter((row) => value(row, ["course_id"]) === courseId && enrolledAuthIds.has(value(row, ["student_id"])));
+      const courseLessonSeats = courseEnrollments.length * courseLessons.length;
       return {
         name: value(course, ["course_name", "title"], "Academy Course"),
         completed: courseProgress.length,
-        total: Math.max(totalStudents * Math.max(courseLessons.length, 1), 1),
-        rate: percent(courseProgress.length, Math.max(totalStudents * Math.max(courseLessons.length, 1), 1))
+        total: courseLessonSeats,
+        rate: percent(courseProgress.length, courseLessonSeats)
       };
     });
 
     const revenueByPlan = memberships.reduce<Record<string, number>>((accumulator, row) => {
-      const plan = value(row, ["membership_plan"], "Unassigned");
+      const plan = value(row, ["active_membership_plan", "membership_plan"], "Unassigned");
       accumulator[plan] = (accumulator[plan] ?? 0) + 1;
       return accumulator;
     }, {});
@@ -532,6 +555,7 @@ export default function ExecutiveCommandCenterPage() {
     const recentActivity = [
       ...students.map((row) => ({ type: "Enrollment", label: value(row, ["full_name", "name", "email"], "New student"), date: value(row, ["enrollment_date", "created_at"]) })),
       ...certificates.map((row) => ({ type: "Certificate", label: value(row, ["student_name", "certificate_number"], "Certificate issued"), date: value(row, ["issue_date", "created_at"]) })),
+      ...digitalCertificates.map((row) => ({ type: "Digital Certificate", label: value(row, ["student_name", "certificate_number"], "Digital certificate issued"), date: value(row, ["issue_date"]) })),
       ...certifications.map((row) => ({ type: "Certification", label: value(row, ["student_name", "certification_title", "course_name"], "Certification record"), date: value(row, ["issued_at", "created_at"]) })),
       ...assignments.map((row) => ({ type: "Assignment", label: value(row, ["title", "assignment_title"], "Assignment submitted"), date: value(row, ["submission_date", "created_at"]) })),
       ...homeworkSubmissions.map((row) => ({ type: "Homework", label: value(row, ["title"], "Homework submitted"), date: value(row, ["graded_at", "created_at"]) })),
@@ -573,12 +597,12 @@ export default function ExecutiveCommandCenterPage() {
       courses: courses.length,
       lessons: lessons.length,
       completionRate,
-      progressRows: progress.length,
+      progressRows: completedProgress.length,
       exams: exams.length,
       examPassRate: percent(examPasses, exams.length),
       examAverage,
-      certificates: certificates.length + certifications.length,
-      certificateRate: percent(certificates.length + certifications.length, totalStudents),
+      certificates: certificates.length + digitalCertificates.length,
+      certificateRate: percent(certificates.length + digitalCertificates.length, totalStudents),
       assignments: assignments.length + homeworkSubmissions.length,
       gradedAssignments: gradedAssignments.length + homeworkSubmissions.filter((row) => row.score !== null && row.score !== undefined).length,
       approvedAssignments: approvedAssignments + homeworkSubmissions.filter((row) => value(row, ["status"]) === "Approved").length,
@@ -594,7 +618,8 @@ export default function ExecutiveCommandCenterPage() {
       tvUniqueViewers,
       tvSubscriptions: tvSubscriptions.length,
       memberships: memberships.length,
-      activeMembershipRate: percent(activeStudents, Math.max(memberships.length, 1)),
+      activeMemberships,
+      activeMembershipRate: percent(activeMemberships, Math.max(memberships.length, 1)),
       revenue,
       instructorActions,
       researchPublications: researchPublications.length,

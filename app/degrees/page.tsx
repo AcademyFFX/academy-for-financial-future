@@ -6,11 +6,10 @@ import { Award, BookOpenCheck, FileCheck2, GraduationCap, Landmark, Save, Shield
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
+import { getClientAdminSession } from "@/lib/admin-client";
 import { createClient } from "@/lib/supabase";
 
 type DbRow = Record<string, unknown>;
-
-const adminEmail = "acafffx@gmail.com";
 
 function value(row: DbRow, keys: string[], fallback = "") {
   for (const key of keys) {
@@ -41,6 +40,7 @@ export default function DegreesPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("Loading AFF degree programs...");
   const [userEmail, setUserEmail] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [studentName, setStudentName] = useState("Student");
   const [studentId, setStudentId] = useState("");
   const [degrees, setDegrees] = useState<DbRow[]>([]);
@@ -58,8 +58,6 @@ export default function DegreesPage() {
     completionStatus: "Completed"
   });
 
-  const isAdmin = userEmail.toLowerCase() === adminEmail;
-
   const loadDegrees = useCallback(async () => {
     setLoading(true);
     try {
@@ -72,10 +70,14 @@ export default function DegreesPage() {
         return;
       }
 
+      const adminSession = await getClientAdminSession();
+      const admin = adminSession.isAdmin;
       setUserEmail(user.email ?? "");
-      const admin = user.email?.toLowerCase() === adminEmail;
+      setIsAdmin(admin);
       const [studentResult, degreeResult, requirementResult, creditResult, approvalResult, studentsResult] = await Promise.all([
-        supabase.from("students").select("*").eq("email", user.email ?? "").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        admin
+          ? Promise.resolve({ data: null, error: null })
+          : supabase.from("students").select("*").eq("auth_user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("academic_degree_programs").select("*").order("credits_required", { ascending: true }),
         supabase.from("degree_requirements").select("*").order("display_order", { ascending: true }),
         admin ? supabase.from("student_credits").select("*").order("created_at", { ascending: false }).limit(300) : supabase.from("student_credits").select("*").eq("student_id", user.id).order("created_at", { ascending: false }),
@@ -88,8 +90,10 @@ export default function DegreesPage() {
       }
 
       const student = (studentResult.data ?? {}) as DbRow;
-      const resolvedName = value(student, ["full_name", "name"], user.user_metadata?.full_name ?? user.email ?? "Student");
-      const resolvedStudentId = value(student, ["student_id"], user.id);
+      const resolvedName = admin
+        ? value(adminSession.adminRow ?? {}, ["full_name", "name", "display_name"], user.user_metadata?.full_name ?? user.email ?? "Administrator")
+        : value(student, ["full_name", "name"], user.user_metadata?.full_name ?? user.email ?? "Student");
+      const resolvedStudentId = admin ? "AFF Academic Office" : value(student, ["student_id"], user.id);
       setStudentName(resolvedName);
       setStudentId(resolvedStudentId);
       setDegrees((degreeResult.data ?? []) as DbRow[]);
@@ -173,7 +177,7 @@ export default function DegreesPage() {
         .from("graduation_approvals")
         .update({
           approval_status: status,
-          approved_by: adminEmail,
+          approved_by: userEmail,
           approved_at: new Date().toISOString(),
           comments: status === "Approved" ? "Graduation approved by AFF Academic Office." : "Graduation request returned for additional requirements."
         })

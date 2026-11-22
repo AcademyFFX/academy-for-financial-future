@@ -980,7 +980,15 @@ export function CourseUploadCenter() {
                 <h3 className="mt-2 font-semibold text-white">{value(asset, ["asset_title"])}</h3>
                 <p className="mt-2 text-sm leading-6 text-ink/60">{Math.max(1, Math.round(Number(value(asset, ["file_size"], "0")) / 1024))} KB · {value(asset, ["asset_status"])}</p>
                 <p className="mt-2 text-sm leading-6 text-ink/62">{value(course ?? {}, ["course_name", "title"], "Course")} {courseModule ? `· ${value(courseModule, ["module_title"])}` : ""} {lesson ? `· ${value(lesson, ["lesson_title", "title"])}` : ""}</p>
-                <a className="mt-4 inline-flex text-sm font-semibold text-gold-300 hover:text-cream" href={value(asset, ["public_url", "signed_url"])} target="_blank" rel="noreferrer">Open uploaded file</a>
+                {(() => {
+                  const fileUrl = value(asset, ["public_url", "signed_url"]);
+                  const isFileUrl = /^https:\/\//i.test(fileUrl);
+                  return isFileUrl ? (
+                    <a className="mt-4 inline-flex text-sm font-semibold text-gold-300 hover:text-cream" href={fileUrl} target="_blank" rel="noreferrer">Open uploaded file</a>
+                  ) : (
+                    <p className="mt-4 text-xs text-ink/60">This is a course record, not a downloadable file.</p>
+                  );
+                })()}
               </article>
             );
           })}

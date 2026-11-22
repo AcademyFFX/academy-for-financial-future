@@ -25,6 +25,9 @@ jobs:
       - name: Course media authorization tests
         run: node scripts/course-media-access-tests.mjs
 
+      - name: Validate staging smoke-test syntax (no network calls)
+        run: node --check scripts/course-media-staging-smoke.mjs
+
       - name: Build
         run: npm run build
         env:

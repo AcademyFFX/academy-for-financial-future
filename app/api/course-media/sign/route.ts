@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { canSignCourseMedia } from "@/lib/course-media-access";
 
 export const dynamic = "force-dynamic";
 const noStore = { "Cache-Control": "no-store" };
@@ -55,16 +56,32 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
   if (adminError) return unauthorized();
 
+  let studentId: number | null = null;
+  let enrollmentStudentId: number | null = null;
+  let enrollmentCourseId: number | null = null;
+  let enrollmentStatus: string | null = null;
   if (!admin) {
-    if (asset.asset_status !== "Published") return unauthorized();
     const { data: student, error: studentError } = await supabase
       .from("students").select("id").eq("auth_user_id", userData.user.id).maybeSingle();
     if (studentError || !student) return unauthorized();
+    studentId = Number(student.id);
     const { data: enrollment, error: enrollmentError } = await supabase
-      .from("enrollments").select("id,enrollment_status")
-      .eq("student_id", student.id).eq("course_id", asset.course_id).maybeSingle();
-    if (enrollmentError || !enrollment || !["active", "enrolled", "completed"].includes(String(enrollment.enrollment_status ?? "").toLowerCase())) return unauthorized();
+      .from("enrollments").select("student_id,course_id,enrollment_status")
+      .eq("student_id", studentId).eq("course_id", asset.course_id).maybeSingle();
+    if (enrollmentError || !enrollment) return unauthorized();
+    enrollmentStudentId = Number(enrollment.student_id);
+    enrollmentCourseId = Number(enrollment.course_id);
+    enrollmentStatus = enrollment.enrollment_status;
   }
+  if (!canSignCourseMedia({
+    isAdmin: Boolean(admin),
+    assetStatus: asset.asset_status,
+    studentId,
+    enrollmentStudentId,
+    enrollmentCourseId,
+    assetCourseId: Number(asset.course_id),
+    enrollmentStatus
+  })) return unauthorized();
 
   const { data: signed, error: signError } = await supabase.storage
     .from("aff-course-assets").createSignedUrl(asset.storage_path, 300);

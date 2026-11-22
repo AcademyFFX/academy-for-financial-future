@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import { issueAttemptToken, hashAttemptToken, verifyAttemptToken } from './aff-attempt-token.mjs';
+const {token,tokenHash}=issueAttemptToken();
+assert.equal(token.length,43);
+assert.equal(tokenHash.length,64);
+assert.equal(hashAttemptToken(token),tokenHash);
+assert.notEqual(issueAttemptToken().token,token);
+const base={token,storedHash:tokenHash,studentId:'student-A',expectedStudentId:'student-A',examId:'exam-1',expectedExamId:'exam-1',expiresAtMs:60000,nowMs:1000,consumedAtMs:null};
+assert.equal(verifyAttemptToken(base),true);
+assert.equal(verifyAttemptToken({...base,token:'invalid'}),false);
+assert.equal(verifyAttemptToken({...base,storedHash:'bad'}),false);
+assert.equal(verifyAttemptToken({...base,expectedStudentId:'student-B'}),false);
+assert.equal(verifyAttemptToken({...base,expectedExamId:'exam-2'}),false);
+assert.equal(verifyAttemptToken({...base,nowMs:60000}),false);
+assert.equal(verifyAttemptToken({...base,consumedAtMs:3000}),false);
+assert.equal(verifyAttemptToken({...base,nowMs:NaN}),false);
+console.log('PASS: 12 offline token assertions; no persistence or endpoint tested');

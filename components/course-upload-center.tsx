@@ -278,7 +278,7 @@ export function CourseUploadCenter() {
         supabase.from("course_assets").select("*").order("created_at", { ascending: false }),
         supabase.from("enrollments").select("*").order("created_at", { ascending: false }),
         supabase.from("certificates").select("*").order("created_at", { ascending: false }),
-        supabase.from("student_profiles").select("auth_user_id,student_id,full_name,email,enrollment_status").order("full_name")
+        supabase.from("students").select("id,auth_user_id,student_id,full_name,email,status").order("full_name")
       ]);
       const error = courseResult.error ?? lessonResult.error ?? assetResult.error;
       if (error) throw error;
@@ -958,7 +958,7 @@ export function CourseUploadCenter() {
           <div className="border-b border-gold-500/20 p-5"><h2 className="text-xl font-semibold text-white">Instructor Progress Dashboard</h2></div>
           <div className="grid gap-px bg-gold-500/14">
             {enrollments.length === 0 ? <p className="bg-navy-950 p-5 text-sm text-ink/68">No course enrollments found.</p> : enrollments.slice(0, 20).map((enrollment) => {
-              const student = students.find((item) => value(item, ["auth_user_id"]) === value(enrollment, ["student_id"]));
+              const student = students.find((item) => value(item, ["id"]) === value(enrollment, ["student_id"]));
               const course = courses.find((item) => value(item, ["id"]) === value(enrollment, ["course_id"]));
               const percentage = Number(value(enrollment, ["progress", "progress_percentage"], "0"));
               return <article key={value(enrollment, ["id"])} className="bg-navy-950 p-5"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold text-white">{value(student ?? {}, ["full_name"], value(enrollment, ["student_id"]))}</p><p className="mt-1 text-sm text-ink/60">{value(course ?? {}, ["course_name", "title"], "Managed Course")} · {progressRows.filter((row) => value(row, ["student_id"]) === value(enrollment, ["student_id"]) && value(row, ["course_id"]) === value(enrollment, ["course_id"])).length} lessons completed</p></div><span className="text-sm text-gold-300">{percentage}%</span></div><div className="mt-3"><ProgressBar value={percentage} /></div></article>;
@@ -980,7 +980,15 @@ export function CourseUploadCenter() {
                 <h3 className="mt-2 font-semibold text-white">{value(asset, ["asset_title"])}</h3>
                 <p className="mt-2 text-sm leading-6 text-ink/60">{Math.max(1, Math.round(Number(value(asset, ["file_size"], "0")) / 1024))} KB · {value(asset, ["asset_status"])}</p>
                 <p className="mt-2 text-sm leading-6 text-ink/62">{value(course ?? {}, ["course_name", "title"], "Course")} {courseModule ? `· ${value(courseModule, ["module_title"])}` : ""} {lesson ? `· ${value(lesson, ["lesson_title", "title"])}` : ""}</p>
-                <a className="mt-4 inline-flex text-sm font-semibold text-gold-300 hover:text-cream" href={value(asset, ["public_url", "signed_url"])} target="_blank" rel="noreferrer">Open uploaded file</a>
+                {(() => {
+                  const fileUrl = value(asset, ["public_url", "signed_url"]);
+                  const isFileUrl = /^https:\/\//i.test(fileUrl);
+                  return isFileUrl ? (
+                    <a className="mt-4 inline-flex text-sm font-semibold text-gold-300 hover:text-cream" href={fileUrl} target="_blank" rel="noreferrer">Open uploaded file</a>
+                  ) : (
+                    <p className="mt-4 text-xs text-ink/60">This is a course record, not a downloadable file.</p>
+                  );
+                })()}
               </article>
             );
           })}

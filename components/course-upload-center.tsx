@@ -278,7 +278,7 @@ export function CourseUploadCenter() {
         supabase.from("course_assets").select("*").order("created_at", { ascending: false }),
         supabase.from("enrollments").select("*").order("created_at", { ascending: false }),
         supabase.from("certificates").select("*").order("created_at", { ascending: false }),
-        supabase.from("student_profiles").select("auth_user_id,student_id,full_name,email,enrollment_status").order("full_name")
+        supabase.from("students").select("auth_user_id,student_id,full_name,email,status").order("full_name")
       ]);
       const error = courseResult.error ?? lessonResult.error ?? assetResult.error;
       if (error) throw error;

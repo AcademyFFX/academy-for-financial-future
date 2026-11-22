@@ -1,0 +1,27 @@
+{
+  "program": "AFF University Critical Thinking Certificate",
+  "volume": 1,
+  "expected_module_count": 12,
+  "mode": "PRESERVE_APPROVED_SOURCES",
+  "modules": [
+    {"number":1,"source_file":null,"status":"SOURCE_REQUIRED"},
+    {"number":2,"source_file":"AFF_Critical_Thinking_Volume_I_Module_2.docx","status":"SOURCE_LOCATED"},
+    {"number":3,"source_file":null,"status":"SOURCE_REQUIRED"},
+    {"number":4,"source_file":null,"status":"SOURCE_REQUIRED"},
+    {"number":5,"source_file":null,"status":"SOURCE_REQUIRED"},
+    {"number":6,"source_file":null,"status":"SOURCE_REQUIRED"},
+    {"number":7,"source_file":null,"status":"SOURCE_REQUIRED"},
+    {"number":8,"source_file":null,"status":"SOURCE_REQUIRED"},
+    {"number":9,"source_file":null,"status":"SOURCE_REQUIRED"},
+    {"number":10,"source_file":null,"status":"SOURCE_REQUIRED"},
+    {"number":11,"source_file":null,"status":"SOURCE_REQUIRED"},
+    {"number":12,"source_file":"AFF_Critical_Thinking_Volume_I_Module_12.html","status":"SOURCE_LOCATED","note":"Contains instructor answer keys; split student/instructor content before publication"}
+  ],
+  "publish_allowed": false,
+  "notes": [
+    "Do not recreate approved manuscripts.",
+    "Course AFF-CTI-101 exists in production; AFF-CTI-102 is draft. Verify final mapping of twelve modules before uploading.",
+    "Never publish instructor answer keys to student-visible course assets.",
+    "This manifest is a source recovery inventory, not a deployment instruction."
+  ]
+}

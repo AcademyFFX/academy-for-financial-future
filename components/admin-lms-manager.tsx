@@ -619,6 +619,10 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
     setAssignmentForm({ ...emptyAssignmentForm, courseId });
     setQuizForm({ ...emptyQuizForm, courseId });
     setActiveSection("course");
+    // The editor is below the course cards; bring it into view after selecting a course.
+    requestAnimationFrame(() => {
+      document.getElementById("aff-course-editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   function publicationChecklist(course = selectedCourse) {
@@ -1369,7 +1373,7 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[300px_1fr]">
+      <section id="aff-course-editor" className="grid scroll-mt-24 gap-6 xl:grid-cols-[300px_1fr]">
         <aside className="terminal-panel h-fit p-4">
           <p className="text-xs uppercase tracking-[.2em] text-gold-300">Course Editor</p>
           <h2 className="mt-2 text-xl font-semibold text-white">{selectedCourse ? value(selectedCourse, ["course_name", "title"]) : "New Course"}</h2>

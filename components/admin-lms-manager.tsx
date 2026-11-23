@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LessonHtmlPreview } from "@/components/lesson-html-preview";
 import {
   Archive,
   ArrowDown,
@@ -417,6 +418,7 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
   const [courseForm, setCourseForm] = useState(emptyCourseForm);
   const [moduleForm, setModuleForm] = useState(emptyModuleForm);
   const [lessonForm, setLessonForm] = useState(emptyLessonForm);
+  const [lessonContentView, setLessonContentView] = useState<"preview" | "source">("preview");
   const [resourceForm, setResourceForm] = useState(emptyResourceForm);
   const [assignmentForm, setAssignmentForm] = useState(emptyAssignmentForm);
   const [quizForm, setQuizForm] = useState(emptyQuizForm);
@@ -1483,7 +1485,21 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
                   <input className="field" type="number" min="1" placeholder="Lesson Number" value={lessonForm.order} onChange={(event) => setLessonForm({ ...lessonForm, order: event.target.value })} />
                 </div>
                 <textarea className="field min-h-20" placeholder="Lesson Summary" value={lessonForm.summary} onChange={(event) => setLessonForm({ ...lessonForm, summary: event.target.value })} />
-                <textarea className="field min-h-32" placeholder="Full Lesson Content" value={lessonForm.fullContent} onChange={(event) => setLessonForm({ ...lessonForm, fullContent: event.target.value })} />
+                <div className="grid gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <label className="text-sm font-semibold text-gold-300">Full Lesson Content</label>
+                    <div className="flex gap-2" role="group" aria-label="Lesson content view">
+                      <button type="button" aria-pressed={lessonContentView === "preview"} onClick={() => setLessonContentView("preview")} className={lessonContentView === "preview" ? "bg-gold-500 px-3 py-2 text-sm font-semibold text-navy-950" : "border border-gold-500/40 px-3 py-2 text-sm text-gold-300"}>Formatted Preview</button>
+                      <button type="button" aria-pressed={lessonContentView === "source"} onClick={() => setLessonContentView("source")} className={lessonContentView === "source" ? "bg-gold-500 px-3 py-2 text-sm font-semibold text-navy-950" : "border border-gold-500/40 px-3 py-2 text-sm text-gold-300"}>HTML Source</button>
+                    </div>
+                  </div>
+                  {lessonContentView === "preview" ? (
+                    <LessonHtmlPreview content={lessonForm.fullContent} title="AFF lesson formatted preview" />
+                  ) : (
+                    <textarea aria-label="Full Lesson Content HTML Source" className="field min-h-80 font-mono" placeholder="Full Lesson Content" value={lessonForm.fullContent} onChange={(event) => setLessonForm({ ...lessonForm, fullContent: event.target.value })} />
+                  )}
+                  <p className="text-xs text-ink/70">Preview does not modify or save the original manuscript. Edit the source only when necessary.</p>
+                </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <select className="field" value={lessonForm.videoType} onChange={(event) => setLessonForm({ ...lessonForm, videoType: event.target.value })}>
                     <option>Text-only lesson</option>

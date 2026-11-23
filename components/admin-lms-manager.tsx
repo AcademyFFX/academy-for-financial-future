@@ -1353,7 +1353,7 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
                     <Info label="Last Updated" value={displayDate(value(course, ["updated_at", "created_at"]))} />
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={() => selectCourse(course)} className="inline-flex items-center gap-2 border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300"><Pencil size={14} /> Edit</button>
+                    <button type="button" onClick={() => { selectCourse(course); setMessage(`Editing ${value(course, ["course_name", "title"])}.`); document.getElementById("aff-course-editor")?.scrollIntoView({ behavior: "smooth", block: "start" }); document.getElementById("aff-course-editor-heading")?.focus({ preventScroll: true }); }} className="inline-flex items-center gap-2 border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300"><Pencil size={14} /> Edit</button>
                     <Link href={`/courses/managed/${encodeURIComponent(value(course, ["course_code", "slug"], safeName(value(course, ["course_name", "title"]))))}`} className="inline-flex items-center gap-2 border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300"><Eye size={14} /> Preview</Link>
                     {statusOf(course) === "Published" ? (
                       <button type="button" onClick={() => { selectCourse(course); updateCourseStatus("Draft"); }} className="border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300">Unpublish</button>
@@ -1369,9 +1369,9 @@ export function AdminLmsManager({ initialCourseId = "", createMode = false }: { 
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[300px_1fr]">
+      <section id="aff-course-editor" className="grid scroll-mt-6 gap-6 xl:grid-cols-[300px_1fr]">
         <aside className="terminal-panel h-fit p-4">
-          <p className="text-xs uppercase tracking-[.2em] text-gold-300">Course Editor</p>
+          <p id="aff-course-editor-heading" tabIndex={-1} className="text-xs uppercase tracking-[.2em] text-gold-300">Course Editor</p>
           <h2 className="mt-2 text-xl font-semibold text-white">{selectedCourse ? value(selectedCourse, ["course_name", "title"]) : "New Course"}</h2>
           <div className="mt-4 grid gap-2">
             {[

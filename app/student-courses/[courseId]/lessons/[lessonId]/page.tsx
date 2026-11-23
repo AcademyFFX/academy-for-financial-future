@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LessonHtmlPreview } from "@/components/lesson-html-preview";
 import { useParams, useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -1196,7 +1197,14 @@ export default function StudentLessonViewerPage() {
 
             <ContentSection title="Lesson Overview" body={overview} />
             <LearningObjectivesPanel objectives={objectiveItems} />
-            <ContentSection title="Main Lesson Content" body={fullText} />
+            {/<[a-z][\\s\\S]*?>/i.test(fullText) ? (
+              <section className="terminal-panel p-6">
+                <p className="text-xs uppercase tracking-[.2em] text-gold-300">Main Lesson Content</p>
+                <div className="mt-4"><LessonHtmlPreview content={fullText} title="AFF lesson manuscript" /></div>
+              </section>
+            ) : (
+              <ContentSection title="Main Lesson Content" body={fullText} />
+            )}
             <ContentSection title="Key Concepts" body={keyConcepts} />
             <ContentSection title="Key Takeaways" body={takeaways} />
             <ContentSection title="Vocabulary" body={vocabulary} />

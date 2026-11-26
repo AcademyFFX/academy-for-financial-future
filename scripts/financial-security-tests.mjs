@@ -31,4 +31,11 @@ assert.equal(billing.hasAcademyAccess({...paid,current_period_end:"invalid"}),fa
 assert.equal(billing.hasAcademyAccess(paid),false);
 assert.equal(billing.hasAcademyAccess({...paid,payment_status:"Pending",current_period_end:future}),false);
 assert.equal(billing.hasAcademyAccess({...paid,selected_membership_plan:"Certification Fee",active_membership_plan:"Certification Fee",membership_plan:"Certification Fee",current_period_end:future}),false);
-console.log("11 financial security assertions passed");
+const trial = {selected_membership_plan:"Free Trial",active_membership_plan:"Free Trial",membership_plan:"Free Trial",payment_status:"Not Required",membership_status:"Free Trial",account_status:"Trial"};
+assert.equal(billing.hasAcademyAccess({...trial,trial_ends_at:future}),true);
+assert.equal(billing.hasAcademyAccess({...trial,trial_ends_at:"2000-01-01"}),false);
+assert.equal(billing.hasAcademyAccess({...trial,trial_ends_at:"invalid"}),false);
+assert.equal(billing.hasAcademyAccess(trial),false);
+assert.equal(billing.hasAcademyAccess({...trial,account_status:"Restricted",trial_ends_at:future}),false);
+assert.equal(billing.hasAcademyAccess({...trial,account_status:"Suspended",trial_ends_at:future}),false);
+console.log("17 financial security assertions passed");

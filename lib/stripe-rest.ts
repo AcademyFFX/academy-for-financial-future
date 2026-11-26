@@ -33,22 +33,17 @@ export function appendMetadata(params: URLSearchParams, metadata: Record<string,
 export function verifyStripeSignature(payload: string, signatureHeader: string | null) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret || !signatureHeader) return false;
-
-  const timestamp = signatureHeader
-    .split(",")
-    .find((part) => part.startsWith("t="))
-    ?.slice(2);
-  const expectedSignature = signatureHeader
-    .split(",")
-    .find((part) => part.startsWith("v1="))
-    ?.slice(3);
-
-  if (!timestamp || !expectedSignature) return false;
-
-  const signedPayload = `${timestamp}.${payload}`;
-  const digest = createHmac("sha256", webhookSecret).update(signedPayload).digest("hex");
-  const expected = Buffer.from(expectedSignature, "hex");
-  const actual = Buffer.from(digest, "hex");
-
-  return expected.length === actual.length && timingSafeEqual(expected, actual);
+  const parts = signatureHeader.split(",").map(part => part.trim());
+  const timestamps = parts.filter(part => part.startsWith("t="));
+  if (timestamps.length !== 1) return false;
+  const timestamp = timestamps[0].slice(2);
+  if (!/^\d+$/.test(timestamp)) return false;
+  const seconds = Number(timestamp);
+  if (!Number.isSafeInteger(seconds) || Math.abs(Math.floor(Date.now() / 1000) - seconds) > 300) return false;
+  const actual = createHmac("sha256", webhookSecret).update(`${timestamp}.${payload}`).digest();
+  return parts.filter(part => part.startsWith("v1=")).some(part => {
+    const signature = part.slice(3);
+    if (!/^[a-fA-F0-9]{64}$/.test(signature)) return false;
+    return timingSafeEqual(Buffer.from(signature, "hex"), actual);
+  });
 }

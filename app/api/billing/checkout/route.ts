@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getBillingPlan } from "@/lib/billing";
-import { buildFreeTrialState, buildPendingPaymentState, membershipStateToDbPayload, normalizeMembershipState } from "@/lib/membership-state";
+import { buildFreeTrialState, membershipStateToDbPayload } from "@/lib/membership-state";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { appendMetadata, stripeRequest } from "@/lib/stripe-rest";
@@ -56,14 +56,15 @@ export async function POST(request: Request) {
       const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       const adminSupabase = createSupabaseAdminClient();
       const trialState = buildFreeTrialState();
-      const { error } = await adminSupabase.from("student_memberships").upsert({
+      const { error } = await adminSupabase.from("student_memberships").insert({
         student_id: user.id,
         student_email: user.email ?? "",
         ...membershipStateToDbPayload(trialState),
         trial_ends_at: trialEndsAt,
         updated_at: new Date().toISOString()
-      }, { onConflict: "student_id" });
+      });
 
+      if (error?.code === "23505") return NextResponse.json({ error: "A membership record already exists. Contact AFF administration for trial eligibility." }, { status: 409 });
       if (error) throw error;
       return NextResponse.json({ url: "/billing?trial=started" });
     }
@@ -117,26 +118,9 @@ export async function POST(request: Request) {
 
     const session = await stripeRequest<CheckoutSessionResponse>("/checkout/sessions", params);
 
-    const adminSupabase = createSupabaseAdminClient();
-    const { data: existingMembership } = await adminSupabase
-      .from("student_memberships")
-      .select("active_membership_plan, membership_plan, payment_status, membership_status")
-      .eq("student_id", user.id)
-      .maybeSingle();
-    const existingState = normalizeMembershipState(existingMembership);
-    const preserveActivePlan = existingState.paymentStatus === "Paid" && existingState.membershipStatus === "Active Membership";
-    const pendingState = buildPendingPaymentState(plan.name);
-    const checkoutState = preserveActivePlan ? existingState : pendingState;
-    const { error } = await adminSupabase.from("student_memberships").upsert({
-      student_id: user.id,
-      student_email: user.email ?? "",
-      ...membershipStateToDbPayload(checkoutState),
-      stripe_checkout_session_id: session.id,
-      stripe_customer_id: typeof session.customer === "string" ? session.customer : null,
-      updated_at: new Date().toISOString()
-    }, { onConflict: "student_id" });
-
-    if (error) throw error;
+    // Checkout initiation is not proof of payment. Do not change existing
+    // membership entitlements or Stripe subscription identifiers here.
+    // Trusted checkout registration must be added before commercial activation.
     return NextResponse.json({ url: session.url });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to start checkout.";

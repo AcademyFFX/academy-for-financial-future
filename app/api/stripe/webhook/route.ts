@@ -68,6 +68,10 @@ async function updateMembershipFromCheckout(object: StripeObject) {
 
   if (!studentId || !plan) return;
 
+  // Certification fees are not academic subscriptions. Keep the existing
+  // membership unchanged; billing history is recorded by the caller.
+  if (plan.id === "certification-fee") return;
+
   const periodEnd = object.lines?.data?.[0]?.period?.end;
   const paid = object.payment_status === "paid";
   const membershipState = paid ? buildActiveMembershipState(plan.name) : buildPendingPaymentState(plan.name);
@@ -149,7 +153,8 @@ async function updateMembershipFromSubscription(object: StripeObject) {
 
   const planId = object.metadata?.plan_id;
   const plan = planId ? getBillingPlan(planId) : undefined;
-  const isActive = ["active", "trialing"].includes(asString(object.status));
+  if (planId === "certification-fee" || object.metadata?.membership_plan === "Certification Fee") return;
+  const isActive = asString(object.status) === "active";
   const planName = plan?.name ?? object.metadata?.membership_plan ?? "Monthly Membership";
   const membershipState = isActive ? buildActiveMembershipState(planName) : buildPendingPaymentState(planName);
 

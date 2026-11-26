@@ -1,0 +1,17 @@
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import ts from "typescript";
+const {outputText}=ts.transpileModule(readFileSync(new URL("../lib/affiliate-reversal.ts",import.meta.url),"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}});
+const mod={exports:{}};
+new Function("module","exports",outputText)(mod,mod.exports);
+const calc=mod.exports.calculateAffiliateReversal;
+const base={originalEligibleMinor:20000,originalCommissionMinor:2000,cumulativeEligibleRefundMinor:5000,previouslyReversedMinor:0};
+assert.deepEqual(calc(base),{adjustmentMinor:500,cumulativeReversedMinor:500,remainingCommissionMinor:1500});
+assert.equal(calc({...base,previouslyReversedMinor:500}).adjustmentMinor,0);
+assert.equal(calc({...base,cumulativeEligibleRefundMinor:10000,previouslyReversedMinor:500}).adjustmentMinor,500);
+assert.equal(calc({...base,cumulativeEligibleRefundMinor:20000,previouslyReversedMinor:500}).adjustmentMinor,1500);
+assert.equal(calc({...base,cumulativeEligibleRefundMinor:0}).adjustmentMinor,0);
+assert.equal(calc({originalEligibleMinor:3,originalCommissionMinor:2,cumulativeEligibleRefundMinor:3,previouslyReversedMinor:1}).adjustmentMinor,1);
+assert.equal(calc({originalEligibleMinor:3,originalCommissionMinor:2,cumulativeEligibleRefundMinor:1,previouslyReversedMinor:0}).adjustmentMinor,0);
+for(const patch of [{originalEligibleMinor:0},{originalCommissionMinor:20001},{cumulativeEligibleRefundMinor:20001},{previouslyReversedMinor:501},{previouslyReversedMinor:-1},{cumulativeEligibleRefundMinor:1.5},{originalEligibleMinor:Infinity},{originalEligibleMinor:Number.MAX_SAFE_INTEGER+1}]) assert.throws(()=>calc({...base,...patch}));
+console.log("15 reversal arithmetic assertions passed; event deduplication and database transactions not tested");

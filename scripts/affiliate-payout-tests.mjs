@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import ts from "typescript";
+const {outputText}=ts.transpileModule(readFileSync(new URL("../lib/affiliate-payout.ts",import.meta.url),"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}});
+const mod={exports:{}};
+new Function("module","exports",outputText)(mod,mod.exports);
+const validate=mod.exports.validateAffiliatePayoutApproval;
+const base={requestId:"r",affiliateUserId:"a",requesterUserId:"a",approverUserId:"admin",approverAuthorized:true,affiliateActive:true,status:"pending",amountMinor:1000,availableMinor:2000,currency:"usd",balanceCurrency:"usd",holdCleared:true,reconciliationClear:true,existingPayout:false};
+assert.equal(validate(base).decision,"eligible_for_transactional_review");
+assert.equal(validate({...base,availableMinor:1000}).amountMinor,1000);
+for(const patch of [{approverUserId:"a"},{requesterUserId:"admin"},{approverAuthorized:false},{affiliateActive:false},{status:"approved"},{amountMinor:0},{amountMinor:-1},{amountMinor:1.5},{amountMinor:Infinity},{availableMinor:999},{availableMinor:Infinity},{currency:"eur"},{holdCleared:false},{reconciliationClear:false},{existingPayout:true},{existingPayout:undefined},{requestId:""},{approverAuthorized:"true"}]) assert.throws(()=>validate({...base,...patch}));
+console.log("20 payout preflight assertions passed; no payout or database transaction executed");

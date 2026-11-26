@@ -1,0 +1,34 @@
+import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
+import ts from "typescript";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+function load(path, dependencies = {}) {
+  const source = readFileSync(new URL("../" + path, import.meta.url), "utf8");
+  const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
+  const module = { exports: {} };
+  new Function("require", "module", "exports", outputText)(name => Object.hasOwn(dependencies, name) ? dependencies[name] : require(name), module, module.exports);
+  return module.exports;
+}
+const state = load("lib/membership-state.ts");
+const billing = load("lib/billing.ts", {"@/lib/membership-state": state});
+const stripe = load("lib/stripe-rest.ts");
+process.env.STRIPE_WEBHOOK_SECRET = "local-test-only";
+const payload = '{"test":true}';
+const now = Math.floor(Date.now()/1000);
+const sign = t => "t="+t+",v1="+createHmac("sha256", process.env.STRIPE_WEBHOOK_SECRET).update(t+"."+payload).digest("hex");
+assert.equal(stripe.verifyStripeSignature(payload, sign(now)), true);
+assert.equal(stripe.verifyStripeSignature(payload, sign(now-600)), false);
+assert.equal(stripe.verifyStripeSignature(payload, sign(now+600)), false);
+assert.equal(stripe.verifyStripeSignature(payload+" ", sign(now)), false);
+assert.equal(stripe.verifyStripeSignature(payload, null), false);
+const paid = {selected_membership_plan:"Monthly Membership",active_membership_plan:"Monthly Membership",membership_plan:"Monthly Membership",payment_status:"Paid",membership_status:"Active Membership",account_status:"Active"};
+const future = new Date(Date.now()+86400000).toISOString();
+assert.equal(billing.hasAcademyAccess({...paid,current_period_end:future}),true);
+assert.equal(billing.hasAcademyAccess({...paid,current_period_end:"2000-01-01"}),false);
+assert.equal(billing.hasAcademyAccess({...paid,current_period_end:"invalid"}),false);
+assert.equal(billing.hasAcademyAccess(paid),false);
+assert.equal(billing.hasAcademyAccess({...paid,payment_status:"Pending",current_period_end:future}),false);
+assert.equal(billing.hasAcademyAccess({...paid,selected_membership_plan:"Certification Fee",active_membership_plan:"Certification Fee",membership_plan:"Certification Fee",current_period_end:future}),false);
+console.log("11 financial security assertions passed");

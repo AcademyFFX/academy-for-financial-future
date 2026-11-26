@@ -26,3 +26,15 @@ jobs:
       - name: Renewal integration
         if: success() || failure()
         run: node scripts/renewal-integration-tests.mjs
+      - name: Affiliate commission
+        if: success() || failure()
+        run: node scripts/affiliate-commission-tests.mjs
+      - name: Affiliate referral
+        if: success() || failure()
+        run: node scripts/affiliate-referral-tests.mjs
+      - name: Affiliate reversal
+        if: success() || failure()
+        run: node scripts/affiliate-reversal-tests.mjs
+      - name: Affiliate payout
+        if: success() || failure()
+        run: node scripts/affiliate-payout-tests.mjs

@@ -96,16 +96,23 @@ export function normalizeMembershipState(row?: MembershipRowLike | null): Member
     };
   }
 
-  if (currentPlan !== "Free Trial") {
+  if (currentPlan !== "Free Trial" &&
+      paymentStatus === "Paid" &&
+      membershipStatus === "Active Membership" &&
+      accountStatus === "Active") {
     return buildActiveMembershipState(currentPlan);
   }
 
-  if (selectedPlan === "Free Trial" || paymentStatus === "Not Required") {
+  if (currentPlan === "Free Trial" && selectedPlan === "Free Trial" &&
+      paymentStatus === "Not Required" && membershipStatus === "Free Trial" &&
+      accountStatus === "Trial") {
     return buildFreeTrialState();
   }
 
-  if (paymentStatus === "Paid" || membershipStatus === "Active Membership" || membershipStatus === "Active" || accountStatus === "Active") {
-    return buildActiveMembershipState(selectedPlan);
+  // Inconsistent or absent records must not synthesize an entitlement.
+  if (selectedPlan === "Free Trial") {
+    return { selectedPlan, currentPlan: "Free Trial", paymentStatus: "Pending",
+      membershipStatus: "Pending Payment", accountStatus: "Restricted" };
   }
 
   return buildPendingPaymentState(selectedPlan);
@@ -124,7 +131,7 @@ export function membershipStateToDbPayload(state: MembershipState) {
 
 export function hasFullCourseAccess(row?: MembershipRowLike | null) {
   const state = normalizeMembershipState(row);
-  return state.paymentStatus === "Paid" && state.membershipStatus === "Active Membership" && state.accountStatus === "Active" && state.currentPlan !== "Free Trial";
+  return state.paymentStatus === "Paid" && state.membershipStatus === "Active Membership" && state.accountStatus === "Active" && state.currentPlan !== "Free Trial" && state.currentPlan !== "Certification Fee";
 }
 
 export function hasPreviewAccess(row?: MembershipRowLike | null) {

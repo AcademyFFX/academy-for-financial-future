@@ -56,3 +56,6 @@ jobs:
       - name: Academic media link security
         if: success() || failure()
         run: node scripts/academic-media-link-tests.mjs
+      - name: Synthetic academic storage laboratory
+        if: success() || failure()
+        run: node scripts/academic-storage-lab-tests.mjs

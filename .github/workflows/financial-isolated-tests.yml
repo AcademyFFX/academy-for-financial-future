@@ -50,3 +50,6 @@ jobs:
       - name: Audit export
         if: success() || failure()
         run: node scripts/financial-audit-export-tests.mjs
+      - name: Academic media authorization
+        if: success() || failure()
+        run: node scripts/academic-media-authorization-tests.mjs

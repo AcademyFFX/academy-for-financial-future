@@ -1,0 +1,11 @@
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import ts from "typescript";
+const {outputText}=ts.transpileModule(readFileSync(new URL("../lib/affiliate-referral.ts",import.meta.url),"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}});
+const mod={exports:{}};
+new Function("module","exports",outputText)(mod,mod.exports);
+const validate=mod.exports.validateAffiliateReferral;
+const base={affiliateId:"a",affiliateUserId:"u1",studentUserId:"u2",referralId:"r",referralAffiliateId:"a",referralStudentUserId:"u2",paymentId:"p",paymentStudentUserId:"u2",affiliateActive:true,referralVerified:true,paymentVerified:true,paymentEligible:true,attributionValid:true,existingCommission:false};
+assert.deepEqual(validate(base),{affiliateId:"a",referralId:"r",paymentId:"p",studentUserId:"u2"});
+for(const patch of [{affiliateUserId:"u2"},{referralAffiliateId:"b"},{referralStudentUserId:"u3"},{paymentStudentUserId:"u3"},{affiliateActive:false},{referralVerified:false},{paymentVerified:false},{paymentEligible:false},{attributionValid:false},{existingCommission:true},{existingCommission:undefined},{paymentId:""},{referralId:" r"},{affiliateActive:"true"}]) assert.throws(()=>validate({...base,...patch}));
+console.log("15 referral preflight assertions passed; database concurrency not tested");

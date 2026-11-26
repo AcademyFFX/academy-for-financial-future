@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import ts from "typescript";
+const source = readFileSync(new URL("../lib/subscription-entitlement.ts", import.meta.url), "utf8");
+const {outputText} = ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}});
+const mod={exports:{}};
+new Function("module","exports",outputText)(mod,mod.exports);
+const {renewalEntitlement}=mod.exports;
+const now=Date.parse("2026-11-25T00:00:00Z");
+const base={currentPeriodEnd:"2026-12-01T00:00:00Z",proposedPeriodEnd:"2027-01-01T00:00:00Z",verifiedInvoice:true,invoicePaid:true,matchingSubscription:true,matchingMembership:true,liveMode:true,suspended:false,cancelled:false};
+assert.equal(renewalEntitlement(base,now).action,"extend");
+for(const key of ["verifiedInvoice","invoicePaid","matchingSubscription","matchingMembership","liveMode"]) assert.equal(renewalEntitlement({...base,[key]:false},now).action,"preserve");
+for(const date of [null,"invalid","2026-11-01","2026-12-01T00:00:00Z"]) assert.equal(renewalEntitlement({...base,proposedPeriodEnd:date},now).action,"preserve");
+for(const key of ["suspended","cancelled"]) assert.equal(renewalEntitlement({...base,[key]:true},now).action,"review");
+console.log("12 renewal policy assertions passed");

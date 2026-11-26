@@ -1,0 +1,46 @@
+name: AFF disposable Supabase storage laboratory
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/aff-financial-authorization
+    paths:
+      - '.github/workflows/academic-private-storage-lab.yml'
+      - 'security-review/local-storage-smoke.mjs'
+permissions:
+  contents: read
+jobs:
+  local-storage:
+    if: github.ref == 'refs/heads/fix/aff-financial-authorization' && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: supabase/setup-cli@v3
+        with:
+          version: '3.4.0'
+      - name: Initialize isolated project
+        run: |
+          docker info >/dev/null
+          mkdir "$RUNNER_TEMP/aff-storage-lab"
+          cd "$RUNNER_TEMP/aff-storage-lab"
+          supabase --version
+          supabase init --help
+          supabase start --help
+          supabase init
+          supabase start
+      - name: Verify local stack
+        run: |
+          cd "$RUNNER_TEMP/aff-storage-lab"
+          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:54321/auth/v1/health >/dev/null
+          echo 'Local Supabase auth endpoint reachable'
+      - name: Stop disposable stack
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/aff-storage-lab/supabase" ]; then
+            cd "$RUNNER_TEMP/aff-storage-lab"
+            supabase stop --help
+            supabase stop --no-backup
+          fi

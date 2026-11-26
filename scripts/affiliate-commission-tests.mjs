@@ -1,0 +1,16 @@
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import ts from "typescript";
+const {outputText}=ts.transpileModule(readFileSync(new URL("../lib/affiliate-commission.ts",import.meta.url),"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}});
+const mod={exports:{}};
+new Function("module","exports",outputText)(mod,mod.exports);
+const calc=mod.exports.calculateAffiliateCommission;
+const base={eligibleAmountMinor:10000,rateBasisPoints:1000,currency:"usd",policyCurrency:"usd",policyVersion:"fixture-v1"};
+assert.equal(calc(base).commissionMinor,1000);
+assert.equal(calc({...base,eligibleAmountMinor:101}).commissionMinor,10);
+assert.equal(calc({...base,rateBasisPoints:0}).commissionMinor,0);
+assert.equal(calc({...base,rateBasisPoints:10000}).commissionMinor,10000);
+assert.equal(calc({...base,eligibleAmountMinor:0}).commissionMinor,0);
+assert.equal(calc({...base,eligibleAmountMinor:Number.MAX_SAFE_INTEGER,rateBasisPoints:10000}).commissionMinor,Number.MAX_SAFE_INTEGER);
+for(const patch of [{eligibleAmountMinor:-1},{eligibleAmountMinor:1.5},{eligibleAmountMinor:Infinity},{eligibleAmountMinor:Number.MAX_SAFE_INTEGER+1},{rateBasisPoints:-1},{rateBasisPoints:10001},{rateBasisPoints:1.5},{currency:"eur"},{currency:"USD"},{policyVersion:" "}]) assert.throws(()=>calc({...base,...patch}));
+console.log("16 affiliate commission assertions passed");

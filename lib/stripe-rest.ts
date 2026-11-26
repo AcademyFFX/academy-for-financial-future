@@ -2,17 +2,17 @@ import { createHmac, timingSafeEqual } from "crypto";
 
 const stripeApiBase = "https://api.stripe.com/v1";
 
-export async function stripeRequest<T>(path: string, params: URLSearchParams) {
+export async function stripeRequest<T>(path: string, params: URLSearchParams, method: "GET" | "POST" = "POST") {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) throw new Error("Missing STRIPE_SECRET_KEY.");
 
-  const response = await fetch(`${stripeApiBase}${path}`, {
-    method: "POST",
+  const response = await fetch(`${stripeApiBase}${path}${method === "GET" && params.size ? "?" + params.toString() : ""}`, {
+    method,
     headers: {
       Authorization: `Bearer ${secretKey}`,
       "Content-Type": "application/x-www-form-urlencoded"
     },
-    body: params
+    body: method === "POST" ? params : undefined
   });
 
   const payload = await response.json();

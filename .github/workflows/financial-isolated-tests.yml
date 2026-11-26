@@ -38,3 +38,15 @@ jobs:
       - name: Affiliate payout
         if: success() || failure()
         run: node scripts/affiliate-payout-tests.mjs
+      - name: Transaction matching
+        if: success() || failure()
+        run: node scripts/financial-reconciliation-tests.mjs
+      - name: Discrepancy detection
+        if: success() || failure()
+        run: node scripts/financial-discrepancy-tests.mjs
+      - name: Financial reporting
+        if: success() || failure()
+        run: node scripts/financial-reporting-tests.mjs
+      - name: Audit export
+        if: success() || failure()
+        run: node scripts/financial-audit-export-tests.mjs

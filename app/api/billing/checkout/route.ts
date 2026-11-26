@@ -5,10 +5,19 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { appendMetadata, stripeRequest } from "@/lib/stripe-rest";
 
+import { registerFixedPriceCheckout } from "@/lib/checkout-registration";
+
 type CheckoutSessionResponse = {
   id: string;
   url: string;
   customer?: string;
+  livemode: boolean;
+  mode: string;
+  status: string;
+  client_reference_id: string;
+  amount_total: number | null;
+  currency: string;
+  expires_at: number;
 };
 
 export async function GET() {
@@ -78,6 +87,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Missing ${plan.priceEnv}.` }, { status: 500 });
     }
 
+    // Recurring and discounted checkout remain disabled until reconciled.
+    if (plan.id !== "certification-fee" || plan.mode !== "payment" || (typeof couponCode === "string" && couponCode.trim())) {
+      return NextResponse.json({ error: "This paid checkout is not yet available." }, { status: 503 });
+    }
+    if (process.env.AFF_VERIFIED_CHECKOUT_ENABLED !== "true") {
+      return NextResponse.json({ error: "Paid checkout is not yet available." }, { status: 503 });
+    }
+    const price = await stripeRequest<{ id: string; active: boolean; livemode: boolean; type: string; unit_amount: number | null; currency: string }>("/prices/" + encodeURIComponent(priceId), new URLSearchParams(), "GET");
+    if (price.id !== priceId || !price.active || !price.livemode || price.type !== "one_time" || !Number.isSafeInteger(price.unit_amount) || (price.unit_amount ?? 0) <= 0) {
+      return NextResponse.json({ error: "Price configuration unavailable." }, { status: 503 });
+    }
     const origin = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
     const params = new URLSearchParams();
     params.append("mode", plan.mode);
@@ -85,7 +105,7 @@ export async function POST(request: Request) {
     params.append("line_items[0][quantity]", "1");
     params.append("success_url", `${origin}/billing?checkout=success&plan=${plan.id}`);
     params.append("cancel_url", `${origin}/billing?checkout=cancelled`);
-    params.append("allow_promotion_codes", "true");
+
     params.append("customer_email", user.email ?? "");
     params.append("client_reference_id", user.id);
     appendMetadata(params, {
@@ -95,35 +115,18 @@ export async function POST(request: Request) {
       membership_plan: plan.name
     });
 
-    if (plan.mode === "subscription") {
-      params.append("subscription_data[metadata][student_id]", user.id);
-      params.append("subscription_data[metadata][student_email]", user.email ?? "");
-      params.append("subscription_data[metadata][plan_id]", plan.id);
-      params.append("subscription_data[metadata][membership_plan]", plan.name);
-    }
-
-    if (typeof couponCode === "string" && couponCode.trim()) {
-      const { data: coupon } = await supabase
-        .from("billing_coupons")
-        .select("stripe_promotion_code_id")
-        .eq("code", couponCode.trim().toUpperCase())
-        .eq("active", true)
-        .maybeSingle();
-
-      if (coupon?.stripe_promotion_code_id) {
-        params.delete("allow_promotion_codes");
-        params.append("discounts[0][promotion_code]", coupon.stripe_promotion_code_id);
-      }
-    }
-
     const session = await stripeRequest<CheckoutSessionResponse>("/checkout/sessions", params);
 
     // Checkout initiation is not proof of payment. Do not change existing
     // membership entitlements or Stripe subscription identifiers here.
-    // Trusted checkout registration must be added before commercial activation.
+    try {
+      await registerFixedPriceCheckout({ studentId: user.id, configuredPriceId: priceId, price, session });
+    } catch {
+      try { await stripeRequest("/checkout/sessions/" + encodeURIComponent(session.id) + "/expire", new URLSearchParams()); } catch { /* URL remains undisclosed; operational reconciliation required. */ }
+      return NextResponse.json({ error: "Unable to authorize checkout." }, { status: 503 });
+    }
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to start checkout.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Unable to start checkout." }, { status: 500 });
   }
 }

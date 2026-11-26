@@ -1,0 +1,18 @@
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import ts from "typescript";
+const {outputText}=ts.transpileModule(readFileSync(new URL("../lib/financial-reconciliation.ts",import.meta.url),"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}});
+const mod={exports:{}};
+new Function("module","exports",outputText)(mod,mod.exports);
+const match=mod.exports.matchFinancialTransaction;
+const base={providerAccount:"acct_fixture",transactionId:"txn_fixture",kind:"collection",currency:"usd",amountMinor:25000,status:"settled"};
+assert.equal(match(base,[base]).status,"matched");
+assert.equal(match(base,[]).status,"missing");
+assert.equal(match(base,[base,base]).status,"duplicate");
+for(const patch of [{providerAccount:"other"},{transactionId:"other"},{kind:"refund"}])assert.equal(match(base,[{...base,...patch}]).status,"missing");
+for(const [key,value] of [["amountMinor",22500],["currency","eur"],["status","pending"]])assert.deepEqual(match(base,[{...base,[key]:value}]),{status:"mismatch",differences:[key]});
+const pending={...base,status:"pending"};
+assert.equal(match(pending,[pending]).status,"pending");
+for(const patch of [{amountMinor:-1},{amountMinor:1.5},{amountMinor:Infinity},{currency:"USD"},{transactionId:""},{providerAccount:" acct"}])assert.throws(()=>match({...base,...patch},[base]));
+assert.throws(()=>match(base,[{...base,amountMinor:-1}]));
+console.log("17 financial reconciliation assertions passed");

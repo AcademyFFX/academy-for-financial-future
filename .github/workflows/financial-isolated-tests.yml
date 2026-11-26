@@ -53,3 +53,6 @@ jobs:
       - name: Academic media authorization
         if: success() || failure()
         run: node scripts/academic-media-authorization-tests.mjs
+      - name: Academic media link security
+        if: success() || failure()
+        run: node scripts/academic-media-link-tests.mjs

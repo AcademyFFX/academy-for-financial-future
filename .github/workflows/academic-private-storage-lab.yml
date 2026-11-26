@@ -36,6 +36,14 @@ jobs:
           cd "$RUNNER_TEMP/aff-storage-lab"
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:54321/auth/v1/health >/dev/null
           echo 'Local Supabase auth endpoint reachable'
+      - name: Actual private storage smoke tests
+        run: |
+          cd "$RUNNER_TEMP/aff-storage-lab"
+          supabase status --help >/dev/null
+          export LAB_SERVICE_ROLE_KEY="$(supabase status -o env | sed -n 's/^SERVICE_ROLE_KEY="\(.*\)"$/\1/p')"
+          test -n "$LAB_SERVICE_ROLE_KEY"
+          echo "::add-mask::$LAB_SERVICE_ROLE_KEY"
+          node "$GITHUB_WORKSPACE/security-review/local-storage-smoke.mjs"
       - name: Stop disposable stack
         if: always()
         run: |

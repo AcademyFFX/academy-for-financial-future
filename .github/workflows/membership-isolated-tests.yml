@@ -1,0 +1,43 @@
+name: AFF isolated membership security
+on:
+  push:
+    branches:
+      - fix/aff-financial-authorization
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  membership-security:
+    if: github.ref == 'refs/heads/fix/aff-financial-authorization' && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: disposable_fixture_only
+          POSTGRES_DB: aff_fixture
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aff_fixture"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run isolated SQL checks
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: ${{ job.services.postgres.ports[5432] }}
+          PGUSER: postgres
+          PGPASSWORD: disposable_fixture_only
+          PGDATABASE: aff_fixture
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f security-review/membership-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f security-review/membership-containment.sql
+          psql -X -v ON_ERROR_STOP=1 -f security-review/membership-role-tests.sql
+          psql -X -v ON_ERROR_STOP=1 -f security-review/membership-verify.sql

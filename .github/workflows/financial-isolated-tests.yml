@@ -1,6 +1,9 @@
 name: AFF isolated financial tests
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/aff-financial-authorization
 permissions:
   contents: read
 jobs:

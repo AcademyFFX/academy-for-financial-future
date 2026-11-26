@@ -94,7 +94,12 @@ export function hasAcademyAccess(membership?: {
   current_period_end?: string | null;
 }) {
   if (!membership) return false;
-  if (hasFullCourseAccess(membership)) return true;
+  if (hasFullCourseAccess(membership)) {
+    const periodEnd = membership.current_period_end;
+    return typeof periodEnd === "string" &&
+      Number.isFinite(Date.parse(periodEnd)) &&
+      Date.parse(periodEnd) > Date.now();
+  }
   if (hasPreviewAccess(membership) && membership.trial_ends_at) {
     return new Date(membership.trial_ends_at).getTime() > Date.now();
   }

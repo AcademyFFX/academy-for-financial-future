@@ -74,3 +74,30 @@ for(const [label,file,allowed] of [
  console.log(label+' assignment '+file+' '+(allowed?'authorized':'denied')+' verified');
 }
 console.log('8 assignment read and signing scenarios passed');
+
+const courseBucket='aff-synthetic-course';
+const instructor=users.get('instructor').id;
+const studentFiles=['lesson.txt','workbook.txt'];
+const restrictedFiles=['answer-key.txt','rubric.txt','guide.txt','draft.txt'];
+await ok('/storage/v1/bucket',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({id:courseBucket,name:courseBucket,public:false})});
+for(const file of [...studentFiles,...restrictedFiles]) await ok('/storage/v1/object/'+courseBucket+'/'+file,{method:'POST',headers:{...headers,'Content-Type':'text/plain'},body:'synthetic '+file});
+const courseSql=`create policy aff_fixture_course_read on storage.objects for select to authenticated using (bucket_id = 'aff-synthetic-course' and ((auth.uid() = '${instructor}'::uuid and name in ('lesson.txt','workbook.txt','answer-key.txt','rubric.txt','guide.txt','draft.txt')) or (auth.uid() = '${a}'::uuid and name in ('lesson.txt','workbook.txt'))));`;
+execFileSync('docker',['exec','-i','supabase_db_aff-storage-lab','psql','-U','postgres','-d','postgres','-v','ON_ERROR_STOP=1'],{input:courseSql,stdio:['pipe','ignore','pipe']});
+for(const [label,u] of users){
+ for(const file of [...studentFiles,...restrictedFiles]){
+ const allowed=label==='instructor'||(label==='student-a'&&studentFiles.includes(file));
+ const p=courseBucket+'/'+file;
+ const read=await request('/storage/v1/object/authenticated/'+p,{headers:u.headers});
+ const sign=await request('/storage/v1/object/sign/'+p,{method:'POST',headers:{...u.headers,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:30})});
+ if(allowed){
+ assert.ok(read.ok);assert.equal(await read.text(),'synthetic '+file);
+ assert.ok(sign.ok);const s=await sign.json();assert.ok(s.signedURL.startsWith('/object/sign/'));
+ assert.equal(await (await ok('/storage/v1'+s.signedURL)).text(),'synthetic '+file);
+ }else{
+ assert.ok([400,401,403,404].includes(read.status),label+' '+file+' read');
+ assert.ok([400,401,403,404].includes(sign.status),label+' '+file+' sign');
+ }
+ }
+ console.log(label+' six course material authorization scenarios verified');
+}
+console.log('24 course material read and signing scenarios passed');

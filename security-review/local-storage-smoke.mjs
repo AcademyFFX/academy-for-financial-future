@@ -31,3 +31,18 @@ await new Promise(resolve=>setTimeout(resolve,7000));
 const expired=await request(route);
 assert.ok([400,401,403,404].includes(expired.status),'Expired signed link must be denied');
 console.log('Actual signed link expiration verified');
+
+ // Local synthetic identities; no production credentials or user data.
+const password='DisposableLabOnly!'+crypto.randomUUID();
+for(const label of ['student-a','student-b','evaluator','instructor']){
+ const email=label+'@example.invalid';
+ await ok('/auth/v1/admin/users',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({email,password,email_confirm:true})});
+ const session=await (await ok('/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:key,'Content-Type':'application/json'},body:JSON.stringify({email,password})})).json();
+ assert.ok(session.access_token&&session.user?.id);
+ const userHeaders={apikey:key,Authorization:'Bearer '+session.access_token};
+ const read=await request('/storage/v1/object/authenticated/'+path,{headers:userHeaders});
+ assert.ok([400,401,403,404].includes(read.status),label+' default read must be denied');
+ const sign=await request('/storage/v1/object/sign/'+path,{method:'POST',headers:{...userHeaders,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:30})});
+ assert.ok([400,401,403,404].includes(sign.status),label+' default signing must be denied');
+ console.log(label+' default read and signing denial verified');
+}

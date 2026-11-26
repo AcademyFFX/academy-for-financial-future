@@ -8,7 +8,7 @@ export function detectFinancialDiscrepancies(provider:readonly ReconciliationRec
   return m;
  };
  const p=group(provider),l=group(ledger);
- return [...new Set([...p.keys(),...l.keys()])].sort().map(k=>{
+ return Array.from(new Set(Array.from(p.keys()).concat(Array.from(l.keys())))).sort().map(k=>{
   const a=p.get(k)??[],b=l.get(k)??[];
   const identity=JSON.parse(k) as [string,string,string];
   const result=a.length>1||b.length>1?{status:"duplicate" as const}:a.length===0?{status:"missing_provider" as const}:b.length===0?{status:"missing_ledger" as const}:matchFinancialTransaction(a[0],b);

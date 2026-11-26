@@ -14,5 +14,5 @@ export function summarizeFinancialPeriod(entries:readonly FinancialReportEntry[]
   let g=groups.get(e.currency);if(!g){g=Object.fromEntries(kinds.map(k=>[k,BigInt(0)])) as Record<Kind,bigint>;groups.set(e.currency,g);}
   g[e.kind]+=BigInt(e.amountMinor);
  }
- return [...groups.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([currency,g])=>({currency,start,end,totalsMinor:Object.fromEntries(kinds.map(k=>[k,g[k].toString()])),netCollectionsMinor:(g.collection-g.refund-g.fee-g.dispute_debit+g.dispute_credit).toString(),commissionLiabilityMovementMinor:(g.commission_accrual-g.commission_reversal-g.affiliate_payout).toString()}));
+ return Array.from(groups.entries()).sort(([a],[b])=>a.localeCompare(b)).map(([currency,g])=>({currency,start,end,totalsMinor:Object.fromEntries(kinds.map(k=>[k,g[k].toString()])),netCollectionsMinor:(g.collection-g.refund-g.fee-g.dispute_debit+g.dispute_credit).toString(),commissionLiabilityMovementMinor:(g.commission_accrual-g.commission_reversal-g.affiliate_payout).toString()}));
 }

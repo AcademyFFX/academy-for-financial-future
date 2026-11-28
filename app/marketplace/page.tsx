@@ -23,7 +23,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
-import { marketplaceProducts, type MarketplaceProduct } from "@/lib/marketplace";
+import { type MarketplaceProduct } from "@/lib/marketplace";
 import { createClient } from "@/lib/supabase";
 
 type Purchase = {
@@ -90,7 +90,7 @@ function normalizeProduct(row: DbProduct): MarketplaceProduct {
 export default function MarketplacePage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const [products, setProducts] = useState<MarketplaceProduct[]>(marketplaceProducts);
+  const [products, setProducts] = useState<MarketplaceProduct[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [activeCategory, setActiveCategory] = useState("All");
   const [couponCode, setCouponCode] = useState("");
@@ -132,9 +132,8 @@ export default function MarketplacePage() {
           fetch("/api/marketplace/history", { cache: "no-store" })
         ]);
 
-        if (!productsResult.error && productsResult.data?.length) {
-          setProducts((productsResult.data as DbProduct[]).map(normalizeProduct));
-        }
+        if (productsResult.error) throw new Error("Product catalog is temporarily unavailable.");
+        setProducts((productsResult.data ?? []).map(normalizeProduct));
 
         const payload = await purchasesResult.json();
         if (!purchasesResult.ok || !Array.isArray(payload.purchases)) throw new Error("Purchase history is temporarily unavailable.");
@@ -265,10 +264,10 @@ export default function MarketplacePage() {
                   <button
                     className="mt-6 inline-flex items-center justify-center gap-2 bg-gold-500 px-4 py-3 text-sm font-bold text-navy-950 disabled:opacity-60"
                     type="button"
-                    disabled={processingProduct === product.id}
+                    disabled={true}
                     onClick={() => startCheckout(product.id)}
                   >
-                    <Sparkles size={16} /> {processingProduct === product.id ? "Preparing..." : "Purchase"}
+                    <Sparkles size={16} /> Checkout unavailable
                   </button>
                 </article>
               );

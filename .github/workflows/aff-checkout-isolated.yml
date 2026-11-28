@@ -87,3 +87,5 @@ jobs:
           mkdir -p node_modules
           ln -s /tmp/aff-billing-test/node_modules/typescript node_modules/typescript
           node scripts/billing-history-isolated-tests.mjs
+      - name: Marketplace history authorization and interface guards
+        run: node scripts/marketplace-history-isolated-tests.mjs

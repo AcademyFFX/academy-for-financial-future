@@ -62,3 +62,6 @@ jobs:
 
       - name: Concurrent subscription renewal replay
         run: bash docs/recovery/tests/aff-int-003g-renewal-concurrency.sh
+
+      - name: Renewal invoice payment and event conflict protection
+        run: psql -X -v ON_ERROR_STOP=1 -f docs/recovery/tests/aff-int-003j-renewal-conflicts.test.sql

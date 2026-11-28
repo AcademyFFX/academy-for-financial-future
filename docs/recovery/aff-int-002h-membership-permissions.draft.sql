@@ -11,8 +11,16 @@ begin
 end $$;
 grant select on public.student_memberships to authenticated;
 grant select, insert, update, delete on public.student_memberships to service_role;
-revoke all on sequence public.student_memberships_id_seq from public, anon, authenticated;
-grant usage, select on sequence public.student_memberships_id_seq to service_role;
+-- UUID identifiers may have no owned sequence.
+do $
+declare seq text;
+begin
+ select pg_get_serial_sequence('public.student_memberships','id') into seq;
+ if seq is not null then
+  execute format('revoke all on sequence %s from public, anon, authenticated',seq);
+  execute format('grant usage, select on sequence %s to service_role',seq);
+ end if;
+end $;
 drop policy if exists "Students can create their membership" on public.student_memberships;
 drop policy if exists "Students can update their membership checkout state" on public.student_memberships;
 drop policy if exists "AFF administrators can manage memberships" on public.student_memberships;

@@ -62,10 +62,10 @@ export async function POST(request: Request) {
         ...membershipStateToDbPayload(trialState),
         trial_ends_at: trialEndsAt,
         updated_at: new Date().toISOString()
-      }, { onConflict: "student_id" });
+      }, { onConflict: "student_id", ignoreDuplicates: true });
 
       if (error) throw error;
-      return NextResponse.json({ url: "/billing?trial=started" });
+      return NextResponse.json({ url: "/billing" });
     }
 
     if (!plan.priceEnv) {

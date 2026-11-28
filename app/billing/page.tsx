@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/page-header";
 import { Section, SectionInner } from "@/components/section";
 import { getClientAdminStatus } from "@/lib/admin-client";
 import { billingPlans } from "@/lib/billing";
-import { buildPendingPaymentState, membershipStateToDbPayload, normalizeMembershipState } from "@/lib/membership-state";
+import { normalizeMembershipState } from "@/lib/membership-state";
 import { createClient } from "@/lib/supabase";
 
 type Membership = {
@@ -95,27 +95,11 @@ export default function BillingPage() {
         let resolvedMembership = membershipResult.data as Membership | null;
 
         if (!resolvedMembership) {
-          const { data: application } = await supabase
-            .from("student_applications")
-            .select("membership_plan,email")
-            .or(`auth_user_id.eq.${currentUser.id},email.eq.${currentUser.email ?? ""}`)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          const selectedPlan = typeof application?.membership_plan === "string" && application.membership_plan.trim()
-            ? application.membership_plan
-            : "Free Trial";
-          const fallbackState = buildPendingPaymentState(selectedPlan);
-          const fallback = {
-            student_id: currentUser.id,
-            student_email: currentUser.email ?? application?.email ?? "",
-            ...membershipStateToDbPayload(fallbackState),
-            updated_at: new Date().toISOString()
-          };
-          const fallbackResult = await supabase.from("student_memberships").upsert(fallback, { onConflict: "student_id" }).select("*").single();
-          if (fallbackResult.error) throw fallbackResult.error;
-          resolvedMembership = fallbackResult.data as Membership;
-          setMessage("No membership record was found. A controlled membership record was created for your authenticated account.");
+          const response = await fetch("/api/billing/membership", { method: "POST" });
+          const payload = await response.json();
+          if (!response.ok || !payload.membership) throw new Error(payload.error ?? "Unable to initialize membership.");
+          resolvedMembership = payload.membership as Membership;
+          setMessage("Membership record initialized securely.");
         } else {
           setMessage("Billing center ready.");
         }

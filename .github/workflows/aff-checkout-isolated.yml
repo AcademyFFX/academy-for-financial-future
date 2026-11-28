@@ -65,3 +65,22 @@ jobs:
 
       - name: Renewal invoice payment and event conflict protection
         run: psql -X -v ON_ERROR_STOP=1 -f docs/recovery/tests/aff-int-003j-renewal-conflicts.test.sql
+
+  billing:
+    if: github.ref == 'refs/heads/fix/aff-commercial-recovery-20261127' && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated TypeScript test dependency
+        run: npm install --prefix /tmp/aff-billing-test --ignore-scripts --no-audit --no-fund typescript@5.6.3
+      - name: Billing history authorization and currency tests
+        run: |
+          mkdir -p node_modules
+          ln -s /tmp/aff-billing-test/node_modules/typescript node_modules/typescript
+          node scripts/billing-history-isolated-tests.mjs

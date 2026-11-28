@@ -13,7 +13,6 @@ import {
   GraduationCap,
   History,
   Package,
-  Receipt,
   ShoppingBag,
   Sparkles,
   Star,
@@ -29,12 +28,13 @@ import { createClient } from "@/lib/supabase";
 
 type Purchase = {
   id: string;
-  product_id: string;
   product_title: string;
   product_category: string;
   amount: number | null;
   currency: string | null;
   purchase_status: string | null;
+  payment_verified: boolean;
+  access_authorized: boolean;
   access_url: string | null;
   created_at: string;
 };
@@ -68,7 +68,7 @@ const iconByType = {
 };
 
 function formatCurrency(cents: number | null | undefined, currency = "USD") {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format((cents ?? 0) / 100);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format((cents ?? 0) / 100);
 }
 
 function normalizeProduct(row: DbProduct): MarketplaceProduct {
@@ -97,6 +97,7 @@ export default function MarketplacePage() {
   const [affiliateCode, setAffiliateCode] = useState("");
   const [processingProduct, setProcessingProduct] = useState("");
   const [loading, setLoading] = useState(true);
+  const [historyUnavailable, setHistoryUnavailable] = useState(false);
   const [message, setMessage] = useState("Loading AFF Marketplace...");
 
   const filteredProducts = useMemo(() => {
@@ -104,7 +105,6 @@ export default function MarketplacePage() {
   }, [activeCategory, products]);
 
   const featuredProducts = useMemo(() => products.filter((product) => product.featured).slice(0, 3), [products]);
-  const purchaseTotal = useMemo(() => purchases.reduce((total, purchase) => total + (purchase.amount ?? 0), 0), [purchases]);
 
   function getErrorMessage(error: unknown, fallback: string) {
     if (error instanceof Error) return error.message;
@@ -129,19 +129,21 @@ export default function MarketplacePage() {
 
         const [productsResult, purchasesResult] = await Promise.all([
           supabase.from("marketplace_products").select("*").eq("active", true).order("featured", { ascending: false }).order("created_at", { ascending: false }),
-          supabase.from("marketplace_purchases").select("*").eq("student_id", currentUser.id).order("created_at", { ascending: false }).limit(50)
+          fetch("/api/marketplace/history", { cache: "no-store" })
         ]);
 
         if (!productsResult.error && productsResult.data?.length) {
           setProducts((productsResult.data as DbProduct[]).map(normalizeProduct));
         }
 
-        if (purchasesResult.error) throw purchasesResult.error;
-
-        setPurchases((purchasesResult.data ?? []) as Purchase[]);
+        const payload = await purchasesResult.json();
+        if (!purchasesResult.ok || !Array.isArray(payload.purchases)) throw new Error("Purchase history is temporarily unavailable.");
+        setPurchases(payload.purchases as Purchase[]);
         setMessage("Marketplace ready. Browse academy products, bundles, downloads, and mentorship programs.");
       } catch (error) {
-        setMessage(getErrorMessage(error, "Run the marketplace migration to enable products and purchase history."));
+        setPurchases([]);
+        setHistoryUnavailable(true);
+        setMessage(getErrorMessage(error, "Marketplace history is temporarily unavailable."));
       } finally {
         setLoading(false);
       }
@@ -195,7 +197,7 @@ export default function MarketplacePage() {
               <div className="mt-5 grid gap-4">
                 <AccountLine label="Student" value={user?.email ?? "Student"} />
                 <AccountLine label="Purchase History" value={`${purchases.length} item${purchases.length === 1 ? "" : "s"}`} />
-                <AccountLine label="Total Purchases" value={formatCurrency(purchaseTotal * 100)} />
+                <AccountLine label="Verified payments" value="Settlement verification pending" />
               </div>
 
               <div className="mt-6 grid gap-3">
@@ -282,6 +284,8 @@ export default function MarketplacePage() {
             </div>
             {loading ? (
               <p className="p-5 text-ink/68">Loading purchase history...</p>
+            ) : historyUnavailable ? (
+              <p className="p-5 text-ink/68">Purchase history is temporarily unavailable.</p>
             ) : purchases.length === 0 ? (
               <p className="p-5 text-ink/68">No marketplace purchases recorded yet.</p>
             ) : (
@@ -289,7 +293,7 @@ export default function MarketplacePage() {
                 <table className="w-full min-w-[860px] border-separate border-spacing-0 text-sm">
                   <thead>
                     <tr className="bg-navy-800">
-                      {["Date", "Product", "Category", "Amount", "Status", "Access"].map((header) => (
+                      {["Date", "Product", "Category", "Recorded amount", "Recorded status", "Access"].map((header) => (
                         <th key={header} className="p-4 text-left font-semibold text-gold-300">{header}</th>
                       ))}
                     </tr>
@@ -308,9 +312,7 @@ export default function MarketplacePage() {
                           </span>
                         </td>
                         <td className="p-4">
-                          <a className="inline-flex items-center gap-2 text-gold-300" href={purchase.access_url ?? "/marketplace"}>
-                            <Receipt size={16} /> Open
-                          </a>
+                          <span className="text-ink/68">Access restricted</span>
                         </td>
                       </tr>
                     ))}

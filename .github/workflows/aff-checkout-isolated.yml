@@ -30,7 +30,7 @@ jobs:
       PGPASSWORD: disposable_test_only
       PGDATABASE: aff_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
       - name: Create disposable fixture
@@ -53,3 +53,6 @@ jobs:
 
       - name: Concurrent identical checkout replay
         run: bash docs/recovery/tests/aff-int-002w-concurrency.sh
+
+      - name: Concurrent conflicting checkout and event protection
+        run: bash docs/recovery/tests/aff-int-002z-conflicts.sh

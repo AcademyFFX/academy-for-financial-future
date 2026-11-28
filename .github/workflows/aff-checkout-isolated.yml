@@ -66,6 +66,9 @@ jobs:
       - name: Renewal invoice payment and event conflict protection
         run: psql -X -v ON_ERROR_STOP=1 -f docs/recovery/tests/aff-int-003j-renewal-conflicts.test.sql
 
+      - name: Marketplace schema permissions and integrity
+        run: psql -X -v ON_ERROR_STOP=1 -f docs/recovery/tests/aff-int-005c-marketplace.test.sql
+
   billing:
     if: github.ref == 'refs/heads/fix/aff-commercial-recovery-20261127' && github.event.repository.private == false
     runs-on: ubuntu-latest

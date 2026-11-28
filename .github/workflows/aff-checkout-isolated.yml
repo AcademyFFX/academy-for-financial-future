@@ -56,3 +56,6 @@ jobs:
 
       - name: Concurrent conflicting checkout and event protection
         run: bash docs/recovery/tests/aff-int-002z-conflicts.sh
+
+      - name: Atomic subscription renewal and rollback
+        run: psql -X -v ON_ERROR_STOP=1 -f docs/recovery/tests/aff-int-003e-renewal.test.sql

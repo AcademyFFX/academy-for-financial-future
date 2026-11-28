@@ -50,3 +50,6 @@ jobs:
         run: |
           psql -X -v ON_ERROR_STOP=1 -f docs/recovery/tests/aff-int-002p-checkout.test.sql
           psql -X -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF EXISTS (SELECT 1 FROM public.aff_financial_ledger) THEN RAISE EXCEPTION 'rollback failed'; END IF; END \$\$;"
+
+      - name: Concurrent identical checkout replay
+        run: bash docs/recovery/tests/aff-int-002w-concurrency.sh

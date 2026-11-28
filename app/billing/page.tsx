@@ -26,8 +26,8 @@ type Membership = {
 type BillingHistoryRow = {
   id: string;
   event_type: string;
-  amount: number | null;
-  currency: string | null;
+  amount_minor: number;
+  currency: string;
   status: string | null;
   description: string | null;
   created_at: string;
@@ -81,12 +81,14 @@ export default function BillingPage() {
 
         const [membershipResult, historyResult, configResponse] = await Promise.all([
           supabase.from("student_memberships").select("*").eq("student_id", currentUser.id).maybeSingle(),
-          supabase.from("billing_history").select("*").eq("student_id", currentUser.id).order("created_at", { ascending: false }).limit(20),
+          fetch("/api/billing/history", { cache: "no-store" }),
           fetch("/api/billing/checkout")
         ]);
 
         if (membershipResult.error) throw membershipResult.error;
-        if (historyResult.error) throw historyResult.error;
+        if (!historyResult.ok) throw new Error("Billing history is temporarily unavailable.");
+        const historyPayload = await historyResult.json();
+        if (!Array.isArray(historyPayload.history)) throw new Error("Invalid billing history response.");
         if (configResponse.ok) {
           const config = await configResponse.json();
           setPlanConfig(config.plans ?? {});
@@ -114,7 +116,7 @@ export default function BillingPage() {
           membership_status: normalizedState.membershipStatus,
           account_status: normalizedState.accountStatus
         });
-        setHistory((historyResult.data ?? []) as BillingHistoryRow[]);
+        setHistory(historyPayload.history as BillingHistoryRow[]);
       } catch (error) {
         const errorMessage = getErrorMessage(error, "Run the billing migration to enable memberships and billing history.");
         setLoadError(errorMessage);
@@ -298,7 +300,7 @@ export default function BillingPage() {
                         <td className="p-4 text-ink/76">{new Date(row.created_at).toLocaleDateString()}</td>
                         <td className="p-4 text-ink/76">{row.description ?? "Academy billing event"}</td>
                         <td className="p-4 text-ink/76">{row.event_type}</td>
-                        <td className="p-4 text-ink/76">{row.amount === null ? "-" : `${row.currency ?? "USD"} ${Number(row.amount).toFixed(2)}`}</td>
+                        <td className="p-4 text-ink/76">{formatLedgerAmount(row.amount_minor, row.currency, row.event_type)}</td>
                         <td className="p-4 text-ink/76">{row.status ?? "Recorded"}</td>
                       </tr>
                     ))}
@@ -311,6 +313,13 @@ export default function BillingPage() {
       </Section>
     </>
   );
+}
+
+function formatLedgerAmount(amountMinor: number, currency: string, eventType: string) {
+  // Stripe settlement minor units: ISK and UGX retain two API decimals.
+  const formatter = new Intl.NumberFormat("en-US", { style: "currency", currency });
+  const digits = ["ISK", "UGX"].includes(currency) ? 2 : formatter.resolvedOptions().maximumFractionDigits ?? 2;
+  return formatter.format((eventType === "refund" ? -1 : 1) * amountMinor / 10 ** digits);
 }
 
 function StatusLine({ label, value }: { label: string; value: string }) {

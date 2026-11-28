@@ -1,0 +1,41 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import ts from "typescript";
+const source = fs.readFileSync("app/api/billing/history/route.ts","utf8");
+const js = ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+async function run({user={id:"student-a"},authError=null,membershipError=null,historyError=null,ids=["membership-a"],rows=[]}={}) {
+ const calls=[];
+ const exports={};
+ const client={auth:{getUser:async()=>({data:{user},error:authError})}};
+ const admin={from(table){
+  calls.push(["from",table]);
+  const q={};
+  for(const method of ["select","eq","in","order","limit"]) q[method]=(...args)=>{calls.push([method,...args]);return q;};
+  q.then=(resolve)=>resolve(table==="student_memberships"?{data:ids.map(id=>({id})),error:membershipError}:{data:rows,error:historyError});
+  return q;
+ }};
+ const modules={"next/server":{NextResponse:{json:(body,options)=>({body,status:options.status??200,headers:options.headers})}},"@/lib/supabase-server":{createSupabaseServerClient:()=>client},"@/lib/supabase-admin":{createSupabaseAdminClient:()=>admin}};
+ new Function("require","exports",js)(name=>{assert.ok(modules[name]);return modules[name]},exports);
+ return {response:await exports.GET(),calls};
+}
+let r=await run({user:null});assert.equal(r.response.status,401);assert.equal(r.calls.length,0);
+r=await run({authError:new Error("invalid")});assert.equal(r.response.status,401);assert.equal(r.calls.length,0);
+r=await run({ids:[]});assert.deepEqual(r.response.body.history,[]);assert.equal(r.calls.filter(c=>c[0]==="from").length,1);
+r=await run({membershipError:new Error("database")});assert.equal(r.response.status,503);
+r=await run({historyError:new Error("database")});assert.equal(r.response.status,503);
+const row={id:"a",entry_type:"refund",amount_minor:2500,currency:"usd",occurred_at:"2026-12-01"};
+r=await run({rows:[row]});assert.equal(r.response.status,200);
+assert.deepEqual(r.calls.filter(c=>c[0]==="eq"||c[0]==="in"),[["eq","student_id","student-a"],["in","membership_id",["membership-a"]],["eq","livemode",true]]);
+assert.ok(r.calls.some(c=>c[0]==="limit"&&c[1]===20));
+assert.equal(r.response.headers["Cache-Control"],"private, no-store");
+assert.equal(r.response.body.history[0].currency,"USD");assert.equal(r.response.body.history[0].event_type,"refund");assert.equal(r.response.body.history[0].amount_minor,2500);
+for(const bad of [{amount_minor:0},{amount_minor:Number.MAX_SAFE_INTEGER+1},{currency:"invalid"},{entry_type:"unknown"}]) assert.equal((await run({rows:[{...row,...bad}]})).response.status,503);
+const page=ts.createSourceFile("page.tsx",fs.readFileSync("app/billing/page.tsx","utf8"),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+const fn=page.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==="formatLedgerAmount");
+assert.ok(fn);
+const format=new Function(ts.transpileModule(fn.getText(),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText+";return formatLedgerAmount;")();
+assert.equal(format(5000,"USD","payment"),"$50.00");
+assert.equal(format(2500,"USD","refund"),"-$25.00");
+assert.equal(format(5000,"JPY","payment"),"¥5,000");
+assert.equal(format(9700,"EUR","payment"),"€97.00");
+console.log("Billing history mocked authorization, query scope, failure and currency tests passed");

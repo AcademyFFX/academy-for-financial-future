@@ -1,0 +1,52 @@
+name: AFF isolated checkout database tests
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/aff-commercial-recovery-20261127]
+    paths:
+      - '.github/workflows/aff-checkout-isolated.yml'
+permissions:
+  contents: read
+jobs:
+  checkout:
+    if: github.ref == 'refs/heads/fix/aff-commercial-recovery-20261127' && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: disposable_test_only
+          POSTGRES_DB: aff_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aff_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: disposable_test_only
+      PGDATABASE: aff_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Create disposable fixture
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE anon NOLOGIN;
+          CREATE ROLE authenticated NOLOGIN;
+          CREATE ROLE service_role NOLOGIN BYPASSRLS;
+          CREATE TABLE public.student_memberships(id uuid PRIMARY KEY);
+          INSERT INTO public.student_memberships VALUES ('00000000-0000-4000-8000-000000000001');
+          SQL
+      - name: Install recovered ledger and revised checkout
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f docs/recovery/originals/AFF_DEV_003_D1_draft.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/recovery/aff-int-002o-checkout-integrity.draft.sql
+      - name: Execute rollback-only tests
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f docs/recovery/tests/aff-int-002p-checkout.test.sql
+          psql -X -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF EXISTS (SELECT 1 FROM public.aff_financial_ledger) THEN RAISE EXCEPTION 'rollback failed'; END IF; END \$\$;"
